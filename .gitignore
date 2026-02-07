@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
+
+# Backup directories
+*_bkp/
+*_backup/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node
+node_modules/
+.vite/
+
+# Env
+.env
+.env.local
