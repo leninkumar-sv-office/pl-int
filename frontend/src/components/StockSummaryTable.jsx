@@ -441,28 +441,52 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       )}
                     </td>
                     <td>
-                      {live?.week_52_low ? (
-                        <span style={{
-                          fontSize: '13px',
-                          color: currentPrice > 0 && currentPrice <= live.week_52_low * 1.05 ? 'var(--red)' : 'var(--text)',
-                          fontWeight: currentPrice > 0 && currentPrice <= live.week_52_low * 1.05 ? 600 : 400,
-                        }}>
-                          {formatINR(live.week_52_low)}
-                        </span>
-                      ) : (
+                      {live?.week_52_low ? (() => {
+                        const nearLow = currentPrice > 0 && currentPrice <= live.week_52_low * 1.05;
+                        const pctFromLow = currentPrice > 0 && live.week_52_low > 0
+                          ? ((currentPrice - live.week_52_low) / live.week_52_low * 100) : 0;
+                        return (
+                          <div>
+                            <div style={{
+                              fontSize: '13px',
+                              color: nearLow ? 'var(--red)' : 'var(--text)',
+                              fontWeight: nearLow ? 600 : 400,
+                            }}>
+                              {formatINR(live.week_52_low)}
+                            </div>
+                            {currentPrice > 0 && (
+                              <div style={{ fontSize: '11px', color: nearLow ? 'var(--red)' : 'var(--text)', fontWeight: nearLow ? 600 : 400 }}>
+                                +{pctFromLow.toFixed(1)}% away
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>
                     <td>
-                      {live?.week_52_high ? (
-                        <span style={{
-                          fontSize: '13px',
-                          color: currentPrice > 0 && currentPrice >= live.week_52_high * 0.95 ? 'var(--green)' : 'var(--text)',
-                          fontWeight: currentPrice > 0 && currentPrice >= live.week_52_high * 0.95 ? 600 : 400,
-                        }}>
-                          {formatINR(live.week_52_high)}
-                        </span>
-                      ) : (
+                      {live?.week_52_high ? (() => {
+                        const nearHigh = currentPrice > 0 && currentPrice >= live.week_52_high * 0.95;
+                        const pctFromHigh = currentPrice > 0 && live.week_52_high > 0
+                          ? ((live.week_52_high - currentPrice) / live.week_52_high * 100) : 0;
+                        return (
+                          <div>
+                            <div style={{
+                              fontSize: '13px',
+                              color: nearHigh ? 'var(--green)' : 'var(--text)',
+                              fontWeight: nearHigh ? 600 : 400,
+                            }}>
+                              {formatINR(live.week_52_high)}
+                            </div>
+                            {currentPrice > 0 && (
+                              <div style={{ fontSize: '11px', color: nearHigh ? 'var(--green)' : 'var(--text)', fontWeight: nearHigh ? 600 : 400 }}>
+                                -{pctFromHigh.toFixed(1)}% away
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>
