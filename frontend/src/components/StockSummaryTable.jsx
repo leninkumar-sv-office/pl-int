@@ -281,6 +281,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'unrealized_loss': aVal = a.unrealized_loss; bVal = b.unrealized_loss; break;
       case 'unrealized_pl': aVal = a.unrealized_pl; bVal = b.unrealized_pl; break;
       case 'realized_pl': aVal = a.realized_pl; bVal = b.realized_pl; break;
+      case 'week_52_low': aVal = a.live?.week_52_low || 0; bVal = b.live?.week_52_low || 0; break;
+      case 'week_52_high': aVal = a.live?.week_52_high || 0; bVal = b.live?.week_52_high || 0; break;
       default: aVal = a.unrealized_profit; bVal = b.unrealized_profit;
     }
     if (typeof aVal === 'string') {
@@ -299,7 +301,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 10; // number of columns in the main table
+  const TOTAL_COLS = 12; // number of columns in the main table
 
   return (
     <div className="section">
@@ -338,6 +340,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>
               <th>Avg Buy</th>
               <th>Current Price</th>
+              <th onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
+                52W Low<SortIcon field="week_52_low" />
+              </th>
+              <th onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
+                52W High<SortIcon field="week_52_high" />
+              </th>
               <th onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
               </th>
@@ -428,6 +436,32 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             </div>
                           )}
                         </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>--</span>
+                      )}
+                    </td>
+                    <td>
+                      {live?.week_52_low ? (
+                        <span style={{
+                          fontSize: '13px',
+                          color: currentPrice > 0 && currentPrice <= live.week_52_low * 1.05 ? 'var(--red)' : 'var(--text)',
+                          fontWeight: currentPrice > 0 && currentPrice <= live.week_52_low * 1.05 ? 600 : 400,
+                        }}>
+                          {formatINR(live.week_52_low)}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>--</span>
+                      )}
+                    </td>
+                    <td>
+                      {live?.week_52_high ? (
+                        <span style={{
+                          fontSize: '13px',
+                          color: currentPrice > 0 && currentPrice >= live.week_52_high * 0.95 ? 'var(--green)' : 'var(--text)',
+                          fontWeight: currentPrice > 0 && currentPrice >= live.week_52_high * 0.95 ? 600 : 400,
+                        }}>
+                          {formatINR(live.week_52_high)}
+                        </span>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
