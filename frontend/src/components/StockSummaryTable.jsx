@@ -281,8 +281,20 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'unrealized_loss': aVal = a.unrealized_loss; bVal = b.unrealized_loss; break;
       case 'unrealized_pl': aVal = a.unrealized_pl; bVal = b.unrealized_pl; break;
       case 'realized_pl': aVal = a.realized_pl; bVal = b.realized_pl; break;
-      case 'week_52_low': aVal = a.live?.week_52_low || 0; bVal = b.live?.week_52_low || 0; break;
-      case 'week_52_high': aVal = a.live?.week_52_high || 0; bVal = b.live?.week_52_high || 0; break;
+      case 'week_52_low': {
+        const aCP = a.live?.current_price || 0, aLow = a.live?.week_52_low || 0;
+        const bCP = b.live?.current_price || 0, bLow = b.live?.week_52_low || 0;
+        aVal = aLow > 0 && aCP > 0 ? ((aCP - aLow) / aLow * 100) : 9999;
+        bVal = bLow > 0 && bCP > 0 ? ((bCP - bLow) / bLow * 100) : 9999;
+        break;
+      }
+      case 'week_52_high': {
+        const aCP2 = a.live?.current_price || 0, aHigh = a.live?.week_52_high || 0;
+        const bCP2 = b.live?.current_price || 0, bHigh = b.live?.week_52_high || 0;
+        aVal = aHigh > 0 && aCP2 > 0 ? ((aHigh - aCP2) / aHigh * 100) : 9999;
+        bVal = bHigh > 0 && bCP2 > 0 ? ((bHigh - bCP2) / bHigh * 100) : 9999;
+        break;
+      }
       default: aVal = a.unrealized_profit; bVal = b.unrealized_profit;
     }
     if (typeof aVal === 'string') {
