@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, getStockSummary } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, getStockSummary, getMarketTicker } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -8,6 +8,7 @@ import AddStockModal from './components/AddStockModal';
 import SellStockModal from './components/SellStockModal';
 import TransactionHistory from './components/TransactionHistory';
 import Charts from './components/Charts';
+import MarketTicker from './components/MarketTicker';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -23,6 +24,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('stocks');
   const [addModalData, setAddModalData] = useState(null); // null = closed, {} = open empty, {symbol,...} = pre-filled
   const [sellTarget, setSellTarget] = useState(null);
+  const [marketTicker, setMarketTicker] = useState([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -41,6 +43,13 @@ export default function App() {
       toast.error('Failed to load portfolio data');
     } finally {
       setLoading(false);
+    }
+    // Load market ticker separately (non-blocking)
+    try {
+      const tickerData = await getMarketTicker();
+      setMarketTicker(tickerData);
+    } catch (err) {
+      console.error('Failed to load market ticker:', err);
     }
   }, []);
 
@@ -91,6 +100,9 @@ export default function App() {
           error: { iconTheme: { primary: '#ff4757', secondary: '#1a1d27' } },
         }}
       />
+
+      {/* Market Ticker */}
+      <MarketTicker tickers={marketTicker} loading={loading} />
 
       {/* Header */}
       <header className="header">

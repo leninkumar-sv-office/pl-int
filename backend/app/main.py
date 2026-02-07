@@ -5,10 +5,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from typing import List
+from typing import List, Dict
 from datetime import date
 import os
 import uuid
+import time
+import threading
 
 from .models import (
     AddStockRequest, SellStockRequest, ManualPriceRequest,
@@ -325,6 +327,146 @@ def get_dashboard_summary():
         stocks_in_profit=stocks_in_profit,
         stocks_in_loss=stocks_in_loss,
     )
+
+
+# ══════════════════════════════════════════════════════════
+#  MARKET TICKER  (Sensex, Nifty, Gold, Forex, etc.)
+# ══════════════════════════════════════════════════════════
+
+MARKET_TICKER_SYMBOLS = [
+    {"key": "SENSEX",    "yahoo": "%5EBSESN",    "label": "Sensex",     "type": "index"},
+    {"key": "NIFTY50",   "yahoo": "%5ENSEI",     "label": "Nifty 50",   "type": "index"},
+    {"key": "GOLD",      "yahoo": "GC%3DF",      "label": "Gold",       "type": "commodity", "unit": "USD/oz"},
+    {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "USD/oz"},
+    {"key": "SGX",       "yahoo": "%5ESTI",         "label": "SGX STI",    "type": "index"},
+    {"key": "NIKKEI",    "yahoo": "%5EN225",      "label": "Nikkei",     "type": "index"},
+    {"key": "SGDINR",    "yahoo": "SGDINR%3DX",   "label": "SGD/INR",   "type": "forex"},
+    {"key": "USDINR",    "yahoo": "USDINR%3DX",   "label": "USD/INR",   "type": "forex"},
+    {"key": "CRUDEOIL",  "yahoo": "CL%3DF",       "label": "Crude Oil", "type": "commodity", "unit": "USD/bbl"},
+]
+
+# Cache for market ticker data (separate from stock cache)
+_ticker_cache: List[dict] = []
+_ticker_cache_time: float = 0.0
+_TICKER_CACHE_TTL = 300  # 5 minutes
+_ticker_lock = threading.Lock()
+
+
+def _fetch_single_ticker_http(meta: dict) -> dict:
+    """Fetch a single ticker via Yahoo Finance v8 chart API (no yfinance library)."""
+    import requests as req
+
+    placeholder = {
+        "key": meta["key"], "label": meta["label"],
+        "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+        "price": 0, "change": 0, "change_pct": 0,
+    }
+
+    yahoo_sym = meta["yahoo"]
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?range=5d&interval=1d"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    }
+
+    try:
+        resp = req.get(url, headers=headers, timeout=10)
+        data = resp.json()
+
+        chart = data.get("chart", {})
+        result = chart.get("result")
+        if not result or len(result) == 0:
+            print(f"[MarketTicker] {meta['key']}: no chart result")
+            return placeholder
+
+        r = result[0]
+        quote = r.get("indicators", {}).get("quote", [{}])[0]
+        closes = quote.get("close", [])
+        meta_resp = r.get("meta", {})
+
+        # Get price from meta (most reliable)
+        price = float(meta_resp.get("regularMarketPrice", 0) or 0)
+        prev_close = float(meta_resp.get("chartPreviousClose", 0)
+                           or meta_resp.get("previousClose", 0) or 0)
+
+        # Fallback: last non-null close from chart data
+        if price <= 0 and closes:
+            valid_closes = [c for c in closes if c is not None]
+            if valid_closes:
+                price = float(valid_closes[-1])
+
+        if prev_close <= 0 and closes:
+            valid_closes = [c for c in closes if c is not None]
+            if len(valid_closes) >= 2:
+                prev_close = float(valid_closes[-2])
+
+        if price > 0:
+            change = price - prev_close if prev_close > 0 else 0
+            change_pct = (change / prev_close * 100) if prev_close > 0 else 0
+            print(f"[MarketTicker] {meta['key']} OK: {price}")
+            return {
+                "key": meta["key"], "label": meta["label"],
+                "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+                "price": round(price, 2),
+                "change": round(change, 2),
+                "change_pct": round(change_pct, 2),
+            }
+
+    except Exception as e:
+        print(f"[MarketTicker] {meta['key']} HTTP failed: {e}")
+
+    return placeholder
+
+
+def _fetch_market_tickers() -> List[dict]:
+    """Fetch all market ticker data via direct Yahoo HTTP API in parallel."""
+    global _ticker_cache, _ticker_cache_time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    with _ticker_lock:
+        if time.time() - _ticker_cache_time < _TICKER_CACHE_TTL and _ticker_cache:
+            return _ticker_cache
+
+    results = []
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(_fetch_single_ticker_http, meta): meta["key"]
+            for meta in MARKET_TICKER_SYMBOLS
+        }
+        for future in as_completed(futures):
+            try:
+                result = future.result(timeout=15)
+                results.append(result)
+            except Exception as e:
+                key = futures[future]
+                meta = next(m for m in MARKET_TICKER_SYMBOLS if m["key"] == key)
+                print(f"[MarketTicker] Timeout/error for {key}: {e}")
+                results.append({
+                    "key": key, "label": meta["label"],
+                    "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+                    "price": 0, "change": 0, "change_pct": 0,
+                })
+
+    # Sort to maintain original order
+    key_order = [m["key"] for m in MARKET_TICKER_SYMBOLS]
+    results.sort(key=lambda r: key_order.index(r["key"]) if r["key"] in key_order else 999)
+
+    # Update cache
+    with _ticker_lock:
+        _ticker_cache = results
+        _ticker_cache_time = time.time()
+
+    fetched = sum(1 for r in results if r["price"] > 0)
+    print(f"[MarketTicker] Fetched {fetched}/{len(results)} tickers with prices")
+
+    return results
+
+
+@app.get("/api/market-ticker")
+def get_market_ticker():
+    """Get market indices, forex rates, and commodity prices."""
+    return _fetch_market_tickers()
 
 
 # ══════════════════════════════════════════════════════════

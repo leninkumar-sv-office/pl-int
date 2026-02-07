@@ -64,3 +64,10 @@ export async function setManualPrice(symbol, exchange, price) {
   const { data } = await api.post('/stock/manual-price', { symbol, exchange, price });
   return data;
 }
+
+// ── Market Ticker ────────────────────────────────────
+
+export async function getMarketTicker() {
+  const { data } = await api.get('/market-ticker');
+  return data;
+}
