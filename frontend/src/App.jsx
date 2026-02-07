@@ -129,6 +129,8 @@ export default function App() {
         <StockSummaryTable
           stocks={stockSummary}
           loading={loading}
+          portfolio={portfolio}
+          onSell={(holding) => setSellTarget(holding)}
           onAddStock={() => setShowAddModal(true)}
         />
       )}

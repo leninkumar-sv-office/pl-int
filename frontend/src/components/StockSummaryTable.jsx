@@ -29,9 +29,75 @@ function WeekRangeBar({ low, high, current, buyPrice }) {
   );
 }
 
-export default function StockSummaryTable({ stocks, loading, onAddStock }) {
+/* Mini lot-picker modal — shown when a stock has multiple lots */
+function LotPickerModal({ symbol, lots, onSelect, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+        <h2>Select Lot to Sell — {symbol}</h2>
+        <p style={{ color: 'var(--text-dim)', fontSize: '13px', marginBottom: '16px' }}>
+          This stock has {lots.length} lots. Pick which one to sell from:
+        </p>
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          {lots.map((item) => {
+            const h = item.holding;
+            const live = item.live;
+            const cp = live?.current_price || 0;
+            const pl = cp > 0 ? (cp - h.buy_price) * h.quantity : 0;
+            const inProfit = cp > h.buy_price;
+            return (
+              <div
+                key={h.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 14px',
+                  marginBottom: '8px',
+                  background: inProfit ? 'var(--green-bg)' : 'var(--bg-input)',
+                  borderRadius: '8px',
+                  border: `1px solid ${inProfit ? 'rgba(0,210,106,0.2)' : 'var(--border)'}`,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: '2px' }}>
+                    {h.quantity} shares @ {formatINR(h.buy_price)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                    Bought {h.buy_date} · {h.exchange}
+                  </div>
+                  {cp > 0 && (
+                    <div style={{
+                      fontSize: '12px',
+                      color: inProfit ? 'var(--green)' : 'var(--red)',
+                      marginTop: '2px',
+                    }}>
+                      P&L: {pl >= 0 ? '+' : ''}{formatINR(pl)}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
+                  onClick={() => onSelect(item)}
+                >
+                  Sell
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell }) {
   const [sortField, setSortField] = useState('unrealized_pl');
   const [sortDir, setSortDir] = useState('desc');
+  const [lotPickerSymbol, setLotPickerSymbol] = useState(null);
 
   if (loading && stocks.length === 0) {
     return (
@@ -61,6 +127,27 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
       setSortDir('desc');
     }
   };
+
+  const handleSellClick = (symbol) => {
+    // Find all held lots for this symbol from portfolio data
+    const lots = (portfolio || []).filter(
+      (item) => item.holding.symbol === symbol && item.holding.quantity > 0
+    );
+    if (lots.length === 0) return;
+    if (lots.length === 1) {
+      // Single lot — go straight to sell modal
+      onSell(lots[0]);
+    } else {
+      // Multiple lots — show lot picker
+      setLotPickerSymbol(symbol);
+    }
+  };
+
+  const lotsForPicker = lotPickerSymbol
+    ? (portfolio || []).filter(
+        (item) => item.holding.symbol === lotPickerSymbol && item.holding.quantity > 0
+      )
+    : [];
 
   const sorted = [...stocks].sort((a, b) => {
     let aVal, bVal;
@@ -141,6 +228,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
                 Realized P&L<SortIcon field="realized_pl" />
               </th>
               <th>Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -289,13 +377,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
                     ) : hasHeld ? (
                       <div>
                         <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
-                        <div style={{
-                          fontSize: '11px',
-                          color: 'var(--red)',
-                          marginTop: '2px',
-                        }}>
-                          {stock.loss_qty} in loss
-                        </div>
+                        {stock.loss_qty > 0 && (
+                          <div style={{
+                            fontSize: '11px',
+                            color: 'var(--red)',
+                            marginTop: '2px',
+                          }}>
+                            {stock.loss_qty} in loss
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <span style={{
@@ -309,12 +399,43 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
                       </span>
                     )}
                   </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {hasHeld && (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleSellClick(stock.symbol)}
+                        >
+                          Sell
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={onAddStock}
+                      >
+                        Buy
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {/* Lot picker modal for multi-lot stocks */}
+      {lotPickerSymbol && lotsForPicker.length > 0 && (
+        <LotPickerModal
+          symbol={lotPickerSymbol}
+          lots={lotsForPicker}
+          onSelect={(item) => {
+            setLotPickerSymbol(null);
+            onSell(item);
+          }}
+          onClose={() => setLotPickerSymbol(null)}
+        />
+      )}
     </div>
   );
 }
