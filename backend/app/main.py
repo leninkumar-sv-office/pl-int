@@ -204,8 +204,16 @@ def get_stock_summary():
 
         total_held_qty = sum(h.quantity for h in held_lots)
         total_sold_qty = sum(s.quantity for s in sold_lots)
-        total_invested = sum(h.buy_price * h.quantity for h in held_lots)
+        # total_invested = sum of column F (COST) for held lots
+        total_invested = sum(
+            h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
+            for h in held_lots
+        )
         avg_buy_price = (total_invested / total_held_qty) if total_held_qty > 0 else 0
+        # avg_price = weighted average of raw transaction price (column E)
+        avg_price = (
+            sum(h.price * h.quantity for h in held_lots) / total_held_qty
+        ) if total_held_qty > 0 else 0
         realized_pl = sum(s.realized_pl for s in sold_lots)
 
         # Live data
@@ -237,6 +245,7 @@ def get_stock_summary():
             name=name,
             total_held_qty=total_held_qty,
             total_sold_qty=total_sold_qty,
+            avg_price=round(avg_price, 2),
             avg_buy_price=round(avg_buy_price, 2),
             total_invested=round(total_invested, 2),
             current_value=round(current_value, 2),
@@ -328,7 +337,7 @@ def get_dashboard_summary():
     stocks_in_loss = 0
 
     for h in holdings:
-        invested = h.buy_price * h.quantity
+        invested = h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
         total_invested += invested
 
         key = f"{h.symbol}.{h.exchange}"

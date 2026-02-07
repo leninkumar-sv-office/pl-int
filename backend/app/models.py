@@ -54,7 +54,9 @@ class Holding(BaseModel):
     exchange: str
     name: str
     quantity: int
-    buy_price: float
+    price: float = 0.0       # Raw transaction price per share (column E)
+    buy_price: float          # Per-unit cost incl. charges = COST/QTY (column F / D)
+    buy_cost: float = 0.0    # Total cost including STT+charges (column F)
     buy_date: str
     notes: str = ""
 
@@ -115,8 +117,9 @@ class StockSummaryItem(BaseModel):
     name: str
     total_held_qty: int = 0       # total shares currently held
     total_sold_qty: int = 0       # total shares sold
-    avg_buy_price: float = 0.0    # weighted average buy price (held lots)
-    total_invested: float = 0.0   # sum of (buy_price * qty) for held lots
+    avg_price: float = 0.0        # weighted average transaction price (column E)
+    avg_buy_price: float = 0.0    # weighted average buy price incl. charges (COST/QTY)
+    total_invested: float = 0.0   # sum of COST (column F) for held lots
     current_value: float = 0.0    # current_price * total_held_qty
     unrealized_pl: float = 0.0
     unrealized_pl_pct: float = 0.0

@@ -26,35 +26,52 @@ export default function MarketTicker({ tickers, loading }) {
     return null;
   }
 
+  // Row 1: indices, Row 2: rest — use same column count so they align
+  const INDEX_KEYS = new Set(['SENSEX', 'NIFTY50', 'SGX', 'NIKKEI', 'SGDINR', 'USDINR']);
+  const row1 = tickers.filter((t) => INDEX_KEYS.has(t.key));
+  const row2 = tickers.filter((t) => !INDEX_KEYS.has(t.key));
+  const cols = Math.max(row1.length, row2.length);
+
+  const renderItem = (t, idx, rowLen) => {
+    const isUp = t.change >= 0;
+    const hasData = t.price > 0;
+    const isLast = idx === rowLen - 1;
+    return (
+      <div key={t.key} style={{
+        ...styles.item,
+        borderRight: isLast ? 'none' : '1px solid var(--border)',
+      }}>
+        <span style={styles.label}>{t.label}</span>
+        {hasData ? (
+          <>
+            <span style={{ ...styles.price, color: isUp ? 'var(--green)' : 'var(--red)' }}>
+              {formatPrice(t.price, t.type)}
+            </span>
+            <span style={{
+              ...styles.change,
+              color: isUp ? 'var(--green)' : 'var(--red)',
+              background: isUp ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
+            }}>
+              {isUp ? '▲' : '▼'} {Math.abs(t.change_pct).toFixed(2)}%
+            </span>
+          </>
+        ) : (
+          <span style={{ ...styles.price, color: 'var(--text-muted)' }}>--</span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={styles.bar}>
-      <div style={styles.track}>
-        {tickers.map((t) => {
-          const isUp = t.change >= 0;
-          const hasData = t.price > 0;
-          return (
-            <div key={t.key} style={styles.item}>
-              <span style={styles.label}>{t.label}</span>
-              {hasData ? (
-                <>
-                  <span style={{ ...styles.price, color: isUp ? 'var(--green)' : 'var(--red)' }}>
-                    {formatPrice(t.price, t.type)}
-                  </span>
-                  <span style={{
-                    ...styles.change,
-                    color: isUp ? 'var(--green)' : 'var(--red)',
-                    background: isUp ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
-                  }}>
-                    {isUp ? '▲' : '▼'} {Math.abs(t.change_pct).toFixed(2)}%
-                  </span>
-                </>
-              ) : (
-                <span style={{ ...styles.price, color: 'var(--text-muted)' }}>--</span>
-              )}
-            </div>
-          );
-        })}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {row1.map((t, i) => renderItem(t, i, row1.length))}
       </div>
+      {row2.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, borderTop: '1px solid var(--border)' }}>
+          {row2.map((t, i) => renderItem(t, i, row2.length))}
+        </div>
+      )}
     </div>
   );
 }
@@ -66,20 +83,12 @@ const styles = {
     borderRadius: 'var(--radius-sm)',
     padding: '8px 16px',
     marginBottom: '20px',
-    overflowX: 'auto',
-  },
-  track: {
-    display: 'flex',
-    gap: '6px',
-    alignItems: 'center',
-    minWidth: 'max-content',
   },
   item: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '4px 12px',
-    borderRight: '1px solid var(--border)',
+    padding: '6px 12px',
     whiteSpace: 'nowrap',
   },
   label: {

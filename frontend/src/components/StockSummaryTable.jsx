@@ -137,7 +137,9 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                 <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <th style={subTh}>Buy Date</th>
                   <th style={subTh}>Qty</th>
+                  <th style={subTh}>Price</th>
                   <th style={subTh}>Buy Price</th>
+                  <th style={subTh}>Total Cost</th>
                   <th style={subTh}>Current</th>
                   <th style={subTh}>P&L</th>
                   <th style={subTh}>Action</th>
@@ -152,7 +154,9 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                     <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={subTd}>{h.buy_date}</td>
                       <td style={{ ...subTd, fontWeight: 600 }}>{h.quantity}</td>
+                      <td style={subTd}>{formatINR(h.price || h.buy_price)}</td>
                       <td style={subTd}>{formatINR(h.buy_price)}</td>
+                      <td style={subTd}>{formatINR(h.buy_cost || (h.buy_price * h.quantity))}</td>
                       <td style={{ ...subTd, color: inProfit ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
                         {cp > 0 ? formatINR(cp) : '--'}
                       </td>
@@ -329,7 +333,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 13; // number of columns in the main table
+  const TOTAL_COLS = 15; // number of columns in the main table
 
   return (
     <div className="section">
@@ -366,7 +370,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               <th onClick={() => handleSort('total_sold_qty')} style={{ cursor: 'pointer' }}>
                 Sold<SortIcon field="total_sold_qty" />
               </th>
-              <th>Avg Buy</th>
+              <th>Price</th>
+              <th>Buy Price</th>
+              <th>Total Cost</th>
               <th>Current Price</th>
               <th onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="week_52_low" />
@@ -446,7 +452,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
                     </td>
+                    <td>{hasHeld ? formatINR(stock.avg_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>
                     <td>{hasHeld ? formatINR(stock.avg_buy_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>
+                    <td>{hasHeld ? formatINR(stock.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>
                     <td>
                       {live ? (
                         <div>

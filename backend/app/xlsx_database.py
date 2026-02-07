@@ -111,15 +111,16 @@ def _gen_id(symbol: str, exchange: str, buy_date: str, buy_price: float, row_idx
 
 
 def _parse_date(val) -> Optional[str]:
-    """Convert xlsx cell value to YYYY-MM-DD string."""
+    """Convert xlsx cell value to DD-MMM-YYYY string (e.g. 27-JAN-2026)."""
+    _FMT = "%d-%b-%Y"
     if isinstance(val, datetime):
-        return val.strftime("%Y-%m-%d")
+        return val.strftime(_FMT).upper()
     if isinstance(val, date):
-        return val.strftime("%Y-%m-%d")
+        return val.strftime(_FMT).upper()
     if isinstance(val, str):
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d-%b-%Y", "%d-%B-%Y"):
             try:
-                return datetime.strptime(val.strip(), fmt).strftime("%Y-%m-%d")
+                return datetime.strptime(val.strip(), fmt).strftime(_FMT).upper()
             except ValueError:
                 continue
     return None
@@ -221,11 +222,11 @@ def _extract_index_data(wb) -> dict:
 
 
 def _parse_excel_serial_date(val) -> Optional[str]:
-    """Convert Excel serial date number to YYYY-MM-DD string."""
+    """Convert Excel serial date number to DD-MMM-YYYY string."""
     if isinstance(val, (int, float)) and val > 1000:
         from datetime import timedelta
         base = datetime(1899, 12, 30)
-        return (base + timedelta(days=int(val))).strftime("%Y-%m-%d")
+        return (base + timedelta(days=int(val))).strftime("%d-%b-%Y").upper()
     return _parse_date(val)
 
 
@@ -372,9 +373,17 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             continue
 
         qty_int = _safe_int(qty)
-        price_f = _safe_float(price)
-        if qty_int <= 0 or price_f <= 0:
+        price_e = _safe_float(price)                         # E: transaction price per share
+        cost_f = _safe_float(ws.cell(row_idx, 6).value)      # F: COST (value at cost incl. charges)
+        if qty_int <= 0 or (price_e <= 0 and cost_f <= 0):
             continue
+
+        # buy_price = per-unit cost from column F; fallback to column E
+        if cost_f > 0 and qty_int > 0:
+            buy_price = cost_f / qty_int
+        else:
+            buy_price = price_e
+            cost_f = round(price_e * qty_int, 2)
 
         exchange = exch if exch in ("NSE", "BSE") else "NSE"
 
@@ -400,11 +409,12 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             if not sell_date:
                 sell_date = tx_date  # fallback
 
-            realized_pl = sell_gain if sell_gain != 0 else round((sell_price - price_f) * sold_units, 2)
+            realized_pl = sell_gain if sell_gain != 0 else round((sell_price - buy_price) * sold_units, 2)
 
             sold.append({
                 "buy_date": tx_date,
-                "buy_price": price_f,
+                "buy_price": buy_price,
+                "buy_cost": cost_f,
                 "sell_date": sell_date,
                 "sell_price": sell_price,
                 "quantity": sold_units,
@@ -416,11 +426,14 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             # Check for partial sell (held = D - sold_units)
             held_qty = qty_int - sold_units
             if held_qty > 0:
+                per_unit_cost = cost_f / qty_int if qty_int > 0 else buy_price
                 held.append({
                     "date": tx_date,
                     "exchange": exchange,
                     "quantity": held_qty,
-                    "price": price_f,
+                    "price": buy_price,
+                    "raw_price": price_e,
+                    "cost": round(per_unit_cost * held_qty, 2),
                     "row_idx": row_idx,
                 })
         else:
@@ -429,7 +442,9 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
                 "date": tx_date,
                 "exchange": exchange,
                 "quantity": qty_int,
-                "price": price_f,
+                "price": buy_price,
+                "raw_price": price_e,
+                "cost": cost_f,
                 "row_idx": row_idx,
             })
 
@@ -619,6 +634,8 @@ class XlsxPortfolio:
                 "date": h["date"],
                 "quantity": h["quantity"],
                 "price": h["price"],
+                "raw_price": h.get("raw_price", h["price"]),
+                "cost": h.get("cost", 0),
                 "exchange": h.get("exchange", exchange),
                 "row_idx": h.get("row_idx", 0),
             } for h in all_held]
@@ -637,6 +654,8 @@ class XlsxPortfolio:
                 "exchange": r.get("exchange", exchange),
                 "quantity": r["remaining"],
                 "price": r["price"],
+                "raw_price": r.get("raw_price", r["price"]),
+                "cost": round(r["price"] * r["remaining"], 2),
                 "row_idx": r.get("row_idx", 0),
             } for r in remaining if r["remaining"] > 0]
 
@@ -658,13 +677,18 @@ class XlsxPortfolio:
         for lot in all_held:
             h_id = _gen_id(symbol, lot.get("exchange", exchange),
                            lot["date"], lot["price"], lot.get("row_idx", 0))
+            lot_cost = lot.get("cost", 0)
+            if lot_cost <= 0:
+                lot_cost = round(lot["price"] * lot["quantity"], 2)
             h = Holding(
                 id=h_id,
                 symbol=symbol,
                 exchange=lot.get("exchange", exchange),
                 name=name,
                 quantity=lot["quantity"],
+                price=round(lot.get("raw_price", lot["price"]), 2),
                 buy_price=round(lot["price"], 2),
+                buy_cost=round(lot_cost, 2),
                 buy_date=lot["date"],
                 notes="",
             )
