@@ -95,6 +95,7 @@ class PortfolioSummary(BaseModel):
     total_holdings: int
     stocks_in_profit: int
     stocks_in_loss: int
+    total_dividend: float = 0.0
 
 
 class HoldingWithLive(BaseModel):
@@ -127,5 +128,7 @@ class StockSummaryItem(BaseModel):
     profitable_qty: int = 0          # shares where lot buy_price < current_price
     loss_qty: int = 0                # shares where lot buy_price >= current_price
     total_dividend: float = 0.0      # total dividend income received
+    dividend_count: int = 0          # number of dividend payments
+    dividend_units: int = 0          # total units that received dividends
     live: Optional[StockLiveData] = None
     is_above_avg_buy: bool = False

@@ -50,21 +50,21 @@ body {
 /* ── Summary Cards ───────────────────────────────────── */
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
   margin-bottom: 32px;
 }
 .summary-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 14px 12px;
   transition: border-color 0.2s;
 }
 .summary-card:hover { border-color: var(--blue); }
-.summary-card .label { font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-.summary-card .value { font-size: 28px; font-weight: 700; }
-.summary-card .sub { font-size: 13px; margin-top: 4px; }
+.summary-card .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.summary-card .value { font-size: 20px; font-weight: 700; }
+.summary-card .sub { font-size: 11px; margin-top: 3px; }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
 .neutral { color: var(--text-dim); }
@@ -366,7 +366,7 @@ tr.highlight-profit:hover {
 @media (max-width: 768px) {
   .app { padding: 16px; }
   .header { flex-direction: column; gap: 16px; }
-  .summary-grid { grid-template-columns: 1fr 1fr; }
+  .summary-grid { grid-template-columns: repeat(3, 1fr); }
   .table-container { overflow-x: auto; }
   table { min-width: 800px; }
 }

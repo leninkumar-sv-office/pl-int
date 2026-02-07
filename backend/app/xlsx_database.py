@@ -322,12 +322,17 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
         # Collect dividends
         if exch == "DIV":
             tx_date = _parse_date(date_val)
-            amount = _safe_float(price) or _safe_float(qty)  # amount may be in price or qty col
+            cost_col_f = _safe_float(ws.cell(row_idx, 6).value)  # F = total amount (qty * price)
+            per_share = _safe_float(price)                        # E = dividend per share
+            div_qty = _safe_float(qty) or 0                       # D = number of units
+            # Prefer column F (total amount); fall back to price or qty
+            amount = cost_col_f or per_share or div_qty
             if amount and amount > 0:
                 remarks_val = str(ws.cell(row_idx, 7).value or "").strip()
                 dividends.append({
                     "date": tx_date or "",
                     "amount": amount,
+                    "units": int(div_qty) if div_qty > 0 else 0,
                     "remarks": remarks_val if remarks_val != "~" else "",
                 })
             continue
@@ -721,12 +726,19 @@ class XlsxPortfolio:
         return all_sold
 
     def get_dividends_by_symbol(self) -> dict:
-        """Get dividend totals grouped by symbol. Returns {symbol: total_amount}."""
+        """Get dividend totals grouped by symbol.
+
+        Returns {symbol: {"amount": total, "count": n_entries, "units": total_units}}.
+        """
         result = {}
         for symbol in self._file_map:
             _, _, dividends = self._get_stock_data(symbol)
             if dividends:
-                result[symbol] = sum(d["amount"] for d in dividends)
+                result[symbol] = {
+                    "amount": sum(d["amount"] for d in dividends),
+                    "count": len(dividends),
+                    "units": sum(d.get("units", 0) for d in dividends),
+                }
         return result
 
     # ── Public WRITE API ──────────────────────────────────

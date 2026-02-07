@@ -329,7 +329,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 12; // number of columns in the main table
+  const TOTAL_COLS = 13; // number of columns in the main table
 
   return (
     <div className="section">
@@ -382,6 +382,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>
               <th onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer' }}>
                 Realized P&L<SortIcon field="realized_pl" />
+              </th>
+              <th onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
+                Dividends<SortIcon field="total_dividend" />
               </th>
               <th>Status</th>
             </tr>
@@ -553,6 +556,22 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           color: stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)',
                         }}>
                           {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td>
+                      {(stock.total_dividend || 0) > 0 ? (
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--green)' }}>
+                            +{formatINR(stock.total_dividend)}
+                          </div>
+                          {(stock.dividend_units || 0) > 0 && (
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
+                              on {stock.dividend_units} units
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>

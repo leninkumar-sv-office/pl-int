@@ -9,7 +9,7 @@ export default function Dashboard({ summary, loading }) {
   if (loading && !summary) {
     return (
       <div className="summary-grid">
-        {[...Array(5)].map((_, i) => (
+        {[...Array(6)].map((_, i) => (
           <div key={i} className="summary-card">
             <div className="label">Loading...</div>
             <div className="value" style={{ color: 'var(--text-muted)' }}>--</div>
@@ -51,6 +51,12 @@ export default function Dashboard({ summary, loading }) {
       value: `${summary.stocks_in_profit} / ${summary.stocks_in_loss}`,
       sub: 'In profit / In loss',
       color: 'var(--text)',
+    },
+    {
+      label: 'Total Dividends',
+      value: formatINR(summary.total_dividend || 0),
+      sub: (summary.total_dividend || 0) > 0 ? 'Dividend income earned' : 'No dividends yet',
+      color: (summary.total_dividend || 0) > 0 ? 'var(--green)' : 'var(--text-muted)',
     },
   ];
 

@@ -245,7 +245,9 @@ def get_stock_summary():
             unrealized_profit=round(unrealized_profit, 2),
             unrealized_loss=round(unrealized_loss, 2),
             realized_pl=round(realized_pl, 2),
-            total_dividend=round(dividends_by_symbol.get(sym, 0), 2),
+            total_dividend=round(dividends_by_symbol.get(sym, {}).get("amount", 0), 2),
+            dividend_count=dividends_by_symbol.get(sym, {}).get("count", 0),
+            dividend_units=dividends_by_symbol.get(sym, {}).get("units", 0),
             num_held_lots=len(held_lots),
             num_sold_lots=len(sold_lots),
             profitable_qty=profitable_qty,
@@ -305,6 +307,7 @@ def get_dashboard_summary():
     """Get aggregated portfolio summary for the dashboard."""
     holdings = db.get_all_holdings()
     sold_positions = db.get_all_sold()
+    dividends_map = db.get_dividends_by_symbol()
 
     if not holdings and not sold_positions:
         return PortfolioSummary(
@@ -312,6 +315,7 @@ def get_dashboard_summary():
             unrealized_pl=0, unrealized_pl_pct=0,
             realized_pl=0, total_holdings=0,
             stocks_in_profit=0, stocks_in_loss=0,
+            total_dividend=0,
         )
 
     # Fetch live prices
@@ -341,6 +345,7 @@ def get_dashboard_summary():
     unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0
 
     realized_pl = sum(s.realized_pl for s in sold_positions)
+    total_dividend = sum(d["amount"] for d in dividends_map.values())
 
     return PortfolioSummary(
         total_invested=round(total_invested, 2),
@@ -351,6 +356,7 @@ def get_dashboard_summary():
         total_holdings=len(holdings),
         stocks_in_profit=stocks_in_profit,
         stocks_in_loss=stocks_in_loss,
+        total_dividend=round(total_dividend, 2),
     )
 
 
