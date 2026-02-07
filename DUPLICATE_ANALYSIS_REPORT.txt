@@ -1,0 +1,192 @@
+================================================================================
+STOCK PORTFOLIO DUPLICATE ROW ANALYSIS REPORT
+================================================================================
+Generated: 2026-02-07
+Directory: /sessions/vibrant-nice-lamport/mnt/pl/dumps/Stocks
+Analysis Type: Research/Analysis Only - NO FILES MODIFIED
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+Total Files Analyzed:           67
+Files with Duplicates:          45 (67%)
+Total Duplicate Pairs Found:    697
+Files with No Duplicates:       22 (33%)
+Files with Errors:              1  (Vikas Lifecare Ltd - missing sheet)
+
+Average duplicates per affected file: 15.5 pairs
+Maximum duplicates in single file: 101 pairs (Rallis India Ltd.xlsx)
+
+================================================================================
+TOP 10 FILES BY DUPLICATE COUNT
+================================================================================
+
+1. Rallis India Ltd.xlsx                     181 rows -> 101 duplicate pairs
+2. Rail Vikas Nigam.xlsx                      47 rows ->  86 duplicate pairs
+3. High Energy Batteries (India) Ltd.xlsx     48 rows ->  60 duplicate pairs
+4. Archive_Indian Railway Ctrng...            89 rows ->  53 duplicate pairs
+5. Bombay Burmah Trading Corp Ltd.xlsx       122 rows ->  52 duplicate pairs
+6. Bharat Wire Ropes Ltd.xlsx                 41 rows ->  38 duplicate pairs
+7. Ashok Leyland Ltd.xlsx                     96 rows ->  29 duplicate pairs
+8. Antony Waste Handling Cell Ltd.xlsx       100 rows ->  24 duplicate pairs
+9. Kajaria Ceramics Ltd.xlsx                  67 rows ->  21 duplicate pairs
+10. Ramco Systems Ltd.xlsx                    67 rows ->  20 duplicate pairs
+
+================================================================================
+DUPLICATE DETECTION METHODOLOGY
+================================================================================
+
+Fuzzy Key Algorithm:
+  - PRIMARY MATCH: Same DATE + ACTION (BUY/SELL) + QUANTITY
+  - SECONDARY MATCH: Prices within 5% tolerance
+  
+This approach identifies transactions that appear to be the same event
+recorded twice, likely from:
+  1. Manual entry (pre-migration)
+  2. Migration script duplication (from .xls load files)
+
+Detection Results:
+  - 697 potential duplicate pairs identified
+  - Detected across 45 different stock files
+  - Price similarity tolerance: ±5%
+
+================================================================================
+DUPLICATE CHARACTERISTICS ANALYSIS
+================================================================================
+
+Total Duplicate Pairs: 697
+
+Cost Field Analysis:
+  - Cost empty in older row:        25 pairs (3%)
+    → Suggests older row may be from simplified pre-migration entry
+  
+  - Cost empty in newer row:       116 pairs (16%)
+    → Suggests newer row from load file with missing cost calculation
+  
+  - Cost values differ:            230 pairs (32%)
+    → Likely migration calculation differences (e.g., fees, taxes)
+
+Exchange Analysis:
+  - Exchange differs:               46 pairs (6%)
+    → Same transaction listed on different exchange (NSE vs BSE)
+    → Possible: Intra-exchange arbitrage or manual entry error
+
+Price Analysis:
+  - Prices identical:              352 pairs (50%)
+    → Confirmed identical transactions
+  
+  - Prices similar (within 5%):    345 pairs (50%)
+    → Likely same transaction with minor price variation
+
+INTERPRETATION:
+The characteristics support the hypothesis that duplicates are from:
+  - Pre-migration manual entries (older, often with missing COST data)
+  - Post-migration load file imports (newer, sometimes with missing COST)
+  - Some transactions recorded on different exchanges
+
+================================================================================
+SAMPLE DUPLICATE PATTERNS
+================================================================================
+
+PATTERN 1: Identical Duplicates
+  Stock: Kajaria Ceramics Ltd.xlsx
+  Row 5:  2026-02-04 | Buy 1 @ 911.70 | Cost: 918.16 | NSE
+  Row 6:  2026-02-04 | Buy 1 @ 911.70 | Cost: 918.16 | NSE
+  → Exact same row repeated
+
+PATTERN 2: Different Exchange
+  Stock: Ashok Leyland Ltd.xlsx
+  Row 6:  2025-10-17 | Buy 50 @ 136.50 | Cost: 6873.28 | BSE
+  Row 7:  2025-10-17 | Buy 50 @ 137.47 | Cost: None     | NSE
+  → Same date/qty, but different exchange and price source
+
+PATTERN 3: Missing Cost
+  Stock: Rail Vikas Nigam.xlsx
+  Row 26: 2025-10-20 | Buy 40 @ 330.70 | Cost: 13321.59 | NSE
+  Row 48: 2025-10-20 | Buy 40 @ 333.04 | Cost: None     | NSE
+  → Newer row has missing cost, suggesting import error
+
+PATTERN 4: Slight Price Variation
+  Stock: Antony Waste Handling Cell Ltd.xlsx
+  Row 8:  2025-12-08 | Buy 8 @ 426.50 | Cost: 3436.31 | NSE
+  Row 9:  2025-12-08 | Buy 8 @ 426.40 | Cost: 3435.51 | NSE
+  → Prices differ <1%, costs differ slightly (rounding)
+
+================================================================================
+FILES WITH HIGHEST PRIORITY ISSUES
+================================================================================
+
+CRITICAL (>50 duplicates):
+  1. Rallis India Ltd.xlsx                    101 duplicates
+  2. Rail Vikas Nigam.xlsx                     86 duplicates
+  3. High Energy Batteries (India) Ltd.xlsx    60 duplicates
+  4. Archive_Indian Railway Ctrng...           53 duplicates
+  5. Bombay Burmah Trading Corp Ltd.xlsx       52 duplicates
+
+HIGH (20-50 duplicates):
+  6. Bharat Wire Ropes Ltd.xlsx                38 duplicates
+  7. Ashok Leyland Ltd.xlsx                    29 duplicates
+  8. Antony Waste Handling Cell Ltd.xlsx       24 duplicates
+  9. Kajaria Ceramics Ltd.xlsx                 21 duplicates
+  10. Ramco Systems Ltd.xlsx                   20 duplicates
+
+These files should be prioritized for manual review and cleanup.
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+1. MANUAL REVIEW REQUIRED:
+   - Review all 697 duplicate pairs for context
+   - Determine which row is the "canonical" entry
+   - Consider: date order, data completeness, source reliability
+
+2. DATA QUALITY ISSUES TO ADDRESS:
+   - COST field inconsistencies (especially empty values)
+   - Exchange discrepancies for same transactions
+   - Price variations that suggest calculation differences
+
+3. CLEANUP STRATEGY:
+   - For identical rows: Remove newer duplicate (post-migration entry)
+   - For different COST values: Choose value from more reliable source
+   - For exchange differences: Verify actual transaction exchange
+   - For missing COST: Fill from matching row or recalculate
+
+4. PREVENTIVE MEASURES:
+   - Implement transaction deduplication before loading
+   - Use composite keys (date+action+qty+exchange) for uniqueness
+   - Validate COST calculation consistency
+   - Add data quality checks post-migration
+
+================================================================================
+OUTPUT FILES GENERATED
+================================================================================
+
+1. analyze_duplicates.py (detailed version)
+   - Full report with all duplicate pairs
+   - Row numbers and detailed field values
+   
+2. analyze_duplicates_summary.py (summary version)
+   - File-level summary table
+   - Top 10 files with most duplicates
+   
+3. duplicate_details.csv
+   - Machine-readable export for further analysis
+   - Columns: Stock File, Total Rows, Duplicate Pairs, Row numbers, etc.
+   
+4. DUPLICATE_ANALYSIS_REPORT.txt (this file)
+   - Executive summary and recommendations
+
+================================================================================
+NOTES
+================================================================================
+
+- This analysis is READ-ONLY - no files were modified
+- All row numbers refer to the Excel row index (including header)
+- Date/Time values shown as: YYYY-MM-DD HH:MM:SS format
+- Price tolerance for matching: ±5%
+- Files skipped: those starting with ~, ., or in _backup directories
+- One file had missing 'Trading History' sheet: Vikas Lifecare Ltd.xlsx
+
+================================================================================
