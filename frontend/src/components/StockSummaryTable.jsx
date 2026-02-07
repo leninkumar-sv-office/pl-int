@@ -299,7 +299,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 9; // number of columns in the main table
+  const TOTAL_COLS = 10; // number of columns in the main table
 
   return (
     <div className="section">
@@ -343,6 +343,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>
               <th onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
+              </th>
+              <th onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer' }}>
+                Realized P&L<SortIcon field="realized_pl" />
               </th>
               <th>Status</th>
             </tr>
@@ -435,7 +438,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           <div style={{ fontWeight: 600, color: 'var(--green)' }}>
                             +{formatINR(stock.unrealized_profit)}
                           </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
                             on {stock.profitable_qty} units
                           </div>
                         </div>
@@ -449,9 +452,21 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           <div style={{ fontWeight: 600, color: 'var(--red)' }}>
                             {formatINR(stock.unrealized_loss)}
                           </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85 }}>
                             on {stock.loss_qty} units
                           </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td>
+                      {stock.realized_pl !== 0 ? (
+                        <div style={{
+                          fontWeight: 600,
+                          color: stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}>
+                          {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
