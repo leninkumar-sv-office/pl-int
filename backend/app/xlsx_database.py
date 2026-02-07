@@ -111,16 +111,16 @@ def _gen_id(symbol: str, exchange: str, buy_date: str, buy_price: float, row_idx
 
 
 def _parse_date(val) -> Optional[str]:
-    """Convert xlsx cell value to DD-MMM-YYYY string (e.g. 27-JAN-2026)."""
-    _FMT = "%d-%b-%Y"
+    """Convert xlsx cell value to YYYY-MM-DD string (e.g. 2026-01-27)."""
+    _FMT = "%Y-%m-%d"
     if isinstance(val, datetime):
-        return val.strftime(_FMT).upper()
+        return val.strftime(_FMT)
     if isinstance(val, date):
-        return val.strftime(_FMT).upper()
+        return val.strftime(_FMT)
     if isinstance(val, str):
         for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d-%b-%Y", "%d-%B-%Y"):
             try:
-                return datetime.strptime(val.strip(), fmt).strftime(_FMT).upper()
+                return datetime.strptime(val.strip(), fmt).strftime(_FMT)
             except ValueError:
                 continue
     return None
@@ -222,11 +222,11 @@ def _extract_index_data(wb) -> dict:
 
 
 def _parse_excel_serial_date(val) -> Optional[str]:
-    """Convert Excel serial date number to DD-MMM-YYYY string."""
+    """Convert Excel serial date number to YYYY-MM-DD string."""
     if isinstance(val, (int, float)) and val > 1000:
         from datetime import timedelta
         base = datetime(1899, 12, 30)
-        return (base + timedelta(days=int(val))).strftime("%d-%b-%Y").upper()
+        return (base + timedelta(days=int(val))).strftime("%Y-%m-%d")
     return _parse_date(val)
 
 

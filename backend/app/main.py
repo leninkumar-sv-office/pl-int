@@ -19,8 +19,27 @@ from .models import (
 )
 from .xlsx_database import xlsx_db as db
 from . import stock_service
+from pydantic import BaseModel
 
 app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
+
+
+# ══════════════════════════════════════════════════════════
+#  STARTUP / SHUTDOWN — background price refresh
+# ══════════════════════════════════════════════════════════
+
+@app.on_event("startup")
+def on_startup():
+    """Start background price refresh thread on server boot."""
+    stock_service.start_background_refresh()
+    print("[App] Background price refresh started")
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    """Stop background refresh cleanly."""
+    stock_service.stop_background_refresh()
+    print("[App] Background price refresh stopped")
 
 # CORS for React dev server
 app.add_middleware(
@@ -308,6 +327,46 @@ def set_manual_price(req: ManualPriceRequest):
 
 
 # ══════════════════════════════════════════════════════════
+#  PRICE MANAGEMENT (refresh, status, bulk update)
+# ══════════════════════════════════════════════════════════
+
+class BulkPriceUpdate(BaseModel):
+    prices: dict  # { "SYMBOL": {"exchange": "NSE", "price": 1234.56}, ... }
+
+
+@app.get("/api/prices/status")
+def get_price_status():
+    """Get status of the background price refresh system."""
+    return stock_service.get_refresh_status()
+
+
+@app.post("/api/prices/refresh")
+def trigger_price_refresh():
+    """Manually trigger an immediate price refresh (clears cache)."""
+    stock_service.clear_cache()
+    stock_service._reset_circuit()  # reset circuit breaker too
+    holdings = db.get_all_holdings()
+    if not holdings:
+        return {"message": "No holdings to refresh", "count": 0}
+    symbols = list(set((h.symbol, h.exchange) for h in holdings))
+    results = stock_service.fetch_multiple(symbols)
+    live_count = sum(1 for v in results.values() if not v.is_manual)
+    return {
+        "message": f"Refreshed {len(results)} stocks ({live_count} from Yahoo)",
+        "total": len(results),
+        "live": live_count,
+        "fallback": len(results) - live_count,
+    }
+
+
+@app.post("/api/prices/bulk-update")
+def bulk_update_prices(req: BulkPriceUpdate):
+    """Push prices from external source (useful when Yahoo is down)."""
+    updated = stock_service.bulk_update_prices(req.prices)
+    return {"message": f"Updated {updated} prices", "count": updated}
+
+
+# ══════════════════════════════════════════════════════════
 #  DASHBOARD SUMMARY
 # ══════════════════════════════════════════════════════════
 
@@ -392,105 +451,24 @@ _TICKER_CACHE_TTL = 300  # 5 minutes
 _ticker_lock = threading.Lock()
 
 
-def _fetch_single_ticker_http(meta: dict) -> dict:
-    """Fetch a single ticker via Yahoo Finance v8 chart API (no yfinance library)."""
-    import requests as req
-
-    placeholder = {
-        "key": meta["key"], "label": meta["label"],
-        "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
-        "price": 0, "change": 0, "change_pct": 0,
-    }
-
-    yahoo_sym = meta["yahoo"]
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?range=5d&interval=1d"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    }
-
-    try:
-        resp = req.get(url, headers=headers, timeout=10)
-        data = resp.json()
-
-        chart = data.get("chart", {})
-        result = chart.get("result")
-        if not result or len(result) == 0:
-            print(f"[MarketTicker] {meta['key']}: no chart result")
-            return placeholder
-
-        r = result[0]
-        quote = r.get("indicators", {}).get("quote", [{}])[0]
-        closes = quote.get("close", [])
-        meta_resp = r.get("meta", {})
-
-        # Get price from meta (most reliable)
-        price = float(meta_resp.get("regularMarketPrice", 0) or 0)
-        prev_close = float(meta_resp.get("chartPreviousClose", 0)
-                           or meta_resp.get("previousClose", 0) or 0)
-
-        # Fallback: last non-null close from chart data
-        if price <= 0 and closes:
-            valid_closes = [c for c in closes if c is not None]
-            if valid_closes:
-                price = float(valid_closes[-1])
-
-        if prev_close <= 0 and closes:
-            valid_closes = [c for c in closes if c is not None]
-            if len(valid_closes) >= 2:
-                prev_close = float(valid_closes[-2])
-
-        if price > 0:
-            change = price - prev_close if prev_close > 0 else 0
-            change_pct = (change / prev_close * 100) if prev_close > 0 else 0
-            print(f"[MarketTicker] {meta['key']} OK: {price}")
-            return {
-                "key": meta["key"], "label": meta["label"],
-                "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
-                "price": round(price, 2),
-                "change": round(change, 2),
-                "change_pct": round(change_pct, 2),
-            }
-
-    except Exception as e:
-        print(f"[MarketTicker] {meta['key']} HTTP failed: {e}")
-
-    return placeholder
-
-
 def _fetch_market_tickers() -> List[dict]:
-    """Fetch all market ticker data via direct Yahoo HTTP API in parallel."""
+    """Fetch all market ticker data via direct Yahoo v8 chart API (no yfinance)."""
     global _ticker_cache, _ticker_cache_time
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import random as _rnd
 
     with _ticker_lock:
         if time.time() - _ticker_cache_time < _TICKER_CACHE_TTL and _ticker_cache:
             return _ticker_cache
 
     results = []
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {
-            executor.submit(_fetch_single_ticker_http, meta): meta["key"]
-            for meta in MARKET_TICKER_SYMBOLS
-        }
-        for future in as_completed(futures):
-            try:
-                result = future.result(timeout=15)
-                results.append(result)
-            except Exception as e:
-                key = futures[future]
-                meta = next(m for m in MARKET_TICKER_SYMBOLS if m["key"] == key)
-                print(f"[MarketTicker] Timeout/error for {key}: {e}")
-                results.append({
-                    "key": key, "label": meta["label"],
-                    "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
-                    "price": 0, "change": 0, "change_pct": 0,
-                })
-
-    # Sort to maintain original order
-    key_order = [m["key"] for m in MARKET_TICKER_SYMBOLS]
-    results.sort(key=lambda r: key_order.index(r["key"]) if r["key"] in key_order else 999)
+    for i, meta in enumerate(MARKET_TICKER_SYMBOLS):
+        result = stock_service.fetch_market_ticker(meta)
+        results.append(result)
+        status = "OK" if result["price"] > 0 else "MISS"
+        print(f"[MarketTicker] {meta['key']}: {status} ({result['price']})")
+        # Small delay between each fetch
+        if i < len(MARKET_TICKER_SYMBOLS) - 1:
+            time.sleep(_rnd.uniform(0.3, 0.8))
 
     # Update cache
     with _ticker_lock:

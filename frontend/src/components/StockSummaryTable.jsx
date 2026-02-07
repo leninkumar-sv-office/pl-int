@@ -31,10 +31,10 @@ function WeekRangeBar({ low, high, current, buyPrice }) {
 function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend }) {
   const heldLots = (portfolio || []).filter(
     (item) => item.holding.symbol === stock.symbol && item.holding.quantity > 0
-  );
+  ).sort((a, b) => b.holding.buy_date.localeCompare(a.holding.buy_date));
   const soldTrades = (transactions || []).filter(
     (t) => t.symbol === stock.symbol
-  );
+  ).sort((a, b) => b.sell_date.localeCompare(a.sell_date));
   const live = stock.live;
   const cp = live?.current_price || 0;
 
