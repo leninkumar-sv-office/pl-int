@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, getStockSummary, getMarketTicker } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -9,6 +9,7 @@ import SellStockModal from './components/SellStockModal';
 import TransactionHistory from './components/TransactionHistory';
 import Charts from './components/Charts';
 import MarketTicker from './components/MarketTicker';
+import DividendModal from './components/DividendModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -24,6 +25,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('stocks');
   const [addModalData, setAddModalData] = useState(null); // null = closed, {} = open empty, {symbol,...} = pre-filled
   const [sellTarget, setSellTarget] = useState(null);
+  const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
   const [marketTicker, setMarketTicker] = useState([]);
 
   const loadData = useCallback(async () => {
@@ -81,6 +83,17 @@ export default function App() {
       loadData();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to sell stock');
+    }
+  };
+
+  const handleAddDividend = async (data) => {
+    try {
+      const result = await addDividend(data);
+      toast.success(result.message);
+      setDividendTarget(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to record dividend');
     }
   };
 
@@ -145,6 +158,7 @@ export default function App() {
           transactions={transactions}
           onSell={(holding) => setSellTarget(holding)}
           onAddStock={(stockData) => setAddModalData(stockData || {})}
+          onDividend={(data) => setDividendTarget(data)}
         />
       )}
 
@@ -179,6 +193,15 @@ export default function App() {
           holding={sellTarget}
           onSell={handleSellStock}
           onClose={() => setSellTarget(null)}
+        />
+      )}
+
+      {dividendTarget && (
+        <DividendModal
+          symbol={dividendTarget.symbol}
+          exchange={dividendTarget.exchange}
+          onSubmit={handleAddDividend}
+          onClose={() => setDividendTarget(null)}
         />
       )}
     </div>

@@ -278,18 +278,19 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
       - Core: A=Date, B=Exch, C=Action, D=Qty, E=Price, F=Cost, ...
       - Realised section (position varies): Price, Date, Gain, Units
 
-    Returns (held_lots, column_sold_lots, sell_rows):
+    Returns (held_lots, column_sold_lots, sell_rows, dividends):
       - held_lots: Buy rows WITHOUT Realised data (or partial remaining)
       - column_sold_lots: Buy rows WITH Realised data tracking sold lots
       - sell_rows: Explicit Sell action rows (for FIFO matching against held)
+      - dividends: List of {date, amount, remarks} for dividend rows
     """
-    held, sold, sell_rows = [], [], []
+    held, sold, sell_rows, dividends = [], [], [], []
     if "Trading History" not in wb.sheetnames:
-        return held, sold, sell_rows
+        return held, sold, sell_rows, dividends
     ws = wb["Trading History"]
     max_row = ws.max_row or 0
     if max_row < 5:
-        return held, sold, sell_rows
+        return held, sold, sell_rows, dividends
 
     # Find header row
     header_row = None
@@ -299,7 +300,7 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             header_row = r
             break
     if header_row is None:
-        return held, sold, sell_rows
+        return held, sold, sell_rows, dividends
 
     # Dynamically find the Realised section columns
     rcols = _find_realised_columns(ws, header_row)
@@ -318,8 +319,17 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
         action = str(action).strip()
         exch = str(exch).strip() if exch else ""
 
-        # Skip dividends
+        # Collect dividends
         if exch == "DIV":
+            tx_date = _parse_date(date_val)
+            amount = _safe_float(price) or _safe_float(qty)  # amount may be in price or qty col
+            if amount and amount > 0:
+                remarks_val = str(ws.cell(row_idx, 7).value or "").strip()
+                dividends.append({
+                    "date": tx_date or "",
+                    "amount": amount,
+                    "remarks": remarks_val if remarks_val != "~" else "",
+                })
             continue
 
         # Collect Sell rows for FIFO matching against held lots.
@@ -418,7 +428,7 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
                 "row_idx": row_idx,
             })
 
-    return held, sold, sell_rows
+    return held, sold, sell_rows, dividends
 
 
 # ═══════════════════════════════════════════════════════════
@@ -528,22 +538,22 @@ class XlsxPortfolio:
         """Get holdings/sold for a symbol, combining all files, with mtime caching."""
         files = self._all_files.get(symbol, [])
         if not files:
-            return [], []
+            return [], [], []
 
         # Compute combined mtime (max of all files)
         try:
             combined_mtime = max(fp.stat().st_mtime for fp in files)
         except OSError:
-            return [], []
+            return [], [], []
 
         if symbol in self._cache:
-            cached_mtime, cached_h, cached_s = self._cache[symbol]
+            cached_mtime, cached_h, cached_s, cached_d = self._cache[symbol]
             if cached_mtime == combined_mtime:
-                return cached_h, cached_s
+                return cached_h, cached_s, cached_d
 
-        holdings, sold = self._parse_and_match_symbol(symbol, files)
-        self._cache[symbol] = (combined_mtime, holdings, sold)
-        return holdings, sold
+        holdings, sold, dividends = self._parse_and_match_symbol(symbol, files)
+        self._cache[symbol] = (combined_mtime, holdings, sold, dividends)
+        return holdings, sold, dividends
 
     def _invalidate_symbol(self, symbol: str):
         """Remove a symbol from cache so next read re-parses."""
@@ -557,7 +567,7 @@ class XlsxPortfolio:
 
     # ── Parse + FIFO ──────────────────────────────────────
 
-    def _parse_and_match_symbol(self, symbol: str, files: List[Path]) -> Tuple[List[Holding], List[SoldPosition]]:
+    def _parse_and_match_symbol(self, symbol: str, files: List[Path]):
         """Parse ALL xlsx files for a symbol with hybrid sold detection.
 
         Column-based: Buy rows with Realised section data → sold via columns.
@@ -565,7 +575,7 @@ class XlsxPortfolio:
         This ensures sells done through the app (which add Sell rows) are
         properly reflected alongside original column-tracked sells.
         """
-        all_held, all_sold_raw, all_sell_rows = [], [], []
+        all_held, all_sold_raw, all_sell_rows, all_dividends = [], [], [], []
         exchange = "NSE"
         name = symbol
 
@@ -578,7 +588,7 @@ class XlsxPortfolio:
                 continue
 
             idx = _extract_index_data(wb)
-            held, sold, sell_rows = _parse_trading_history(wb)
+            held, sold, sell_rows, dividends = _parse_trading_history(wb)
             wb.close()
 
             # Use index data from the primary (non-archive) file
@@ -591,9 +601,10 @@ class XlsxPortfolio:
             all_held.extend(held)
             all_sold_raw.extend(sold)
             all_sell_rows.extend(sell_rows)
+            all_dividends.extend(dividends)
 
         if not all_held and not all_sold_raw and not all_sell_rows:
-            return [], []
+            return [], [], all_dividends
 
         # FIFO-match explicit Sell rows against held lots.
         # Column-tracked sells (Buy rows with Realised data) are already in
@@ -672,7 +683,7 @@ class XlsxPortfolio:
                 realized_pl=s["realized_pl"],
             ))
 
-        return holdings, sold
+        return holdings, sold, all_dividends
 
     # ── Public READ API ───────────────────────────────────
 
@@ -683,7 +694,7 @@ class XlsxPortfolio:
         self._holding_file.clear()
 
         for symbol in self._file_map:
-            holdings, _ = self._get_stock_data(symbol)
+            holdings, _, _ = self._get_stock_data(symbol)
             primary_fp = self._file_map[symbol]
             for h in holdings:
                 self._holding_index[h.id] = h
@@ -705,9 +716,18 @@ class XlsxPortfolio:
         """Get all sold positions (FIFO-derived) across every stock file."""
         all_sold: List[SoldPosition] = []
         for symbol in self._file_map:
-            _, sold = self._get_stock_data(symbol)
+            _, sold, _ = self._get_stock_data(symbol)
             all_sold.extend(sold)
         return all_sold
+
+    def get_dividends_by_symbol(self) -> dict:
+        """Get dividend totals grouped by symbol. Returns {symbol: total_amount}."""
+        result = {}
+        for symbol in self._file_map:
+            _, _, dividends = self._get_stock_data(symbol)
+            if dividends:
+                result[symbol] = sum(d["amount"] for d in dividends)
+        return result
 
     # ── Public WRITE API ──────────────────────────────────
 
@@ -765,6 +785,25 @@ class XlsxPortfolio:
             quantity=quantity,
             price=price,
             remarks="APP_SELL",
+        )
+        self._insert_transaction(filepath, tx)
+        self._invalidate_symbol(symbol)
+
+    def add_dividend(self, symbol: str, exchange: str, amount: float,
+                     dividend_date: str, remarks: str = ""):
+        """Insert a dividend row into the stock's xlsx file."""
+        symbol = symbol.upper()
+        filepath = self._find_file_for_symbol(symbol)
+        if filepath is None:
+            raise FileNotFoundError(f"No xlsx file for symbol {symbol}")
+
+        tx = Transaction(
+            date=dividend_date,
+            exchange="DIV",
+            action="Buy",         # action column, doesn't matter for DIV
+            quantity=1,            # placeholder
+            price=amount,          # dividend amount stored in price column
+            remarks=remarks or "DIVIDEND",
         )
         self._insert_transaction(filepath, tx)
         self._invalidate_symbol(symbol)

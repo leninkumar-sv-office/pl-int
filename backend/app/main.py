@@ -13,7 +13,7 @@ import time
 import threading
 
 from .models import (
-    AddStockRequest, SellStockRequest, ManualPriceRequest,
+    AddStockRequest, SellStockRequest, AddDividendRequest, ManualPriceRequest,
     Holding, SoldPosition, StockLiveData,
     PortfolioSummary, HoldingWithLive, StockSummaryItem,
 )
@@ -136,6 +136,29 @@ def delete_holding(holding_id: str):
 
 
 # ══════════════════════════════════════════════════════════
+#  DIVIDEND
+# ══════════════════════════════════════════════════════════
+
+@app.post("/api/portfolio/dividend")
+def add_dividend(req: AddDividendRequest):
+    """Record a dividend received for a stock."""
+    dividend_date = req.dividend_date or str(date.today())
+    try:
+        db.add_dividend(
+            symbol=req.symbol.upper(),
+            exchange=req.exchange,
+            amount=req.amount,
+            dividend_date=dividend_date,
+            remarks=req.remarks,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"No xlsx file found for {req.symbol}")
+    return {
+        "message": f"Dividend of ₹{req.amount:.2f} recorded for {req.symbol.upper()}",
+    }
+
+
+# ══════════════════════════════════════════════════════════
 #  STOCK-LEVEL SUMMARY (held + sold aggregation)
 # ══════════════════════════════════════════════════════════
 
@@ -144,6 +167,7 @@ def get_stock_summary():
     """Get per-stock aggregated data showing held + sold quantities."""
     holdings = db.get_all_holdings()
     sold_positions = db.get_all_sold()
+    dividends_by_symbol = db.get_dividends_by_symbol()
 
     # Fetch live data
     symbols = list(set((h.symbol, h.exchange) for h in holdings))
@@ -221,6 +245,7 @@ def get_stock_summary():
             unrealized_profit=round(unrealized_profit, 2),
             unrealized_loss=round(unrealized_loss, 2),
             realized_pl=round(realized_pl, 2),
+            total_dividend=round(dividends_by_symbol.get(sym, 0), 2),
             num_held_lots=len(held_lots),
             num_sold_lots=len(sold_lots),
             profitable_qty=profitable_qty,

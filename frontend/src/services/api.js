@@ -65,6 +65,13 @@ export async function setManualPrice(symbol, exchange, price) {
   return data;
 }
 
+// ── Dividend ─────────────────────────────────────────
+
+export async function addDividend(dividendData) {
+  const { data } = await api.post('/portfolio/dividend', dividendData);
+  return data;
+}
+
 // ── Market Ticker ────────────────────────────────────
 
 export async function getMarketTicker() {

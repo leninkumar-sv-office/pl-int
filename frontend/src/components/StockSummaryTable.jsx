@@ -28,7 +28,7 @@ function WeekRangeBar({ low, high, current, buyPrice }) {
 }
 
 /* ── Expanded detail panel inside a stock row ───────────── */
-function StockDetail({ stock, portfolio, transactions, onSell, onAddStock }) {
+function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend }) {
   const heldLots = (portfolio || []).filter(
     (item) => item.holding.symbol === stock.symbol && item.holding.quantity > 0
   );
@@ -62,6 +62,13 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock }) {
           style={{ fontWeight: 600 }}
         >
           + Buy {stock.symbol}
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={(e) => { e.stopPropagation(); onDividend({ symbol: stock.symbol, exchange: stock.exchange }); }}
+          style={{ fontWeight: 600 }}
+        >
+          + Dividend
         </button>
       </div>
 
@@ -100,6 +107,14 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock }) {
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Realized P&L</div>
               <div style={{ fontWeight: 600, color: stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
+              </div>
+            </div>
+          )}
+          {stock.total_dividend > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Dividends</div>
+              <div style={{ fontWeight: 600, color: 'var(--green)' }}>
+                +{formatINR(stock.total_dividend)}
               </div>
             </div>
           )}
@@ -231,7 +246,7 @@ const subTd = {
 
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, transactions }) {
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onDividend, transactions }) {
   const [sortField, setSortField] = useState('unrealized_pl');
   const [sortDir, setSortDir] = useState('desc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
@@ -281,6 +296,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'unrealized_loss': aVal = a.unrealized_loss; bVal = b.unrealized_loss; break;
       case 'unrealized_pl': aVal = a.unrealized_pl; bVal = b.unrealized_pl; break;
       case 'realized_pl': aVal = a.realized_pl; bVal = b.realized_pl; break;
+      case 'total_dividend': aVal = a.total_dividend || 0; bVal = b.total_dividend || 0; break;
       case 'week_52_low': {
         const aCP = a.live?.current_price || 0, aLow = a.live?.week_52_low || 0;
         const bCP = b.live?.current_price || 0, bLow = b.live?.week_52_low || 0;
@@ -587,6 +603,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           transactions={transactions}
                           onSell={onSell}
                           onAddStock={onAddStock}
+                          onDividend={onDividend}
                         />
                       </td>
                     </tr>

@@ -21,6 +21,14 @@ class SellStockRequest(BaseModel):
     sell_date: str = Field(default="", description="Sell date YYYY-MM-DD (defaults to today)")
 
 
+class AddDividendRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol e.g. RELIANCE, TCS")
+    exchange: str = Field(default="NSE")
+    amount: float = Field(..., gt=0, description="Total dividend amount received")
+    dividend_date: str = Field(default="", description="Dividend date YYYY-MM-DD (defaults to today)")
+    remarks: str = Field(default="", description="Optional notes")
+
+
 class ManualPriceRequest(BaseModel):
     symbol: str
     exchange: str = "NSE"
@@ -118,5 +126,6 @@ class StockSummaryItem(BaseModel):
     num_sold_lots: int = 0           # individual sold lot count
     profitable_qty: int = 0          # shares where lot buy_price < current_price
     loss_qty: int = 0                # shares where lot buy_price >= current_price
+    total_dividend: float = 0.0      # total dividend income received
     live: Optional[StockLiveData] = None
     is_above_avg_buy: bool = False
