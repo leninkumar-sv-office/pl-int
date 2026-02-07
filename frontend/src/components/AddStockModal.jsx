@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 
-export default function AddStockModal({ onAdd, onClose }) {
+export default function AddStockModal({ onAdd, onClose, initialData }) {
   const [form, setForm] = useState({
-    symbol: '',
-    exchange: 'NSE',
-    name: '',
+    symbol: initialData?.symbol || '',
+    exchange: initialData?.exchange || 'NSE',
+    name: initialData?.name || '',
     quantity: '',
     buy_price: '',
     buy_date: new Date().toISOString().split('T')[0],

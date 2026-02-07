@@ -271,25 +271,25 @@ def _find_realised_columns(ws, header_row: int) -> dict:
     return cols
 
 
-def _parse_trading_history(wb) -> Tuple[list, list]:
-    """Parse Buy rows from Trading History sheet using column layout.
+def _parse_trading_history(wb) -> Tuple[list, list, list]:
+    """Parse Buy and Sell rows from Trading History sheet using column layout.
 
     The xlsx format tracks sold lots directly in the Realised section:
       - Core: A=Date, B=Exch, C=Action, D=Qty, E=Price, F=Cost, ...
       - Realised section (position varies): Price, Date, Gain, Units
 
-    Returns (held_lots, sold_lots):
-      - Buy rows WITHOUT Realised data → held lots (quantity = D)
-      - Buy rows WITH Realised data → sold lots (quantity = Units, held = D - Units)
-      - Sell rows and DIV rows are skipped entirely.
+    Returns (held_lots, column_sold_lots, sell_rows):
+      - held_lots: Buy rows WITHOUT Realised data (or partial remaining)
+      - column_sold_lots: Buy rows WITH Realised data tracking sold lots
+      - sell_rows: Explicit Sell action rows (for FIFO matching against held)
     """
-    held, sold = [], []
+    held, sold, sell_rows = [], [], []
     if "Trading History" not in wb.sheetnames:
-        return held, sold
+        return held, sold, sell_rows
     ws = wb["Trading History"]
     max_row = ws.max_row or 0
     if max_row < 5:
-        return held, sold
+        return held, sold, sell_rows
 
     # Find header row
     header_row = None
@@ -299,7 +299,7 @@ def _parse_trading_history(wb) -> Tuple[list, list]:
             header_row = r
             break
     if header_row is None:
-        return held, sold
+        return held, sold, sell_rows
 
     # Dynamically find the Realised section columns
     rcols = _find_realised_columns(ws, header_row)
@@ -318,8 +318,34 @@ def _parse_trading_history(wb) -> Tuple[list, list]:
         action = str(action).strip()
         exch = str(exch).strip() if exch else ""
 
-        # Skip dividends (EXCH=DIV) and Sell rows (info is in Buy row's Realised cols)
-        if exch == "DIV" or action == "Sell":
+        # Skip dividends
+        if exch == "DIV":
+            continue
+
+        # Collect Sell rows for FIFO matching against held lots.
+        # IMPORTANT: Original dump files have Sell rows alongside Realised
+        # columns on Buy rows for the SAME sales — these would double-count.
+        # So when a Realised section exists, only collect app-initiated sells
+        # (marked with "APP_SELL" remark). When no Realised section exists,
+        # collect all Sell rows (file was created by app or has no column data).
+        if action == "Sell":
+            remarks_val = str(ws.cell(row_idx, 7).value or "").strip()
+            is_app_sell = remarks_val == "APP_SELL"
+            if not has_realised_section or is_app_sell:
+                tx_date = _parse_date(date_val)
+                if not tx_date:
+                    continue
+                qty_int = _safe_int(qty)
+                price_f = _safe_float(price)
+                if qty_int > 0 and price_f > 0:
+                    exchange = exch if exch in ("NSE", "BSE") else "NSE"
+                    sell_rows.append({
+                        "date": tx_date,
+                        "quantity": qty_int,
+                        "price": price_f,
+                        "exchange": exchange,
+                        "row_idx": row_idx,
+                    })
             continue
 
         # Only process Buy rows
@@ -392,7 +418,7 @@ def _parse_trading_history(wb) -> Tuple[list, list]:
                 "row_idx": row_idx,
             })
 
-    return held, sold
+    return held, sold, sell_rows
 
 
 # ═══════════════════════════════════════════════════════════
@@ -532,12 +558,14 @@ class XlsxPortfolio:
     # ── Parse + FIFO ──────────────────────────────────────
 
     def _parse_and_match_symbol(self, symbol: str, files: List[Path]) -> Tuple[List[Holding], List[SoldPosition]]:
-        """Parse ALL xlsx files for a symbol — no FIFO needed.
+        """Parse ALL xlsx files for a symbol with hybrid sold detection.
 
-        The xlsx format tracks sold lots directly in columns W-AB,
-        so we read held vs sold status from the spreadsheet itself.
+        Column-based: Buy rows with Realised section data → sold via columns.
+        FIFO-based: Explicit Sell rows are FIFO-matched against held lots.
+        This ensures sells done through the app (which add Sell rows) are
+        properly reflected alongside original column-tracked sells.
         """
-        all_held, all_sold_raw = [], []
+        all_held, all_sold_raw, all_sell_rows = [], [], []
         exchange = "NSE"
         name = symbol
 
@@ -550,7 +578,7 @@ class XlsxPortfolio:
                 continue
 
             idx = _extract_index_data(wb)
-            held, sold = _parse_trading_history(wb)
+            held, sold, sell_rows = _parse_trading_history(wb)
             wb.close()
 
             # Use index data from the primary (non-archive) file
@@ -562,11 +590,54 @@ class XlsxPortfolio:
 
             all_held.extend(held)
             all_sold_raw.extend(sold)
+            all_sell_rows.extend(sell_rows)
 
-        if not all_held and not all_sold_raw:
+        if not all_held and not all_sold_raw and not all_sell_rows:
             return [], []
 
-        # Build Holding objects directly (no FIFO needed)
+        # FIFO-match explicit Sell rows against held lots.
+        # Column-tracked sells (Buy rows with Realised data) are already in
+        # all_sold_raw and their lots are NOT in all_held, so no double-counting.
+        if all_sell_rows and all_held:
+            buys_for_fifo = [{
+                "date": h["date"],
+                "quantity": h["quantity"],
+                "price": h["price"],
+                "exchange": h.get("exchange", exchange),
+                "row_idx": h.get("row_idx", 0),
+            } for h in all_held]
+
+            sells_for_fifo = [{
+                "date": s["date"],
+                "quantity": s["quantity"],
+                "price": s["price"],
+            } for s in all_sell_rows]
+
+            remaining, fifo_sold = fifo_match(buys_for_fifo, sells_for_fifo)
+
+            # Replace held lots with remaining after FIFO
+            all_held = [{
+                "date": r["date"],
+                "exchange": r.get("exchange", exchange),
+                "quantity": r["remaining"],
+                "price": r["price"],
+                "row_idx": r.get("row_idx", 0),
+            } for r in remaining if r["remaining"] > 0]
+
+            # Add FIFO-derived sold positions
+            for fs in fifo_sold:
+                all_sold_raw.append({
+                    "buy_date": fs["buy_date"],
+                    "buy_price": fs["buy_price"],
+                    "sell_date": fs["sell_date"],
+                    "sell_price": fs["sell_price"],
+                    "quantity": fs["quantity"],
+                    "realized_pl": fs["realized_pl"],
+                    "exchange": fs.get("buy_exchange", exchange),
+                    "row_idx": fs.get("row_idx", 0),
+                })
+
+        # Build Holding objects directly
         holdings = []
         for lot in all_held:
             h_id = _gen_id(symbol, lot.get("exchange", exchange),
@@ -676,7 +747,12 @@ class XlsxPortfolio:
 
     def add_sell_transaction(self, symbol: str, exchange: str,
                              quantity: int, price: float, sell_date: str):
-        """Insert a Sell row into the stock's xlsx file."""
+        """Insert a Sell row into the stock's xlsx file.
+
+        Marks the row with 'APP_SELL' so the parser knows to FIFO-match it
+        against held lots (as opposed to original Sell rows that are already
+        tracked via Realised columns on Buy rows).
+        """
         symbol = symbol.upper()
         filepath = self._find_file_for_symbol(symbol)
         if filepath is None:
@@ -688,7 +764,7 @@ class XlsxPortfolio:
             action="Sell",
             quantity=quantity,
             price=price,
-            remarks="~",
+            remarks="APP_SELL",
         )
         self._insert_transaction(filepath, tx)
         self._invalidate_symbol(symbol)

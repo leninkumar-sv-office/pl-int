@@ -21,7 +21,7 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('stocks');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalData, setAddModalData] = useState(null); // null = closed, {} = open empty, {symbol,...} = pre-filled
   const [sellTarget, setSellTarget] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -54,7 +54,7 @@ export default function App() {
     try {
       await addStock(data);
       toast.success(`Added ${data.quantity} shares of ${data.symbol}`);
-      setShowAddModal(false);
+      setAddModalData(null);
       loadData();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to add stock');
@@ -99,7 +99,7 @@ export default function App() {
           <button className="btn btn-ghost" onClick={handleRefresh} disabled={loading}>
             {loading ? '⟳ Loading...' : '⟳ Refresh'}
           </button>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+          <button className="btn btn-primary" onClick={() => setAddModalData({})}>
             + Add Stock
           </button>
         </div>
@@ -130,8 +130,9 @@ export default function App() {
           stocks={stockSummary}
           loading={loading}
           portfolio={portfolio}
+          transactions={transactions}
           onSell={(holding) => setSellTarget(holding)}
-          onAddStock={() => setShowAddModal(true)}
+          onAddStock={(stockData) => setAddModalData(stockData || {})}
         />
       )}
 
@@ -140,7 +141,7 @@ export default function App() {
           portfolio={portfolio}
           loading={loading}
           onSell={(holding) => setSellTarget(holding)}
-          onAddStock={() => setShowAddModal(true)}
+          onAddStock={() => setAddModalData({})}
         />
       )}
 
@@ -153,10 +154,11 @@ export default function App() {
       )}
 
       {/* Modals */}
-      {showAddModal && (
+      {addModalData !== null && (
         <AddStockModal
+          initialData={addModalData}
           onAdd={handleAddStock}
-          onClose={() => setShowAddModal(false)}
+          onClose={() => setAddModalData(null)}
         />
       )}
 
