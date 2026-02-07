@@ -190,6 +190,21 @@ def get_stock_summary():
         unrealized_pl = current_value - total_invested
         unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0
 
+        # Per-lot profitability: split into profitable vs loss lots
+        profitable_qty = 0
+        loss_qty = 0
+        unrealized_profit = 0.0  # P&L sum from lots where current > buy
+        unrealized_loss = 0.0    # P&L sum from lots where current <= buy
+        if current_price > 0:
+            for h in held_lots:
+                lot_pl = (current_price - h.buy_price) * h.quantity
+                if current_price > h.buy_price:
+                    profitable_qty += h.quantity
+                    unrealized_profit += lot_pl
+                else:
+                    loss_qty += h.quantity
+                    unrealized_loss += lot_pl
+
         result.append(StockSummaryItem(
             symbol=sym,
             exchange=exchange,
@@ -201,9 +216,13 @@ def get_stock_summary():
             current_value=round(current_value, 2),
             unrealized_pl=round(unrealized_pl, 2),
             unrealized_pl_pct=round(unrealized_pl_pct, 2),
+            unrealized_profit=round(unrealized_profit, 2),
+            unrealized_loss=round(unrealized_loss, 2),
             realized_pl=round(realized_pl, 2),
             num_held_lots=len(held_lots),
             num_sold_lots=len(sold_lots),
+            profitable_qty=profitable_qty,
+            loss_qty=loss_qty,
             live=live,
             is_above_avg_buy=current_price > avg_buy_price if current_price > 0 and avg_buy_price > 0 else False,
         ))

@@ -111,8 +111,12 @@ class StockSummaryItem(BaseModel):
     current_value: float = 0.0    # current_price * total_held_qty
     unrealized_pl: float = 0.0
     unrealized_pl_pct: float = 0.0
-    realized_pl: float = 0.0     # sum of realized P&L from sold lots
-    num_held_lots: int = 0        # individual held lot count
-    num_sold_lots: int = 0        # individual sold lot count
+    unrealized_profit: float = 0.0   # P&L from lots where current > buy (positive)
+    unrealized_loss: float = 0.0     # P&L from lots where current <= buy (negative)
+    realized_pl: float = 0.0        # sum of realized P&L from sold lots
+    num_held_lots: int = 0           # individual held lot count
+    num_sold_lots: int = 0           # individual sold lot count
+    profitable_qty: int = 0          # shares where lot buy_price < current_price
+    loss_qty: int = 0                # shares where lot buy_price >= current_price
     live: Optional[StockLiveData] = None
     is_above_avg_buy: bool = False

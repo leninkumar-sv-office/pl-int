@@ -70,9 +70,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
       case 'total_sold_qty': aVal = a.total_sold_qty; bVal = b.total_sold_qty; break;
       case 'total_invested': aVal = a.total_invested; bVal = b.total_invested; break;
       case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
+      case 'unrealized_profit': aVal = a.unrealized_profit; bVal = b.unrealized_profit; break;
+      case 'unrealized_loss': aVal = a.unrealized_loss; bVal = b.unrealized_loss; break;
       case 'unrealized_pl': aVal = a.unrealized_pl; bVal = b.unrealized_pl; break;
       case 'realized_pl': aVal = a.realized_pl; bVal = b.realized_pl; break;
-      default: aVal = a.unrealized_pl; bVal = b.unrealized_pl;
+      default: aVal = a.unrealized_profit; bVal = b.unrealized_profit;
     }
     if (typeof aVal === 'string') {
       return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
@@ -129,8 +131,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
               <th onClick={() => handleSort('current_value')} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="current_value" />
               </th>
-              <th onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer' }}>
-                Unrealized P&L<SortIcon field="unrealized_pl" />
+              <th onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer' }}>
+                Unrealized PF<SortIcon field="unrealized_profit" />
+              </th>
+              <th onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer' }}>
+                Unrealized Loss<SortIcon field="unrealized_loss" />
               </th>
               <th onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer' }}>
                 Realized P&L<SortIcon field="realized_pl" />
@@ -226,19 +231,27 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
                     {hasHeld ? formatINR(stock.current_value) : <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>-</span>}
                   </td>
                   <td>
-                    {hasHeld ? (
+                    {hasHeld && stock.unrealized_profit > 0 ? (
                       <div>
-                        <div style={{
-                          fontWeight: 600,
-                          color: stock.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)',
-                        }}>
-                          {stock.unrealized_pl >= 0 ? '+' : ''}{formatINR(stock.unrealized_pl)}
+                        <div style={{ fontWeight: 600, color: 'var(--green)' }}>
+                          +{formatINR(stock.unrealized_profit)}
                         </div>
-                        <div style={{
-                          fontSize: '11px',
-                          color: stock.unrealized_pl_pct >= 0 ? 'var(--green)' : 'var(--red)',
-                        }}>
-                          {stock.unrealized_pl_pct >= 0 ? '+' : ''}{stock.unrealized_pl_pct.toFixed(2)}%
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          on {stock.profitable_qty} units
+                        </div>
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)' }}>-</span>
+                    )}
+                  </td>
+                  <td>
+                    {hasHeld && stock.unrealized_loss < 0 ? (
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--red)' }}>
+                          {formatINR(stock.unrealized_loss)}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          on {stock.loss_qty} units
                         </div>
                       </div>
                     ) : (
@@ -258,12 +271,32 @@ export default function StockSummaryTable({ stocks, loading, onAddStock }) {
                     )}
                   </td>
                   <td>
-                    {hasHeld && stock.is_above_avg_buy ? (
-                      <div className="sell-tag">
-                        ▲ Profit
+                    {hasHeld && stock.profitable_qty > 0 ? (
+                      <div>
+                        <div className="sell-tag">
+                          ▲ Can Sell {stock.profitable_qty}
+                        </div>
+                        {stock.loss_qty > 0 && (
+                          <div style={{
+                            fontSize: '11px',
+                            color: 'var(--red)',
+                            marginTop: '4px',
+                          }}>
+                            {stock.loss_qty} in loss
+                          </div>
+                        )}
                       </div>
                     ) : hasHeld ? (
-                      <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
+                      <div>
+                        <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
+                        <div style={{
+                          fontSize: '11px',
+                          color: 'var(--red)',
+                          marginTop: '2px',
+                        }}>
+                          {stock.loss_qty} in loss
+                        </div>
+                      </div>
                     ) : (
                       <span style={{
                         fontSize: '11px',
