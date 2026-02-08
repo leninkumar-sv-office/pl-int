@@ -23,30 +23,23 @@ from .xlsx_database import xlsx_db as db
 from . import stock_service
 from . import zerodha_service
 from pydantic import BaseModel
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
 
 
-# ── Error-logging middleware: catches unhandled 500s and logs them ──
-class ErrorLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        try:
-            response = await call_next(request)
-            if response.status_code >= 500:
-                print(f"[ERROR] {request.method} {request.url.path} → {response.status_code}")
-            return response
-        except Exception as e:
-            print(f"[ERROR] {request.method} {request.url.path} → unhandled: {e}")
-            traceback.print_exc()
-            return JSONResponse(
-                status_code=500,
-                content={"detail": f"Internal error: {str(e)[:200]}"},
-            )
-
-app.add_middleware(ErrorLoggingMiddleware)
+# ── Global exception handler: logs unhandled errors to console ──
+# (Using exception_handler instead of BaseHTTPMiddleware which can
+#  break sync endpoints and large responses)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"[ERROR] {request.method} {request.url.path} → {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal error: {str(exc)[:200]}"},
+    )
 
 
 # ══════════════════════════════════════════════════════════
@@ -56,6 +49,19 @@ app.add_middleware(ErrorLoggingMiddleware)
 @app.on_event("startup")
 def on_startup():
     """Start background refresh threads on server boot."""
+    # ── Pre-warm xlsx caches so first request is fast ──
+    t0 = time.time()
+    try:
+        holdings = db.get_all_holdings()  # parses all xlsx files → populates cache
+        sold = db.get_all_sold()
+        symbols = list(set((h.symbol, h.exchange) for h in holdings))
+        stock_service.get_cached_prices(symbols)  # populates price cache from JSON
+        elapsed = time.time() - t0
+        print(f"[App] Pre-warmed caches: {len(holdings)} holdings, "
+              f"{len(sold)} sold, {len(symbols)} symbols in {elapsed:.1f}s")
+    except Exception as e:
+        print(f"[App] Pre-warm error (non-fatal): {e}")
+
     # Check Zerodha connection
     if zerodha_service.is_configured():
         if zerodha_service.is_session_valid():
@@ -431,16 +437,37 @@ def _do_price_refresh():
 
 @app.post("/api/prices/refresh")
 def trigger_price_refresh():
-    """Trigger an immediate price refresh (non-blocking).
-    Re-scans dumps/ for new xlsx files, then fetches live prices in background."""
-    reindex_result = db.reindex()
-    threading.Thread(target=_do_price_refresh, daemon=True).start()
-    holdings = db.get_all_holdings()
-    return {
-        "message": f"Refresh started for {len(holdings)} holdings",
-        "stocks": len(set(h.symbol for h in holdings)),
-        "reindex": reindex_result,
-    }
+    """Trigger an immediate price refresh (BLOCKING — waits for fresh prices).
+    Re-scans dumps/ for new xlsx files, then fetches live prices synchronously."""
+    t0 = time.time()
+    try:
+        reindex_result = db.reindex()
+        stock_service.clear_cache()
+        stock_service._reset_circuit()
+        holdings = db.get_all_holdings()
+        if not holdings:
+            return {"message": "No holdings found", "stocks": 0, "reindex": reindex_result}
+        symbols = list(set((h.symbol, h.exchange) for h in holdings))
+        res = stock_service.fetch_multiple(symbols)
+        live = sum(1 for v in res.values() if not v.is_manual)
+        fb = sum(1 for v in res.values() if v.is_manual)
+        elapsed = round(time.time() - t0, 1)
+        print(f"[PriceRefresh] Done in {elapsed}s: {live} live, {fb} fallback / {len(symbols)} stocks")
+        return {
+            "message": f"Refreshed {live} live + {fb} cached / {len(symbols)} stocks in {elapsed}s",
+            "stocks": len(symbols),
+            "live": live,
+            "fallback": fb,
+            "elapsed": elapsed,
+            "reindex": reindex_result,
+        }
+    except Exception as e:
+        print(f"[PriceRefresh] Error: {e}")
+        traceback.print_exc()
+        return {
+            "message": f"Refresh error: {str(e)[:200]}",
+            "stocks": 0,
+        }
 
 
 @app.post("/api/prices/bulk-update")

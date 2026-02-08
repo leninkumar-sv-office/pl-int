@@ -4,7 +4,7 @@ const API_BASE = '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 60000,  // 60s — handles cold-start scenarios
 });
 
 // ── Portfolio ─────────────────────────────────────────
@@ -82,7 +82,8 @@ export async function getMarketTicker() {
 // ── Live Refresh (actual external fetch) ────────────
 
 export async function triggerPriceRefresh() {
-  const { data } = await api.post('/prices/refresh');
+  // Longer timeout: refresh is synchronous — waits for Zerodha to respond
+  const { data } = await api.post('/prices/refresh', null, { timeout: 120000 });
   return data;
 }
 

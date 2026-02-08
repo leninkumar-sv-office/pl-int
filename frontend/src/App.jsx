@@ -106,10 +106,17 @@ export default function App() {
     await loadData();
   }, [loadData]);
 
-  // On mount: read cached data immediately, then trigger first live refresh
+  // On mount: read cached data first, THEN trigger live refresh after data loads
   useEffect(() => {
-    loadData();             // instant read from cache
-    liveRefresh();          // then trigger actual live fetch in background
+    let mounted = true;
+    (async () => {
+      await loadData();                    // read cached data first (instant)
+      if (mounted) {
+        // Small delay to let backend threads settle before triggering live refresh
+        setTimeout(() => { if (mounted) liveRefresh(); }, 500);
+      }
+    })();
+    return () => { mounted = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh: trigger live refresh at chosen interval

@@ -511,8 +511,9 @@ def get_cached_prices(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData
     """Return prices from local sources ONLY: memory cache → JSON file → xlsx.
     Never makes network calls.  Used by GET endpoints to respond instantly."""
     results: Dict[str, StockLiveData] = {}
-    need_xlsx: List[Tuple[str, str]] = []  # defer xlsx fallback
+    need_file: List[Tuple[str, str]] = []
 
+    # ── Pass 1: serve from memory cache (fast, no I/O) ──
     for sym, exch in symbols:
         key = f"{sym}.{exch}"
         # 1. Memory cache (hot)
@@ -525,33 +526,61 @@ def get_cached_prices(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData
         if stale:
             results[key] = stale
             continue
-        # 3. Saved JSON file (fast — just reads JSON)
-        fb = _file_fallback(sym, exch)
-        if fb:
-            _cache_set(key, fb)
-            results[key] = fb
-            continue
-        # 3b. Try alternate exchange (BSE→NSE or NSE→BSE) from JSON
-        alt_exch = "NSE" if exch.upper() == "BSE" else "BSE"
-        alt_fb = _file_fallback(sym, alt_exch)
-        if alt_fb:
-            # Reuse price but tag with correct exchange
+        need_file.append((sym, exch))
+
+    if not need_file:
+        return results
+
+    # ── Pass 2: load JSON file ONCE for all remaining stocks ──
+    saved = _load_prices_file()
+    need_xlsx: List[Tuple[str, str]] = []
+
+    for sym, exch in need_file:
+        key = f"{sym}.{exch}"
+        info = saved.get(key)
+        if info and float(info.get("price", 0)) > 0:
             data = StockLiveData(
                 symbol=sym, exchange=exch,
-                name=alt_fb.name,
-                current_price=alt_fb.current_price,
-                week_52_high=alt_fb.week_52_high,
-                week_52_low=alt_fb.week_52_low,
-                day_change=alt_fb.day_change,
-                day_change_pct=alt_fb.day_change_pct,
-                volume=alt_fb.volume,
-                previous_close=alt_fb.previous_close,
+                name=info.get("name", db._name_map.get(sym, sym)),
+                current_price=round(float(info["price"]), 2),
+                week_52_high=float(info.get("week_52_high", 0) or 0),
+                week_52_low=float(info.get("week_52_low", 0) or 0),
+                day_change=float(info.get("day_change", 0) or 0),
+                day_change_pct=float(info.get("day_change_pct", 0) or 0),
+                volume=int(info.get("volume", 0) or 0),
+                previous_close=float(info.get("previous_close", 0) or 0),
                 is_manual=True,
             )
             _cache_set(key, data)
             results[key] = data
             continue
-        # 4. xlsx Index sheet (per-symbol, opens only the needed file)
+
+        # Try alternate exchange (BSE→NSE or NSE→BSE) from same JSON
+        alt_exch = "NSE" if exch.upper() == "BSE" else "BSE"
+        alt_key = f"{sym}.{alt_exch}"
+        alt_info = saved.get(alt_key)
+        if alt_info and float(alt_info.get("price", 0)) > 0:
+            data = StockLiveData(
+                symbol=sym, exchange=exch,
+                name=alt_info.get("name", db._name_map.get(sym, sym)),
+                current_price=round(float(alt_info["price"]), 2),
+                week_52_high=float(alt_info.get("week_52_high", 0) or 0),
+                week_52_low=float(alt_info.get("week_52_low", 0) or 0),
+                day_change=float(alt_info.get("day_change", 0) or 0),
+                day_change_pct=float(alt_info.get("day_change_pct", 0) or 0),
+                volume=int(alt_info.get("volume", 0) or 0),
+                previous_close=float(alt_info.get("previous_close", 0) or 0),
+                is_manual=True,
+            )
+            _cache_set(key, data)
+            results[key] = data
+            continue
+
+        need_xlsx.append((sym, exch))
+
+    # ── Pass 3: xlsx Index sheet fallback (per-symbol, opens only needed file) ──
+    for sym, exch in need_xlsx:
+        key = f"{sym}.{exch}"
         xf = _xlsx_fallback(sym, exch)
         if xf:
             _cache_set(key, xf)
