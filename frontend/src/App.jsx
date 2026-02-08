@@ -6,6 +6,7 @@ import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
 import AddStockModal from './components/AddStockModal';
 import SellStockModal from './components/SellStockModal';
+import BulkSellModal from './components/BulkSellModal';
 import TransactionHistory from './components/TransactionHistory';
 import Charts from './components/Charts';
 import MarketTicker from './components/MarketTicker';
@@ -26,6 +27,7 @@ export default function App() {
   const [addModalData, setAddModalData] = useState(null); // null = closed, {} = open empty, {symbol,...} = pre-filled
   const [sellTarget, setSellTarget] = useState(null);
   const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
+  const [bulkSellItems, setBulkSellItems] = useState(null); // null = closed, [...] = open
   const [marketTicker, setMarketTicker] = useState([]);
   const [refreshInterval, setRefreshInterval] = useState(300); // seconds
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
@@ -148,6 +150,18 @@ export default function App() {
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to sell stock');
     }
+  };
+
+  const handleBulkSellSingle = async (data) => {
+    // Sell a single lot — called repeatedly by BulkSellModal
+    const result = await sellStock(data);
+    return result;
+  };
+
+  const handleBulkSellClose = () => {
+    setBulkSellItems(null);
+    loadData();
+    toast.success('Bulk sell completed');
   };
 
   const handleAddDividend = async (data) => {
@@ -282,6 +296,7 @@ export default function App() {
           portfolio={portfolio}
           transactions={transactions}
           onSell={(holding) => setSellTarget(holding)}
+          onBulkSell={(items) => setBulkSellItems(items)}
           onAddStock={(stockData) => setAddModalData(stockData || {})}
           onDividend={(data) => setDividendTarget(data)}
         />
@@ -318,6 +333,14 @@ export default function App() {
           holding={sellTarget}
           onSell={handleSellStock}
           onClose={() => setSellTarget(null)}
+        />
+      )}
+
+      {bulkSellItems && (
+        <BulkSellModal
+          items={bulkSellItems}
+          onSell={handleBulkSellSingle}
+          onClose={handleBulkSellClose}
         />
       )}
 

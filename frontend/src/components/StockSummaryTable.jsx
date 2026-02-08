@@ -28,7 +28,7 @@ function WeekRangeBar({ low, high, current, buyPrice }) {
 }
 
 /* ── Expanded detail panel inside a stock row ───────────── */
-function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend }) {
+function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend, selectedLots, onToggleLot, onToggleAllLots }) {
   const heldLots = (portfolio || []).filter(
     (item) => item.holding.symbol === stock.symbol && item.holding.quantity > 0
   ).sort((a, b) => b.holding.buy_date.localeCompare(a.holding.buy_date));
@@ -37,6 +37,9 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
   ).sort((a, b) => b.sell_date.localeCompare(a.sell_date));
   const live = stock.live;
   const cp = live?.current_price || 0;
+
+  const allLotsSelected = heldLots.length > 0 && heldLots.every(item => selectedLots.has(item.holding.id));
+  const someLotsSelected = heldLots.some(item => selectedLots.has(item.holding.id));
 
   return (
     <div style={{
@@ -135,6 +138,16 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <th style={{ ...subTh, width: '36px', textAlign: 'center', padding: '10px 6px' }}>
+                    <input
+                      type="checkbox"
+                      checked={allLotsSelected}
+                      ref={(el) => { if (el) el.indeterminate = someLotsSelected && !allLotsSelected; }}
+                      onChange={() => onToggleAllLots(heldLots.map(item => item.holding.id))}
+                      style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                      title="Select all lots for bulk sell"
+                    />
+                  </th>
                   <th style={subTh}>Buy Date</th>
                   <th style={subTh}>Qty</th>
                   <th style={subTh}>Price</th>
@@ -150,8 +163,23 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                   const h = item.holding;
                   const lotPL = cp > 0 ? (cp - h.buy_price) * h.quantity : 0;
                   const inProfit = cp > h.buy_price;
+                  const isChecked = selectedLots.has(h.id);
                   return (
-                    <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <tr
+                      key={h.id}
+                      style={{
+                        borderBottom: '1px solid var(--border)',
+                        background: isChecked ? 'rgba(59,130,246,0.08)' : undefined,
+                      }}
+                    >
+                      <td style={{ textAlign: 'center', padding: '10px 6px', width: '36px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => onToggleLot(h.id)}
+                          style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                        />
+                      </td>
                       <td style={subTd}>{h.buy_date}</td>
                       <td style={{ ...subTd, fontWeight: 600 }}>{h.quantity}</td>
                       <td style={subTd}>{formatINR(h.price || h.buy_price)}</td>
@@ -250,12 +278,14 @@ const subTd = {
 
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onDividend, transactions }) {
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions }) {
   const [sortField, setSortField] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef(null);
+  // Bulk selection tracks individual lot (holding) IDs
+  const [selectedLots, setSelectedLots] = useState(new Set());
 
   useEffect(() => {
     if (searchRef.current) searchRef.current.focus();
@@ -292,6 +322,42 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
   const toggleExpand = (symbol) => {
     setExpandedSymbol(prev => prev === symbol ? null : symbol);
+  };
+
+  // ── Lot-level bulk selection helpers ──
+  const toggleLot = (lotId) => {
+    setSelectedLots(prev => {
+      const next = new Set(prev);
+      if (next.has(lotId)) next.delete(lotId);
+      else next.add(lotId);
+      return next;
+    });
+  };
+
+  const toggleAllLots = (lotIds) => {
+    setSelectedLots(prev => {
+      const allSelected = lotIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        lotIds.forEach(id => next.delete(id));
+      } else {
+        lotIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedLots(new Set());
+
+  const handleBulkSell = () => {
+    if (!onBulkSell || selectedLots.size === 0) return;
+    // Gather selected lots from portfolio
+    const selectedItems = (portfolio || []).filter(
+      item => selectedLots.has(item.holding.id) && item.holding.quantity > 0
+    );
+    if (selectedItems.length > 0) {
+      onBulkSell(selectedItems);
+    }
   };
 
   // Filter stocks by search query (matches symbol or name)
@@ -349,6 +415,14 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   };
 
   const TOTAL_COLS = 16; // number of columns in the main table
+
+  // Count selected lots info for the action bar
+  const selectedCount = selectedLots.size;
+  const selectedQty = selectedCount > 0
+    ? (portfolio || [])
+        .filter(item => selectedLots.has(item.holding.id) && item.holding.quantity > 0)
+        .reduce((sum, item) => sum + item.holding.quantity, 0)
+    : 0;
 
   return (
     <div className="section">
@@ -704,6 +778,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           onSell={onSell}
                           onAddStock={onAddStock}
                           onDividend={onDividend}
+                          selectedLots={selectedLots}
+                          onToggleLot={toggleLot}
+                          onToggleAllLots={toggleAllLots}
                         />
                       </td>
                     </tr>
@@ -714,6 +791,49 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           </tbody>
         </table>
       </div>
+
+      {/* ── Floating bulk action bar (lot-level) ──────────── */}
+      {selectedCount > 0 && (
+        <div style={{
+          position: 'sticky',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'var(--bg-card)',
+          borderTop: '2px solid var(--blue)',
+          padding: '12px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          zIndex: 10,
+          borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+          boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontWeight: 600, fontSize: '14px' }}>
+              {selectedCount} lot{selectedCount > 1 ? 's' : ''} selected
+              <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '8px' }}>
+                ({selectedQty} shares)
+              </span>
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={clearSelection}
+              style={{ fontSize: '12px' }}
+            >
+              Clear
+            </button>
+          </div>
+          <button
+            className="btn btn-danger"
+            onClick={handleBulkSell}
+            style={{ fontWeight: 600, padding: '8px 24px' }}
+          >
+            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
