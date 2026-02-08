@@ -275,6 +275,8 @@ if (params.get('auth') === 'success') {
     msg.className = 'msg msg-ok';
     msg.textContent = '✓ Zerodha login successful! Token has been set.';
     msg.style.display = 'block';
+    // Refresh the status card to show the new valid session
+    loadStatus();
   }, 300);
 }
 if (params.get('auth') === 'failed') {

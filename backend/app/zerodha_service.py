@@ -133,7 +133,7 @@ def get_login_url(redirect_url: str = "http://localhost:8000/api/zerodha/callbac
 def generate_session(request_token: str) -> bool:
     """Exchange request_token for access_token using API secret.
     Call this after user completes Kite login."""
-    global _access_token, _session_valid
+    global _access_token, _session_valid, _auth_failed, _conn_failed
     if not _api_key or not _api_secret:
         print("[Zerodha] API key or secret not configured")
         return False
@@ -157,6 +157,9 @@ def generate_session(request_token: str) -> bool:
             data = resp.json().get("data", {})
             _access_token = data.get("access_token", "")
             if _access_token:
+                # Reset all failure flags — we have a fresh valid token
+                _auth_failed = False
+                _conn_failed = False
                 with _lock:
                     _session_valid = True
                 # Persist to .env

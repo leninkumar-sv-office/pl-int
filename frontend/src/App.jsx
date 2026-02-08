@@ -127,6 +127,19 @@ export default function App() {
     return () => clearInterval(interval);
   }, [liveRefresh, refreshInterval]);
 
+  // Re-fetch Zerodha status + data when user returns to this tab
+  // (e.g. after completing Zerodha login in another tab)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        getZerodhaStatus().then(zs => setZerodhaStatus(zs)).catch(() => {});
+        liveRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [liveRefresh]);
+
   const handleAddStock = async (data) => {
     try {
       await addStock(data);
