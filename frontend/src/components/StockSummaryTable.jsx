@@ -348,7 +348,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 15; // number of columns in the main table
+  const TOTAL_COLS = 16; // number of columns in the main table
 
   return (
     <div className="section">
@@ -438,6 +438,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>
               <th onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
+              </th>
+              <th onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer' }}>
+                Unrealized P/L<SortIcon field="unrealized_pl" />
               </th>
               <th onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer' }}>
                 Realized P&L<SortIcon field="realized_pl" />
@@ -609,6 +612,21 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           </div>
                         </div>
                       ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td>
+                      {hasHeld ? (() => {
+                        const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
+                        return (
+                          <div style={{
+                            fontWeight: 600,
+                            color: upl >= 0 ? 'var(--green)' : 'var(--red)',
+                          }}>
+                            {upl >= 0 ? '+' : ''}{formatINR(upl)}
+                          </div>
+                        );
+                      })() : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
                     </td>
