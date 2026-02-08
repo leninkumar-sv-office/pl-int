@@ -5,6 +5,17 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const formatDate = (dateStr) => {
+  if (!dateStr) return '--';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mon = MONTHS[d.getMonth()];
+  const yyyy = d.getFullYear();
+  return `${dd}-${mon}-${yyyy}`;
+};
+
 export default function TransactionHistory({ transactions }) {
   if (!transactions || transactions.length === 0) {
     return (
@@ -67,8 +78,8 @@ export default function TransactionHistory({ transactions }) {
                   }}>
                     {formatINR(t.sell_price)}
                   </td>
-                  <td style={{ color: 'var(--text-dim)' }}>{t.buy_date}</td>
-                  <td style={{ color: 'var(--text-dim)' }}>{t.sell_date}</td>
+                  <td style={{ color: 'var(--text-dim)' }}>{formatDate(t.buy_date)}</td>
+                  <td style={{ color: 'var(--text-dim)' }}>{formatDate(t.sell_date)}</td>
                   <td>{formatINR(invested)}</td>
                   <td>{formatINR(received)}</td>
                   <td>

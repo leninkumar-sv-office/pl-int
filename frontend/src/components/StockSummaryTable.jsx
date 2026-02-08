@@ -5,6 +5,17 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const formatDate = (dateStr) => {
+  if (!dateStr) return '--';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mon = MONTHS[d.getMonth()];
+  const yyyy = d.getFullYear();
+  return `${dd}-${mon}-${yyyy}`;
+};
+
 function WeekRangeBar({ low, high, current, buyPrice }) {
   if (!low || !high || low >= high) {
     return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>N/A</span>;
@@ -180,7 +191,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                           style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
                         />
                       </td>
-                      <td style={subTd}>{h.buy_date}</td>
+                      <td style={subTd}>{formatDate(h.buy_date)}</td>
                       <td style={{ ...subTd, fontWeight: 600 }}>{h.quantity}</td>
                       <td style={subTd}>{formatINR(h.price || h.buy_price)}</td>
                       <td style={subTd}>{formatINR(h.buy_price)}</td>
@@ -234,8 +245,8 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
               <tbody>
                 {soldTrades.map((t, idx) => (
                   <tr key={t.id || idx} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={subTd}>{t.buy_date}</td>
-                    <td style={subTd}>{t.sell_date}</td>
+                    <td style={subTd}>{formatDate(t.buy_date)}</td>
+                    <td style={subTd}>{formatDate(t.sell_date)}</td>
                     <td style={{ ...subTd, fontWeight: 600 }}>{t.quantity}</td>
                     <td style={subTd}>{formatINR(t.buy_price)}</td>
                     <td style={subTd}>{formatINR(t.sell_price)}</td>
