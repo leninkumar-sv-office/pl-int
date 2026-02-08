@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -255,6 +255,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [sortDir, setSortDir] = useState('desc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    if (searchRef.current) searchRef.current.focus();
+  }, [stocks.length]);
 
   if (loading && stocks.length === 0) {
     return (
@@ -366,6 +371,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
         <div style={{ position: 'relative', flex: '1', maxWidth: '360px' }}>
           <input
+            ref={searchRef}
             type="text"
             placeholder="Search stocks by symbol or name..."
             value={searchQuery}
