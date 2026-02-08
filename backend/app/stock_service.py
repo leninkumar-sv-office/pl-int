@@ -2,10 +2,11 @@
 Stock data service — multi-source with retry.
 
 Priority order:
-  1. yfinance (batched, with retry + exponential backoff)
-  2. Google Finance scraping (fallback)
-  3. Saved JSON prices (offline fallback)
-  4. xlsx Index sheet data (last resort)
+  1. Zerodha Kite Connect (primary — fast, reliable, Indian market)
+  2. yfinance (batched, with retry + exponential backoff)
+  3. Google Finance scraping (fallback)
+  4. Saved JSON prices (offline fallback)
+  5. xlsx Index sheet data (last resort)
 
 All sources feed into a unified cache.  Manual push via bulk_update_prices()
 also writes to the JSON file so data survives restarts.
@@ -21,6 +22,7 @@ import yfinance as yf
 from typing import Optional, Dict, List, Tuple
 from .models import StockLiveData
 from .xlsx_database import xlsx_db as db
+from . import zerodha_service
 
 # ═══════════════════════════════════════════════════════════
 #  CONFIG
@@ -31,6 +33,12 @@ BATCH_SIZE = 5            # tickers per yf.download()
 BATCH_DELAY = (2.0, 3.5)  # random delay between batches
 REFRESH_INTERVAL = 300    # background refresh every 5 min
 MAX_RETRIES = 3           # retry attempts per source
+
+# Fallback toggle — Yahoo/Google are OFF by default.
+# Enable via: python -m uvicorn app.main:app --port 8000 --reload
+#   with env var: ENABLE_FALLBACK=1
+# Or at runtime via POST /api/settings/fallback
+ENABLE_YAHOO_GOOGLE = os.getenv("ENABLE_FALLBACK", "").strip().lower() in ("1", "true", "yes")
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 _PRICES_FILE = os.path.join(_DATA_DIR, "stock_prices.json")
@@ -120,12 +128,15 @@ _xlsx_built = False
 
 
 def _build_xlsx():
+    """Build xlsx Index sheet cache for ALL stocks (expensive — opens every xlsx file)."""
     global _xlsx_built
     if _xlsx_built:
         return
     import openpyxl
     from .xlsx_database import _extract_index_data
     for sym, fp in db._file_map.items():
+        if sym in _xlsx_idx:
+            continue  # already cached
         try:
             wb = openpyxl.load_workbook(fp, data_only=True)
             idx = _extract_index_data(wb)
@@ -142,9 +153,32 @@ def _build_xlsx():
     print(f"[StockService] xlsx fallback: {ok}/{len(_xlsx_idx)} with prices")
 
 
+def _xlsx_single(symbol: str) -> dict:
+    """Load Index sheet data for a single symbol (fast — one file only)."""
+    if symbol in _xlsx_idx:
+        return _xlsx_idx[symbol]
+    fp = db._file_map.get(symbol)
+    if not fp:
+        return {"price": 0, "w52h": 0, "w52l": 0}
+    try:
+        import openpyxl
+        from .xlsx_database import _extract_index_data
+        wb = openpyxl.load_workbook(fp, data_only=True)
+        idx = _extract_index_data(wb)
+        wb.close()
+        _xlsx_idx[symbol] = {
+            "price": float(idx.get("current_price", 0) or 0),
+            "w52h": float(idx.get("week_52_high", 0) or 0),
+            "w52l": float(idx.get("week_52_low", 0) or 0),
+        }
+    except Exception:
+        _xlsx_idx[symbol] = {"price": 0, "w52h": 0, "w52l": 0}
+    return _xlsx_idx[symbol]
+
+
 def _xlsx_fallback(symbol: str, exchange: str) -> Optional[StockLiveData]:
-    _build_xlsx()
-    idx = _xlsx_idx.get(symbol, {})
+    """Get price from xlsx Index sheet for a single symbol."""
+    idx = _xlsx_single(symbol)
     price = idx.get("price", 0)
     if price <= 0:
         mp = db.get_manual_price(symbol, exchange)
@@ -290,8 +324,24 @@ def _fetch_google_finance_ticker(gf_symbol: str) -> Optional[Tuple[float, float]
 #  FETCH MULTIPLE — batched with multi-source fallback
 # ═══════════════════════════════════════════════════════════
 
+def _fetch_via_zerodha(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
+    """Try Zerodha Kite Connect for all symbols.
+    Returns {sym.exch: {price, day_change, day_change_pct, volume, ...}}."""
+    if not zerodha_service.is_session_valid():
+        return {}
+    try:
+        quotes = zerodha_service.fetch_quotes(symbols)
+        if quotes:
+            ok = sum(1 for v in quotes.values() if v.get("price", 0) > 0)
+            print(f"[StockService] Zerodha: {ok}/{len(symbols)} quotes")
+        return quotes
+    except Exception as e:
+        print(f"[StockService] Zerodha error: {e}")
+        return {}
+
+
 def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
-    """Fetch prices: yfinance → Google Finance → saved JSON → xlsx."""
+    """Fetch prices: Zerodha → yfinance → Google Finance → saved JSON → xlsx."""
     results: Dict[str, StockLiveData] = {}
     need: List[Tuple[str, str]] = []
 
@@ -307,49 +357,109 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
     if not need:
         return results
 
-    # 2. Build yahoo map
-    ymap: Dict[str, Tuple[str, str]] = {}
-    for sym, exch in need:
-        ys = _yahoo_sym(sym, exch)
-        ymap[ys] = (sym, exch)
+    # ── SOURCE 1: ZERODHA KITE CONNECT (primary) ──────────
+    zerodha_prices: Dict[str, dict] = {}
+    still_need: List[Tuple[str, str]] = []
 
-    all_ys = list(ymap.keys())
+    if zerodha_service.is_session_valid():
+        zerodha_prices = _fetch_via_zerodha(need)
+
+    to_save: Dict[str, dict] = {}
+
+    for sym, exch in need:
+        key = f"{sym}.{exch}"
+        zq = zerodha_prices.get(key)
+        if zq and zq.get("price", 0) > 0:
+            data = StockLiveData(
+                symbol=sym, exchange=exch,
+                name=zq.get("name") or db._name_map.get(sym, sym),
+                current_price=round(zq["price"], 2),
+                week_52_high=float(zq.get("week_52_high", 0) or 0),
+                week_52_low=float(zq.get("week_52_low", 0) or 0),
+                day_change=float(zq.get("day_change", 0) or 0),
+                day_change_pct=float(zq.get("day_change_pct", 0) or 0),
+                volume=int(zq.get("volume", 0) or 0),
+                previous_close=float(zq.get("close", 0) or 0),
+                is_manual=False,
+            )
+            _cache_set(key, data)
+            results[key] = data
+            to_save[key] = {
+                "price": data.current_price,
+                "name": data.name,
+                "week_52_high": data.week_52_high,
+                "week_52_low": data.week_52_low,
+                "day_change": data.day_change,
+                "day_change_pct": data.day_change_pct,
+                "volume": data.volume,
+                "previous_close": data.previous_close,
+            }
+        else:
+            still_need.append((sym, exch))
+
+    # Save Zerodha prices to JSON immediately
+    if to_save:
+        _save_prices_file(to_save)
+
+    if not still_need:
+        zerodha_got = len(need) - len(still_need)
+        if zerodha_got > 0:
+            print(f"[StockService] All {zerodha_got} prices from Zerodha")
+        return results
+
+    # ── SOURCE 2 & 3: YAHOO / GOOGLE (only if ENABLE_YAHOO_GOOGLE) ──
+    ymap: Dict[str, Tuple[str, str]] = {}
     all_prices: Dict[str, float] = {}
 
-    # 3. Batch download from Yahoo (with retry)
-    total_batches = (len(all_ys) + BATCH_SIZE - 1) // BATCH_SIZE
-    for i in range(0, len(all_ys), BATCH_SIZE):
-        batch = all_ys[i:i + BATCH_SIZE]
-        bnum = (i // BATCH_SIZE) + 1
+    if ENABLE_YAHOO_GOOGLE:
+        for sym, exch in still_need:
+            ys = _yahoo_sym(sym, exch)
+            ymap[ys] = (sym, exch)
 
-        prices = _download_batch_with_retry(batch)
-        all_prices.update(prices)
-        print(f"[StockService] Batch {bnum}/{total_batches}: "
-              f"{len(prices)}/{len(batch)} OK")
+        all_ys = list(ymap.keys())
 
-        if i + BATCH_SIZE < len(all_ys):
-            time.sleep(random.uniform(*BATCH_DELAY))
+        # Yahoo Finance
+        total_batches = (len(all_ys) + BATCH_SIZE - 1) // BATCH_SIZE
+        for i in range(0, len(all_ys), BATCH_SIZE):
+            batch = all_ys[i:i + BATCH_SIZE]
+            bnum = (i // BATCH_SIZE) + 1
 
-    yahoo_got = len(all_prices)
-    print(f"[StockService] Yahoo total: {yahoo_got}/{len(all_ys)}")
+            prices = _download_batch_with_retry(batch)
+            all_prices.update(prices)
+            print(f"[StockService] Yahoo batch {bnum}/{total_batches}: "
+                  f"{len(prices)}/{len(batch)} OK")
 
-    # 4. Google Finance fallback for missing symbols
-    missing_from_yahoo = [ys for ys in all_ys if ys not in all_prices]
-    if missing_from_yahoo:
-        gf_got = 0
-        for ys in missing_from_yahoo:
-            sym, exch = ymap[ys]
-            gf_price = _fetch_google_finance_price(sym, exch)
-            if gf_price and gf_price > 0:
-                all_prices[ys] = gf_price
-                gf_got += 1
-            time.sleep(random.uniform(0.3, 0.8))
-        if gf_got > 0:
-            print(f"[StockService] Google Finance: {gf_got}/{len(missing_from_yahoo)}")
+            if i + BATCH_SIZE < len(all_ys):
+                time.sleep(random.uniform(*BATCH_DELAY))
 
-    # 5. Build results + fallback chain
-    _build_xlsx()
-    to_save: Dict[str, dict] = {}
+        yahoo_got = len(all_prices)
+        if yahoo_got > 0:
+            print(f"[StockService] Yahoo total: {yahoo_got}/{len(all_ys)}")
+
+        # Google Finance fallback
+        missing_from_yahoo = [ys for ys in all_ys if ys not in all_prices]
+        if missing_from_yahoo:
+            gf_got = 0
+            for ys in missing_from_yahoo:
+                sym, exch = ymap[ys]
+                gf_price = _fetch_google_finance_price(sym, exch)
+                if gf_price and gf_price > 0:
+                    all_prices[ys] = gf_price
+                    gf_got += 1
+                time.sleep(random.uniform(0.3, 0.8))
+            if gf_got > 0:
+                print(f"[StockService] Google Finance: {gf_got}/{len(missing_from_yahoo)}")
+    else:
+        # Build ymap for the fallback chain below (stale cache / JSON / xlsx)
+        for sym, exch in still_need:
+            ys = _yahoo_sym(sym, exch)
+            ymap[ys] = (sym, exch)
+        if still_need:
+            print(f"[StockService] {len(still_need)} stocks pending — "
+                  f"using saved JSON/xlsx fallback")
+
+    # ── BUILD RESULTS + fallback chain ─────────────────────
+    yahoo_save: Dict[str, dict] = {}
 
     for ys, (sym, exch) in ymap.items():
         key = f"{sym}.{exch}"
@@ -369,8 +479,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
             )
             _cache_set(key, data)
             results[key] = data
-            # Save to JSON for persistence
-            to_save[key] = {
+            yahoo_save[key] = {
                 "price": data.current_price,
                 "name": data.name,
                 "week_52_high": data.week_52_high,
@@ -387,9 +496,65 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                     _cache_set(key, fb)
                     results[key] = fb
 
-    if to_save:
-        _save_prices_file(to_save)
+    if yahoo_save:
+        _save_prices_file(yahoo_save)
 
+    return results
+
+
+# ═══════════════════════════════════════════════════════════
+#  CACHED-ONLY PRICES (no network — instant)
+# ═══════════════════════════════════════════════════════════
+
+def get_cached_prices(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
+    """Return prices from local sources ONLY: memory cache → JSON file → xlsx.
+    Never makes network calls.  Used by GET endpoints to respond instantly."""
+    results: Dict[str, StockLiveData] = {}
+    need_xlsx: List[Tuple[str, str]] = []  # defer xlsx fallback
+
+    for sym, exch in symbols:
+        key = f"{sym}.{exch}"
+        # 1. Memory cache (hot)
+        c = _cache_get(key)
+        if c:
+            results[key] = c
+            continue
+        # 2. Stale cache
+        stale = _cache_get_stale(key)
+        if stale:
+            results[key] = stale
+            continue
+        # 3. Saved JSON file (fast — just reads JSON)
+        fb = _file_fallback(sym, exch)
+        if fb:
+            _cache_set(key, fb)
+            results[key] = fb
+            continue
+        # 3b. Try alternate exchange (BSE→NSE or NSE→BSE) from JSON
+        alt_exch = "NSE" if exch.upper() == "BSE" else "BSE"
+        alt_fb = _file_fallback(sym, alt_exch)
+        if alt_fb:
+            # Reuse price but tag with correct exchange
+            data = StockLiveData(
+                symbol=sym, exchange=exch,
+                name=alt_fb.name,
+                current_price=alt_fb.current_price,
+                week_52_high=alt_fb.week_52_high,
+                week_52_low=alt_fb.week_52_low,
+                day_change=alt_fb.day_change,
+                day_change_pct=alt_fb.day_change_pct,
+                volume=alt_fb.volume,
+                previous_close=alt_fb.previous_close,
+                is_manual=True,
+            )
+            _cache_set(key, data)
+            results[key] = data
+            continue
+        # 4. xlsx Index sheet (per-symbol, opens only the needed file)
+        xf = _xlsx_fallback(sym, exch)
+        if xf:
+            _cache_set(key, xf)
+            results[key] = xf
     return results
 
 
@@ -425,13 +590,17 @@ _GF_TICKER_MAP = {
 
 
 def fetch_market_ticker(meta: dict) -> dict:
-    """Fetch a single market ticker: yfinance → Google Finance → placeholder."""
+    """Fetch a single market ticker via Yahoo/Google Finance.
+    Only runs if ENABLE_YAHOO_GOOGLE is True, otherwise returns placeholder."""
     from urllib.parse import unquote
     placeholder = {
         "key": meta["key"], "label": meta["label"],
         "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
         "price": 0, "change": 0, "change_pct": 0,
     }
+
+    if not ENABLE_YAHOO_GOOGLE:
+        return placeholder
 
     # Source 1: yfinance with retry
     yf_sym = unquote(meta["yahoo"])
@@ -539,6 +708,8 @@ def _bg_loop():
     print(f"[StockService] Background refresh started (every {REFRESH_INTERVAL}s)")
     while _bg_running:
         try:
+            # Re-scan dumps/ folder for new/modified xlsx files
+            db.reindex()
             holdings = db.get_all_holdings()
             if not holdings:
                 with _refresh_lock:
@@ -558,7 +729,7 @@ def _bg_loop():
                     _last_refresh_time = time.time()
                     _last_refresh_status = (
                         f"ok: {live} live, {fb} fallback / {len(syms)}")
-                print(f"[StockService] Refresh: {live} live, {fb} fallback")
+                print(f"[StockService] Refresh: {live} zerodha, {fb} cached / {len(syms)} stocks")
         except Exception as e:
             print(f"[StockService] Refresh error: {e}")
             with _refresh_lock:

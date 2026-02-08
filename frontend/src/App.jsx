@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -28,6 +28,9 @@ export default function App() {
   const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
   const [marketTicker, setMarketTicker] = useState([]);
   const [refreshInterval, setRefreshInterval] = useState(300); // seconds
+  const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
 
   // Read cached data from backend (fast, no external calls)
   const loadData = useCallback(async () => {
@@ -48,16 +51,22 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-    // Load market ticker separately (non-blocking)
+    // Load market ticker + Zerodha status separately (non-blocking)
     try {
       const tickerData = await getMarketTicker();
       setMarketTicker(tickerData);
     } catch (err) {
       console.error('Failed to load market ticker:', err);
     }
+    try {
+      const zs = await getZerodhaStatus();
+      setZerodhaStatus(zs);
+    } catch (err) {
+      console.error('Failed to load Zerodha status:', err);
+    }
   }, []);
 
-  // Trigger actual live refresh from external sources (Yahoo/Google)
+  // Trigger actual live refresh from external sources (Zerodha/Yahoo/Google)
   // then read updated data
   const liveRefresh = useCallback(async () => {
     try {
@@ -137,6 +146,20 @@ export default function App() {
     }
   };
 
+  const handleSetToken = async () => {
+    if (!tokenInput.trim()) return;
+    try {
+      const result = await setZerodhaToken(tokenInput.trim());
+      toast.success(result.message || 'Token set');
+      setShowTokenInput(false);
+      setTokenInput('');
+      const zs = await getZerodhaStatus();
+      setZerodhaStatus(zs);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to set token');
+    }
+  };
+
   return (
     <div className="app">
       <Toaster
@@ -155,6 +178,30 @@ export default function App() {
       <header className="header">
         <h1><span>Stock</span> Portfolio Dashboard</h1>
         <div className="header-actions">
+          {/* Zerodha status */}
+          {zerodhaStatus && (
+            <div className="zerodha-status" title={
+              zerodhaStatus.session_valid
+                ? 'Zerodha connected — live prices active'
+                : zerodhaStatus.auth_failed
+                  ? 'Zerodha token expired — click to refresh'
+                  : zerodhaStatus.has_access_token
+                    ? 'Zerodha token set — testing...'
+                    : 'Zerodha not connected — click to setup'
+            }>
+              <a
+                className={`zerodha-dot ${
+                  zerodhaStatus.session_valid ? 'connected' :
+                  zerodhaStatus.auth_failed ? 'expired' : 'disconnected'
+                }`}
+                href="/api/zerodha/login"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Z
+              </a>
+            </div>
+          )}
           <div className="refresh-control">
             <select
               className="refresh-select"

@@ -20,6 +20,7 @@ from .models import (
 )
 from .xlsx_database import xlsx_db as db
 from . import stock_service
+from . import zerodha_service
 from pydantic import BaseModel
 
 app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
@@ -32,6 +33,21 @@ app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
 @app.on_event("startup")
 def on_startup():
     """Start background refresh threads on server boot."""
+    # Check Zerodha connection
+    if zerodha_service.is_configured():
+        if zerodha_service.is_session_valid():
+            print(f"[App] Zerodha configured — API key: {zerodha_service._api_key[:4]}..., "
+                  f"access token: {'set' if zerodha_service._access_token else 'NOT SET'}")
+        else:
+            print("[App] Zerodha API key configured but no access token — "
+                  "visit /api/zerodha/login-url or POST /api/zerodha/set-token")
+    else:
+        print("[App] Zerodha NOT configured — using Yahoo/Google fallback only")
+    # Show fallback status
+    if stock_service.ENABLE_YAHOO_GOOGLE:
+        print("[App] Yahoo/Google fallback: ENABLED (set ENABLE_FALLBACK= to disable)")
+    else:
+        print("[App] Yahoo/Google fallback: DISABLED (set ENABLE_FALLBACK=1 to enable)")
     stock_service.start_background_refresh()
     print("[App] Background stock price refresh started")
     _start_ticker_bg_refresh()
@@ -61,14 +77,14 @@ app.add_middleware(
 
 @app.get("/api/portfolio", response_model=List[HoldingWithLive])
 def get_portfolio():
-    """Get all holdings with live price data."""
+    """Get all holdings with cached price data (instant, no network calls)."""
     holdings = db.get_all_holdings()
     if not holdings:
         return []
 
-    # Fetch live data for all symbols
+    # Use cached prices only — live fetches happen in background threads
     symbols = list(set((h.symbol, h.exchange) for h in holdings))
-    live_data = stock_service.fetch_multiple(symbols)
+    live_data = stock_service.get_cached_prices(symbols)
 
     result = []
     for h in holdings:
@@ -192,9 +208,9 @@ def get_stock_summary():
     sold_positions = db.get_all_sold()
     dividends_by_symbol = db.get_dividends_by_symbol()
 
-    # Fetch live data
+    # Use cached prices (instant, no network calls)
     symbols = list(set((h.symbol, h.exchange) for h in holdings))
-    live_data = stock_service.fetch_multiple(symbols) if symbols else {}
+    live_data = stock_service.get_cached_prices(symbols) if symbols else {}
 
     # Group holdings by symbol
     held_by_symbol: dict = {}
@@ -309,10 +325,11 @@ def get_transactions():
 
 @app.get("/api/stock/{symbol}")
 def get_stock_live(symbol: str, exchange: str = "NSE"):
-    """Get live stock data including 52-week range."""
-    data = stock_service.fetch_live_data(symbol, exchange)
+    """Get stock data including 52-week range (cached, no network calls)."""
+    results = stock_service.get_cached_prices([(symbol, exchange)])
+    data = results.get(f"{symbol}.{exchange}")
     if not data:
-        raise HTTPException(status_code=404, detail=f"Could not fetch data for {symbol}")
+        raise HTTPException(status_code=404, detail=f"No cached data for {symbol}")
     return data
 
 
@@ -344,22 +361,34 @@ def get_price_status():
     return stock_service.get_refresh_status()
 
 
+def _do_price_refresh():
+    """Worker: reindex xlsx files then fetch live prices."""
+    try:
+        db.reindex()
+        stock_service.clear_cache()
+        stock_service._reset_circuit()
+        holdings = db.get_all_holdings()
+        if not holdings:
+            return
+        symbols = list(set((h.symbol, h.exchange) for h in holdings))
+        res = stock_service.fetch_multiple(symbols)
+        live = sum(1 for v in res.values() if not v.is_manual)
+        print(f"[PriceRefresh] Done: {live} live, {len(res)-live} fallback / {len(symbols)} stocks")
+    except Exception as e:
+        print(f"[PriceRefresh] Error: {e}")
+
+
 @app.post("/api/prices/refresh")
 def trigger_price_refresh():
-    """Manually trigger an immediate price refresh (clears cache)."""
-    stock_service.clear_cache()
-    stock_service._reset_circuit()  # reset circuit breaker too
+    """Trigger an immediate price refresh (non-blocking).
+    Re-scans dumps/ for new xlsx files, then fetches live prices in background."""
+    reindex_result = db.reindex()
+    threading.Thread(target=_do_price_refresh, daemon=True).start()
     holdings = db.get_all_holdings()
-    if not holdings:
-        return {"message": "No holdings to refresh", "count": 0}
-    symbols = list(set((h.symbol, h.exchange) for h in holdings))
-    results = stock_service.fetch_multiple(symbols)
-    live_count = sum(1 for v in results.values() if not v.is_manual)
     return {
-        "message": f"Refreshed {len(results)} stocks ({live_count} from Yahoo)",
-        "total": len(results),
-        "live": live_count,
-        "fallback": len(results) - live_count,
+        "message": f"Refresh started for {len(holdings)} holdings",
+        "stocks": len(set(h.symbol for h in holdings)),
+        "reindex": reindex_result,
     }
 
 
@@ -370,14 +399,26 @@ def bulk_update_prices(req: BulkPriceUpdate):
     return {"message": f"Updated {updated} prices", "count": updated}
 
 
+def _do_ticker_refresh():
+    """Background thread for ticker refresh."""
+    try:
+        results = _refresh_tickers_once()
+        ok = sum(1 for r in results if r.get("price", 0) > 0)
+        print(f"[MarketTicker] Refresh done: {ok}/{len(results)} tickers with prices")
+    except Exception as e:
+        print(f"[MarketTicker] Refresh error: {e}")
+
 @app.post("/api/market-ticker/refresh")
 def trigger_ticker_refresh():
-    """Force an immediate live market ticker refresh (Yahoo → Google → file)."""
-    results = _refresh_tickers_once()
-    ok = sum(1 for r in results if r.get("price", 0) > 0)
+    """Force an immediate live market ticker refresh (Yahoo → Google → file). Non-blocking."""
+    threading.Thread(target=_do_ticker_refresh, daemon=True).start()
+    # Return current cached data immediately
+    with _ticker_lock:
+        cached = list(_ticker_cache) if _ticker_cache else []
+    ok = sum(1 for t in cached if t.get("price", 0) > 0)
     return {
-        "message": f"Refreshed {ok}/{len(results)} tickers",
-        "total": len(results),
+        "message": f"Ticker refresh started ({ok} currently cached)",
+        "total": len(cached),
         "with_price": ok,
     }
 
@@ -411,6 +452,91 @@ def set_refresh_interval(body: dict):
     return {"interval": interval, "message": f"Refresh interval set to {interval}s"}
 
 
+@app.get("/api/settings/fallback")
+def get_fallback_status():
+    """Check if Yahoo/Google fallback is enabled."""
+    return {"enabled": stock_service.ENABLE_YAHOO_GOOGLE}
+
+
+@app.post("/api/settings/fallback")
+def toggle_fallback(body: dict):
+    """Enable/disable Yahoo/Google Finance fallback at runtime.
+    Body: {"enabled": true} or {"enabled": false}"""
+    enabled = body.get("enabled", False)
+    stock_service.ENABLE_YAHOO_GOOGLE = bool(enabled)
+    status = "enabled" if enabled else "disabled"
+    print(f"[App] Yahoo/Google fallback {status}")
+    return {"enabled": stock_service.ENABLE_YAHOO_GOOGLE,
+            "message": f"Yahoo/Google fallback {status}"}
+
+
+# ══════════════════════════════════════════════════════════
+#  ZERODHA AUTH & STATUS
+# ══════════════════════════════════════════════════════════
+
+@app.get("/api/zerodha/status")
+def get_zerodha_status():
+    """Get Zerodha connection status."""
+    return zerodha_service.get_status()
+
+
+@app.get("/api/zerodha/login")
+def zerodha_login_page():
+    """Serve Zerodha login/settings page."""
+    html_path = os.path.join(os.path.dirname(__file__), "zerodha_login.html")
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/api/zerodha/login-url")
+def get_zerodha_login_url():
+    """Get Kite Connect login URL for browser auth."""
+    if not zerodha_service.is_configured():
+        raise HTTPException(status_code=400, detail="Zerodha API key not configured in .env")
+    url = zerodha_service.get_login_url()
+    return {"login_url": url}
+
+
+@app.get("/api/zerodha/callback")
+def zerodha_callback(request_token: str = "", action: str = "", status: str = ""):
+    """Kite Connect redirect callback — exchanges request_token for access_token."""
+    from fastapi.responses import RedirectResponse
+    if action != "login" or not request_token:
+        return RedirectResponse(url="/api/zerodha/login?auth=failed&error=Invalid+callback")
+    success = zerodha_service.generate_session(request_token)
+    if success:
+        # Trigger background refresh with the new token
+        threading.Thread(target=_do_price_refresh, daemon=True).start()
+        return RedirectResponse(url="/api/zerodha/login?auth=success")
+    return RedirectResponse(url="/api/zerodha/login?auth=failed&error=Token+exchange+failed")
+
+
+@app.post("/api/zerodha/set-token")
+def set_zerodha_token(body: dict):
+    """Manually set the Zerodha access token."""
+    token = body.get("access_token", "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="access_token is required")
+    zerodha_service.set_access_token(token)
+    # Validate
+    valid = zerodha_service.validate_session()
+    if valid:
+        # Trigger background refresh with the new valid token
+        threading.Thread(target=_do_price_refresh, daemon=True).start()
+    return {
+        "message": "Token set" + (" and validated — refreshing prices" if valid else " (validation pending)"),
+        "valid": valid,
+    }
+
+
+@app.get("/api/zerodha/validate")
+def validate_zerodha():
+    """Validate the current Zerodha session."""
+    if not zerodha_service.is_session_valid():
+        return {"valid": False, "message": "No access token configured"}
+    valid = zerodha_service.validate_session()
+    return {"valid": valid, "message": "Session valid" if valid else "Session expired — re-login needed"}
+
+
 # ══════════════════════════════════════════════════════════
 #  DASHBOARD SUMMARY
 # ══════════════════════════════════════════════════════════
@@ -431,9 +557,9 @@ def get_dashboard_summary():
             total_dividend=0,
         )
 
-    # Fetch live prices
+    # Use cached prices (instant, no network calls)
     symbols = list(set((h.symbol, h.exchange) for h in holdings))
-    live_data = stock_service.fetch_multiple(symbols) if symbols else {}
+    live_data = stock_service.get_cached_prices(symbols) if symbols else {}
 
     total_invested = 0.0
     current_value = 0.0
@@ -478,15 +604,15 @@ def get_dashboard_summary():
 # ══════════════════════════════════════════════════════════
 
 MARKET_TICKER_SYMBOLS = [
-    {"key": "SENSEX",    "yahoo": "%5EBSESN",    "label": "Sensex",     "type": "index"},
-    {"key": "NIFTY50",   "yahoo": "%5ENSEI",     "label": "Nifty 50",   "type": "index"},
-    {"key": "GOLD",      "yahoo": "GC%3DF",      "label": "Gold",       "type": "commodity", "unit": "USD/oz"},
-    {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "USD/oz"},
-    {"key": "SGX",       "yahoo": "%5ESTI",         "label": "SGX STI",    "type": "index"},
-    {"key": "NIKKEI",    "yahoo": "%5EN225",      "label": "Nikkei",     "type": "index"},
-    {"key": "SGDINR",    "yahoo": "SGDINR%3DX",   "label": "SGD/INR",   "type": "forex"},
-    {"key": "USDINR",    "yahoo": "USDINR%3DX",   "label": "USD/INR",   "type": "forex"},
-    {"key": "CRUDEOIL",  "yahoo": "CL%3DF",       "label": "Crude Oil", "type": "commodity", "unit": "USD/bbl"},
+    {"key": "SENSEX",    "yahoo": "%5EBSESN",    "label": "Sensex",     "type": "index",     "kite": True},
+    {"key": "NIFTY50",   "yahoo": "%5ENSEI",     "label": "Nifty 50",   "type": "index",     "kite": True},
+    {"key": "GOLD",      "yahoo": "GC%3DF",      "label": "Gold",       "type": "commodity", "unit": "₹/10g",   "kite": True},
+    {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "₹/kg",    "kite": True},
+    {"key": "SGX",       "yahoo": "%5ESTI",         "label": "SGX STI",    "type": "index",                        "kite": False},
+    {"key": "NIKKEI",    "yahoo": "%5EN225",      "label": "Nikkei",     "type": "index",                        "kite": False},
+    {"key": "SGDINR",    "yahoo": "SGDINR%3DX",   "label": "SGD/INR",   "type": "forex",                        "kite": False},
+    {"key": "USDINR",    "yahoo": "USDINR%3DX",   "label": "USD/INR",   "type": "forex",     "kite": True},
+    {"key": "CRUDEOIL",  "yahoo": "CL%3DF",       "label": "Crude Oil", "type": "commodity", "unit": "₹/bbl",   "kite": True},
 ]
 
 # ══════════════════════════════════════════════════════════
@@ -546,9 +672,9 @@ def _save_ticker_file(tickers: List[dict]):
 
 
 def _refresh_tickers_once():
-    """Single refresh cycle: fetch from sources, merge with fallback, update cache."""
+    """Single refresh cycle: Zerodha (primary) → saved JSON (offline cache).
+    Yahoo/Google are ONLY used if ENABLE_FALLBACK is explicitly turned on."""
     global _ticker_cache, _ticker_cache_time
-    import random as _rnd
 
     # Build fallback map from file + cache (non-zero values only)
     saved = _load_ticker_file()
@@ -557,25 +683,84 @@ def _refresh_tickers_once():
         cache_map = {t["key"]: t for t in _ticker_cache if t.get("price", 0) > 0}
     fallback_map = {**saved_map, **cache_map}
 
-    results = []
-    for i, meta in enumerate(MARKET_TICKER_SYMBOLS):
-        result = stock_service.fetch_market_ticker(meta)
-        # If live fetch returned zero, use fallback
-        if result["price"] <= 0 and meta["key"] in fallback_map:
-            fb = fallback_map[meta["key"]]
-            result["price"] = fb["price"]
-            result["change"] = fb.get("change", 0)
-            result["change_pct"] = fb.get("change_pct", 0)
-            status = "FALLBACK"
+    # ── SOURCE 1: ZERODHA ──
+    zerodha_tickers: Dict[str, dict] = {}
+    if zerodha_service.is_session_valid() and not zerodha_service._auth_failed:
+        try:
+            zerodha_tickers = zerodha_service.fetch_market_tickers()
+            if zerodha_tickers:
+                ok = sum(1 for v in zerodha_tickers.values() if v.get("price", 0) > 0)
+                print(f"[MarketTicker] Zerodha returned {ok} tickers")
+            else:
+                print(f"[MarketTicker] Zerodha returned no data")
+        except Exception as e:
+            print(f"[MarketTicker] Zerodha error: {e}")
+    else:
+        if zerodha_service._auth_failed:
+            reason = "token expired — visit /api/zerodha/login"
+        elif not zerodha_service._access_token:
+            reason = "no access token set"
+        elif zerodha_service._conn_failed:
+            reason = "connection failed, retrying in 60s"
         else:
-            status = "OK" if result["price"] > 0 else "MISS"
-        print(f"[MarketTicker] {meta['key']}: {status} ({result['price']})")
-        results.append(result)
-        if i < len(MARKET_TICKER_SYMBOLS) - 1:
-            time.sleep(_rnd.uniform(0.3, 0.8))
+            reason = "not configured"
+        print(f"[MarketTicker] Zerodha skipped ({reason})")
 
-    ok = sum(1 for r in results if r["price"] > 0)
-    print(f"[MarketTicker] Refresh done: {ok}/{len(results)} with prices")
+    results = []
+    for meta in MARKET_TICKER_SYMBOLS:
+        key = meta["key"]
+
+        # Try Zerodha
+        zt = zerodha_tickers.get(key)
+        if zt and zt.get("price", 0) > 0:
+            result = {
+                "key": key, "label": meta["label"],
+                "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+                "price": zt["price"], "change": zt.get("change", 0),
+                "change_pct": zt.get("change_pct", 0),
+                "source": "zerodha",
+            }
+            results.append(result)
+            continue
+
+        # SOURCE 2: Yahoo/Google — ONLY if explicitly enabled
+        if stock_service.ENABLE_YAHOO_GOOGLE:
+            import random as _rnd
+            yg_result = stock_service.fetch_market_ticker(meta)
+            if yg_result.get("price", 0) > 0:
+                yg_result["source"] = "yahoo/google"
+                results.append(yg_result)
+                time.sleep(_rnd.uniform(0.3, 0.8))
+                continue
+
+        # SOURCE 3: Saved JSON (offline cache from last successful fetch)
+        if key in fallback_map:
+            fb = fallback_map[key]
+            result = {
+                "key": key, "label": meta["label"],
+                "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+                "price": fb["price"], "change": fb.get("change", 0),
+                "change_pct": fb.get("change_pct", 0),
+                "source": "cached",
+            }
+            results.append(result)
+            continue
+
+        # No data at all
+        results.append({
+            "key": key, "label": meta["label"],
+            "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+            "price": 0, "change": 0, "change_pct": 0,
+            "source": "none",
+        })
+
+    # Log summary by source
+    by_source = {}
+    for r in results:
+        src = r.get("source", "none")
+        by_source[src] = by_source.get(src, 0) + 1
+    summary = ", ".join(f"{v} {k}" for k, v in by_source.items())
+    print(f"[MarketTicker] Refresh done: {summary}")
 
     # Save to file (merge-safe) and update cache
     _save_ticker_file(results)

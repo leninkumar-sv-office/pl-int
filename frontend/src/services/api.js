@@ -102,3 +102,25 @@ export async function setRefreshInterval(interval) {
   const { data } = await api.post('/settings/refresh-interval', { interval });
   return data;
 }
+
+// ── Zerodha ────────────────────────────────────────
+
+export async function getZerodhaStatus() {
+  const { data } = await api.get('/zerodha/status');
+  return data;
+}
+
+export async function getZerodhaLoginUrl() {
+  const { data } = await api.get('/zerodha/login-url');
+  return data;
+}
+
+export async function setZerodhaToken(accessToken) {
+  const { data } = await api.post('/zerodha/set-token', { access_token: accessToken });
+  return data;
+}
+
+export async function validateZerodha() {
+  const { data } = await api.get('/zerodha/validate');
+  return data;
+}

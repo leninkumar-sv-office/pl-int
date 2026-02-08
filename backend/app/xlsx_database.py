@@ -484,6 +484,38 @@ class XlsxPortfolio:
 
         print(f"[XlsxDB] Indexed {len(self._file_map)} stock files ({sum(len(v) for v in self._all_files.values())} total including archives)")
 
+    def reindex(self):
+        """Re-scan the dumps folder for new/removed/modified xlsx files.
+
+        Call this periodically (e.g. every refresh cycle) so that newly
+        dropped xlsx files appear without a backend restart.
+        """
+        with self._lock:
+            old_symbols = set(self._file_map.keys())
+            # Clear maps and rebuild
+            self._file_map.clear()
+            self._all_files.clear()
+            self._name_map.clear()
+            self._build_file_map()
+            new_symbols = set(self._file_map.keys())
+
+            added = new_symbols - old_symbols
+            removed = old_symbols - new_symbols
+
+            # Invalidate caches for changed/new/removed symbols
+            # Also invalidate existing symbols whose files may have changed
+            for sym in new_symbols | removed:
+                self._invalidate_symbol(sym)
+
+            if added or removed:
+                parts = []
+                if added:
+                    parts.append(f"+{len(added)}")
+                if removed:
+                    parts.append(f"-{len(removed)}")
+                print(f"[XlsxDB] Reindex: {len(new_symbols)} stocks ({', '.join(parts)} changed)")
+            return {"total": len(new_symbols), "added": list(added), "removed": list(removed)}
+
     def _find_file_for_symbol(self, symbol: str) -> Optional[Path]:
         """Find xlsx file for a given stock symbol."""
         symbol = symbol.upper()
@@ -665,13 +697,17 @@ class XlsxPortfolio:
         self._holding_index.clear()
         self._holding_file.clear()
 
-        for symbol in self._file_map:
-            holdings, _, _ = self._get_stock_data(symbol)
-            primary_fp = self._file_map[symbol]
-            for h in holdings:
-                self._holding_index[h.id] = h
-                self._holding_file[h.id] = primary_fp
-            all_holdings.extend(holdings)
+        # Snapshot to avoid "dict changed size during iteration" from bg reindex
+        file_snapshot = dict(self._file_map)
+        for symbol, primary_fp in file_snapshot.items():
+            try:
+                holdings, _, _ = self._get_stock_data(symbol)
+                for h in holdings:
+                    self._holding_index[h.id] = h
+                    self._holding_file[h.id] = primary_fp
+                all_holdings.extend(holdings)
+            except Exception as e:
+                print(f"[XlsxDB] Error reading {symbol}: {e}")
 
         return all_holdings
 
@@ -687,9 +723,14 @@ class XlsxPortfolio:
     def get_all_sold(self) -> List[SoldPosition]:
         """Get all sold positions (FIFO-derived) across every stock file."""
         all_sold: List[SoldPosition] = []
-        for symbol in self._file_map:
-            _, sold, _ = self._get_stock_data(symbol)
-            all_sold.extend(sold)
+        # Snapshot to avoid "dict changed size during iteration" from bg reindex
+        symbols = list(self._file_map.keys())
+        for symbol in symbols:
+            try:
+                _, sold, _ = self._get_stock_data(symbol)
+                all_sold.extend(sold)
+            except Exception as e:
+                print(f"[XlsxDB] Error reading sold for {symbol}: {e}")
         return all_sold
 
     def get_dividends_by_symbol(self) -> dict:
@@ -698,14 +739,19 @@ class XlsxPortfolio:
         Returns {symbol: {"amount": total, "count": n_entries, "units": total_units}}.
         """
         result = {}
-        for symbol in self._file_map:
-            _, _, dividends = self._get_stock_data(symbol)
-            if dividends:
-                result[symbol] = {
-                    "amount": sum(d["amount"] for d in dividends),
-                    "count": len(dividends),
-                    "units": sum(d.get("units", 0) for d in dividends),
-                }
+        # Snapshot to avoid "dict changed size during iteration" from bg reindex
+        symbols = list(self._file_map.keys())
+        for symbol in symbols:
+            try:
+                _, _, dividends = self._get_stock_data(symbol)
+                if dividends:
+                    result[symbol] = {
+                        "amount": sum(d["amount"] for d in dividends),
+                        "count": len(dividends),
+                        "units": sum(d.get("units", 0) for d in dividends),
+                    }
+            except Exception as e:
+                print(f"[XlsxDB] Error reading dividends for {symbol}: {e}")
         return result
 
     # ── Public WRITE API ──────────────────────────────────

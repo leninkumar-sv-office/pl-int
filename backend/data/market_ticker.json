@@ -5,8 +5,9 @@
     "type": "index",
     "unit": "",
     "price": 83580.4,
-    "change": 0,
-    "change_pct": 0
+    "change": 266.47,
+    "change_pct": 0.32,
+    "source": "zerodha"
   },
   {
     "key": "NIFTY50",
@@ -14,26 +15,29 @@
     "type": "index",
     "unit": "",
     "price": 25693.7,
-    "change": 0,
-    "change_pct": 0
+    "change": 50.9,
+    "change_pct": 0.2,
+    "source": "zerodha"
   },
   {
     "key": "GOLD",
     "label": "Gold",
     "type": "commodity",
-    "unit": "USD/oz",
-    "price": 4950.0,
-    "change": 130.0,
-    "change_pct": 2.7
+    "unit": "\u20b9/10g",
+    "price": 155050.0,
+    "change": 2979.0,
+    "change_pct": 1.96,
+    "source": "zerodha"
   },
   {
     "key": "SILVER",
     "label": "Silver",
     "type": "commodity",
-    "unit": "USD/oz",
-    "price": 78.46,
-    "change": -1.54,
-    "change_pct": -1.93
+    "unit": "\u20b9/kg",
+    "price": 249499.0,
+    "change": -393.0,
+    "change_pct": -0.16,
+    "source": "zerodha"
   },
   {
     "key": "SGX",
@@ -42,7 +46,8 @@
     "unit": "",
     "price": 4934.0,
     "change": -41.0,
-    "change_pct": -0.83
+    "change_pct": -0.83,
+    "source": "cached"
   },
   {
     "key": "NIKKEI",
@@ -51,33 +56,37 @@
     "unit": "",
     "price": 54253.68,
     "change": 0,
-    "change_pct": 0
+    "change_pct": 0,
+    "source": "cached"
   },
   {
     "key": "SGDINR",
     "label": "SGD/INR",
     "type": "forex",
     "unit": "",
-    "price": 71.05,
+    "price": 71.16,
     "change": 0,
-    "change_pct": 0
+    "change_pct": 0,
+    "source": "cached"
   },
   {
     "key": "USDINR",
     "label": "USD/INR",
     "type": "forex",
     "unit": "",
-    "price": 90.58,
-    "change": 0,
-    "change_pct": 0
+    "price": 90.71,
+    "change": 0.32,
+    "change_pct": 0.35,
+    "source": "zerodha"
   },
   {
     "key": "CRUDEOIL",
     "label": "Crude Oil",
     "type": "commodity",
-    "unit": "USD/bbl",
-    "price": 63.5,
-    "change": 0.21,
-    "change_pct": 0.33
+    "unit": "\u20b9/bbl",
+    "price": 5819.0,
+    "change": 73.0,
+    "change_pct": 1.27,
+    "source": "zerodha"
   }
 ]
