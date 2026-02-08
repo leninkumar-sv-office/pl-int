@@ -251,8 +251,8 @@ const subTd = {
 
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onDividend, transactions }) {
-  const [sortField, setSortField] = useState('unrealized_pl');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortField, setSortField] = useState('symbol');
+  const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchRef = useRef(null);
