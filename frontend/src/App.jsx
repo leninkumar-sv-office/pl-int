@@ -54,12 +54,24 @@ export default function App() {
       if (ssResult.status === 'fulfilled') setStockSummary(ssResult.value);
       else console.error('Stock summary load failed:', ssResult.reason);
 
-      // Show toast only if ALL failed
-      const allFailed = [pResult, sResult, tResult, ssResult].every(r => r.status === 'rejected');
-      if (allFailed) toast.error('Failed to load portfolio data');
+      // Show toast with details on which endpoints failed
+      const results = [
+        { name: 'Portfolio', r: pResult },
+        { name: 'Summary', r: sResult },
+        { name: 'Transactions', r: tResult },
+        { name: 'Stocks', r: ssResult },
+      ];
+      const failed = results.filter(x => x.r.status === 'rejected');
+      if (failed.length === results.length) {
+        const reason = failed[0].r.reason?.message || 'Server unreachable';
+        toast.error(`Failed to load data: ${reason}`);
+      } else if (failed.length > 0) {
+        const names = failed.map(x => x.name).join(', ');
+        toast.error(`Failed to load: ${names}`);
+      }
     } catch (err) {
       console.error('Failed to load data:', err);
-      toast.error('Failed to load portfolio data');
+      toast.error(`Failed to load portfolio data: ${err.message || err}`);
     } finally {
       setLoading(false);
     }

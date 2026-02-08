@@ -12,6 +12,7 @@ import json
 import uuid
 import time
 import threading
+import traceback
 
 from .models import (
     AddStockRequest, SellStockRequest, AddDividendRequest, ManualPriceRequest,
@@ -22,8 +23,30 @@ from .xlsx_database import xlsx_db as db
 from . import stock_service
 from . import zerodha_service
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
+
+
+# ── Error-logging middleware: catches unhandled 500s and logs them ──
+class ErrorLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response = await call_next(request)
+            if response.status_code >= 500:
+                print(f"[ERROR] {request.method} {request.url.path} → {response.status_code}")
+            return response
+        except Exception as e:
+            print(f"[ERROR] {request.method} {request.url.path} → unhandled: {e}")
+            traceback.print_exc()
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Internal error: {str(e)[:200]}"},
+            )
+
+app.add_middleware(ErrorLoggingMiddleware)
 
 
 # ══════════════════════════════════════════════════════════
