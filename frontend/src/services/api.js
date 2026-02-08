@@ -78,3 +78,27 @@ export async function getMarketTicker() {
   const { data } = await api.get('/market-ticker');
   return data;
 }
+
+// ── Live Refresh (actual external fetch) ────────────
+
+export async function triggerPriceRefresh() {
+  const { data } = await api.post('/prices/refresh');
+  return data;
+}
+
+export async function triggerTickerRefresh() {
+  const { data } = await api.post('/market-ticker/refresh');
+  return data;
+}
+
+// ── Settings ────────────────────────────────────────
+
+export async function getRefreshInterval() {
+  const { data } = await api.get('/settings/refresh-interval');
+  return data;
+}
+
+export async function setRefreshInterval(interval) {
+  const { data } = await api.post('/settings/refresh-interval', { interval });
+  return data;
+}

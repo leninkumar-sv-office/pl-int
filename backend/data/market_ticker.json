@@ -1,0 +1,83 @@
+[
+  {
+    "key": "SENSEX",
+    "label": "Sensex",
+    "type": "index",
+    "unit": "",
+    "price": 83580.4,
+    "change": 0,
+    "change_pct": 0
+  },
+  {
+    "key": "NIFTY50",
+    "label": "Nifty 50",
+    "type": "index",
+    "unit": "",
+    "price": 25693.7,
+    "change": 0,
+    "change_pct": 0
+  },
+  {
+    "key": "GOLD",
+    "label": "Gold",
+    "type": "commodity",
+    "unit": "USD/oz",
+    "price": 4950.0,
+    "change": 130.0,
+    "change_pct": 2.7
+  },
+  {
+    "key": "SILVER",
+    "label": "Silver",
+    "type": "commodity",
+    "unit": "USD/oz",
+    "price": 78.46,
+    "change": -1.54,
+    "change_pct": -1.93
+  },
+  {
+    "key": "SGX",
+    "label": "SGX STI",
+    "type": "index",
+    "unit": "",
+    "price": 4934.0,
+    "change": -41.0,
+    "change_pct": -0.83
+  },
+  {
+    "key": "NIKKEI",
+    "label": "Nikkei",
+    "type": "index",
+    "unit": "",
+    "price": 54253.68,
+    "change": 0,
+    "change_pct": 0
+  },
+  {
+    "key": "SGDINR",
+    "label": "SGD/INR",
+    "type": "forex",
+    "unit": "",
+    "price": 71.05,
+    "change": 0,
+    "change_pct": 0
+  },
+  {
+    "key": "USDINR",
+    "label": "USD/INR",
+    "type": "forex",
+    "unit": "",
+    "price": 90.58,
+    "change": 0,
+    "change_pct": 0
+  },
+  {
+    "key": "CRUDEOIL",
+    "label": "Crude Oil",
+    "type": "commodity",
+    "unit": "USD/bbl",
+    "price": 63.5,
+    "change": 0.21,
+    "change_pct": 0.33
+  }
+]

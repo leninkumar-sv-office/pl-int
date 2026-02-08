@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -27,7 +27,9 @@ export default function App() {
   const [sellTarget, setSellTarget] = useState(null);
   const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
   const [marketTicker, setMarketTicker] = useState([]);
+  const [refreshInterval, setRefreshInterval] = useState(300); // seconds
 
+  // Read cached data from backend (fast, no external calls)
   const loadData = useCallback(async () => {
     try {
       const [portfolioData, summaryData, txData, stockSummaryData] = await Promise.all([
@@ -55,11 +57,33 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 60000);
-    return () => clearInterval(interval);
+  // Trigger actual live refresh from external sources (Yahoo/Google)
+  // then read updated data
+  const liveRefresh = useCallback(async () => {
+    try {
+      // Fire both live refreshes in parallel
+      await Promise.all([
+        triggerPriceRefresh().catch(e => console.error('Price refresh error:', e)),
+        triggerTickerRefresh().catch(e => console.error('Ticker refresh error:', e)),
+      ]);
+    } catch (err) {
+      console.error('Live refresh error:', err);
+    }
+    // Now read the updated data
+    await loadData();
   }, [loadData]);
+
+  // On mount: read cached data immediately, then trigger first live refresh
+  useEffect(() => {
+    loadData();             // instant read from cache
+    liveRefresh();          // then trigger actual live fetch in background
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh: trigger live refresh at chosen interval
+  useEffect(() => {
+    const interval = setInterval(liveRefresh, refreshInterval * 1000);
+    return () => clearInterval(interval);
+  }, [liveRefresh, refreshInterval]);
 
   const handleAddStock = async (data) => {
     try {
@@ -99,8 +123,18 @@ export default function App() {
 
   const handleRefresh = async () => {
     setLoading(true);
-    await loadData();
-    toast.success('Prices refreshed');
+    await liveRefresh();
+    toast.success('Prices refreshed from live sources');
+  };
+
+  const handleIntervalChange = async (e) => {
+    const newInterval = Number(e.target.value);
+    setRefreshInterval(newInterval);
+    try {
+      await apiSetRefreshInterval(newInterval);
+    } catch (err) {
+      console.error('Failed to set refresh interval:', err);
+    }
   };
 
   return (
@@ -121,6 +155,19 @@ export default function App() {
       <header className="header">
         <h1><span>Stock</span> Portfolio Dashboard</h1>
         <div className="header-actions">
+          <div className="refresh-control">
+            <select
+              className="refresh-select"
+              value={refreshInterval}
+              onChange={handleIntervalChange}
+              title="Auto-refresh interval"
+            >
+              <option value={60}>1 min</option>
+              <option value={120}>2 min</option>
+              <option value={300}>5 min</option>
+              <option value={600}>10 min</option>
+            </select>
+          </div>
           <button className="btn btn-ghost" onClick={handleRefresh} disabled={loading}>
             {loading ? '⟳ Loading...' : '⟳ Refresh'}
           </button>

@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from typing import List, Dict
 from datetime import date
 import os
+import json
 import uuid
 import time
 import threading
@@ -30,16 +31,19 @@ app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
 
 @app.on_event("startup")
 def on_startup():
-    """Start background price refresh thread on server boot."""
+    """Start background refresh threads on server boot."""
     stock_service.start_background_refresh()
-    print("[App] Background price refresh started")
+    print("[App] Background stock price refresh started")
+    _start_ticker_bg_refresh()
+    print("[App] Background market ticker refresh started (every 300s)")
 
 
 @app.on_event("shutdown")
 def on_shutdown():
-    """Stop background refresh cleanly."""
+    """Stop background refreshes cleanly."""
     stock_service.stop_background_refresh()
-    print("[App] Background price refresh stopped")
+    _stop_ticker_bg_refresh()
+    print("[App] Background refreshes stopped")
 
 # CORS for React dev server
 app.add_middleware(
@@ -366,6 +370,47 @@ def bulk_update_prices(req: BulkPriceUpdate):
     return {"message": f"Updated {updated} prices", "count": updated}
 
 
+@app.post("/api/market-ticker/refresh")
+def trigger_ticker_refresh():
+    """Force an immediate live market ticker refresh (Yahoo → Google → file)."""
+    results = _refresh_tickers_once()
+    ok = sum(1 for r in results if r.get("price", 0) > 0)
+    return {
+        "message": f"Refreshed {ok}/{len(results)} tickers",
+        "total": len(results),
+        "with_price": ok,
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  REFRESH SETTINGS
+# ══════════════════════════════════════════════════════════
+
+_VALID_INTERVALS = [60, 120, 300, 600]  # 1m, 2m, 5m, 10m
+
+@app.get("/api/settings/refresh-interval")
+def get_refresh_interval():
+    """Get the current backend refresh intervals (stock prices + market tickers)."""
+    return {
+        "stock_interval": stock_service.REFRESH_INTERVAL,
+        "ticker_interval": _TICKER_REFRESH_INTERVAL,
+    }
+
+
+@app.post("/api/settings/refresh-interval")
+def set_refresh_interval(body: dict):
+    """Set the backend refresh interval in seconds (applies to both stock + ticker)."""
+    global _TICKER_REFRESH_INTERVAL
+    interval = int(body.get("interval", 300))
+    if interval < 60:
+        interval = 60
+    if interval > 600:
+        interval = 600
+    stock_service.REFRESH_INTERVAL = interval
+    _TICKER_REFRESH_INTERVAL = interval
+    return {"interval": interval, "message": f"Refresh interval set to {interval}s"}
+
+
 # ══════════════════════════════════════════════════════════
 #  DASHBOARD SUMMARY
 # ══════════════════════════════════════════════════════════
@@ -444,47 +489,187 @@ MARKET_TICKER_SYMBOLS = [
     {"key": "CRUDEOIL",  "yahoo": "CL%3DF",       "label": "Crude Oil", "type": "commodity", "unit": "USD/bbl"},
 ]
 
-# Cache for market ticker data (separate from stock cache)
+# ══════════════════════════════════════════════════════════
+#  MARKET TICKER — cache, persistence, background refresh
+# ══════════════════════════════════════════════════════════
+
 _ticker_cache: List[dict] = []
 _ticker_cache_time: float = 0.0
-_TICKER_CACHE_TTL = 300  # 5 minutes
+_TICKER_REFRESH_INTERVAL = 300   # 5 minutes
 _ticker_lock = threading.Lock()
+_TICKER_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "market_ticker.json")
+
+# Background thread state
+_ticker_bg_running = False
+_ticker_bg_thread = None
 
 
-def _fetch_market_tickers() -> List[dict]:
-    """Fetch all market ticker data via direct Yahoo v8 chart API (no yfinance)."""
+def _load_ticker_file() -> List[dict]:
+    """Load ticker data from JSON file."""
+    try:
+        with open(_TICKER_FILE) as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_ticker_file(tickers: List[dict]):
+    """Save ticker data to JSON file — MERGE: never overwrite non-zero with zero."""
+    os.makedirs(os.path.dirname(_TICKER_FILE), exist_ok=True)
+    # Load existing file to preserve non-zero values
+    existing = _load_ticker_file()
+    existing_map = {t["key"]: t for t in existing if t.get("price", 0) > 0}
+    # Build merged list: new non-zero values override, but zeros don't clobber
+    merged_map = dict(existing_map)  # start with saved non-zero
+    for t in tickers:
+        key = t.get("key", "")
+        if t.get("price", 0) > 0:
+            merged_map[key] = t
+        # If new price is 0 but existing has non-zero, keep existing (already in map)
+    # Rebuild list in canonical order
+    key_order = [m["key"] for m in MARKET_TICKER_SYMBOLS]
+    result = []
+    for key in key_order:
+        if key in merged_map:
+            result.append(merged_map[key])
+        else:
+            # No data at all — include placeholder
+            meta = next((m for m in MARKET_TICKER_SYMBOLS if m["key"] == key), {})
+            result.append({
+                "key": key, "label": meta.get("label", key),
+                "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
+                "price": 0, "change": 0, "change_pct": 0,
+            })
+    with open(_TICKER_FILE, "w") as f:
+        json.dump(result, f, indent=2)
+
+
+def _refresh_tickers_once():
+    """Single refresh cycle: fetch from sources, merge with fallback, update cache."""
     global _ticker_cache, _ticker_cache_time
     import random as _rnd
 
+    # Build fallback map from file + cache (non-zero values only)
+    saved = _load_ticker_file()
+    saved_map = {t["key"]: t for t in saved if t.get("price", 0) > 0}
     with _ticker_lock:
-        if time.time() - _ticker_cache_time < _TICKER_CACHE_TTL and _ticker_cache:
-            return _ticker_cache
+        cache_map = {t["key"]: t for t in _ticker_cache if t.get("price", 0) > 0}
+    fallback_map = {**saved_map, **cache_map}
 
     results = []
     for i, meta in enumerate(MARKET_TICKER_SYMBOLS):
         result = stock_service.fetch_market_ticker(meta)
-        results.append(result)
-        status = "OK" if result["price"] > 0 else "MISS"
+        # If live fetch returned zero, use fallback
+        if result["price"] <= 0 and meta["key"] in fallback_map:
+            fb = fallback_map[meta["key"]]
+            result["price"] = fb["price"]
+            result["change"] = fb.get("change", 0)
+            result["change_pct"] = fb.get("change_pct", 0)
+            status = "FALLBACK"
+        else:
+            status = "OK" if result["price"] > 0 else "MISS"
         print(f"[MarketTicker] {meta['key']}: {status} ({result['price']})")
-        # Small delay between each fetch
+        results.append(result)
         if i < len(MARKET_TICKER_SYMBOLS) - 1:
             time.sleep(_rnd.uniform(0.3, 0.8))
 
-    # Update cache
+    ok = sum(1 for r in results if r["price"] > 0)
+    print(f"[MarketTicker] Refresh done: {ok}/{len(results)} with prices")
+
+    # Save to file (merge-safe) and update cache
+    _save_ticker_file(results)
     with _ticker_lock:
         _ticker_cache = results
         _ticker_cache_time = time.time()
 
-    fetched = sum(1 for r in results if r["price"] > 0)
-    print(f"[MarketTicker] Fetched {fetched}/{len(results)} tickers with prices")
-
     return results
+
+
+def _ticker_bg_loop():
+    """Background loop: refresh market tickers every REFRESH_INTERVAL seconds."""
+    global _ticker_cache, _ticker_cache_time
+    # Initial load from file (instant, no network)
+    saved = _load_ticker_file()
+    if saved:
+        with _ticker_lock:
+            _ticker_cache = saved
+            _ticker_cache_time = time.time()
+        ok = sum(1 for t in saved if t.get("price", 0) > 0)
+        print(f"[MarketTicker] Loaded {ok}/{len(saved)} from file on startup")
+
+    while _ticker_bg_running:
+        try:
+            _refresh_tickers_once()
+        except Exception as e:
+            print(f"[MarketTicker] Refresh error: {e}")
+        # Sleep in 1s chunks so we can exit promptly
+        for _ in range(_TICKER_REFRESH_INTERVAL):
+            if not _ticker_bg_running:
+                break
+            time.sleep(1)
+
+
+def _start_ticker_bg_refresh():
+    global _ticker_bg_thread, _ticker_bg_running
+    if _ticker_bg_running:
+        return
+    _ticker_bg_running = True
+    _ticker_bg_thread = threading.Thread(target=_ticker_bg_loop, daemon=True)
+    _ticker_bg_thread.start()
+
+
+def _stop_ticker_bg_refresh():
+    global _ticker_bg_running
+    _ticker_bg_running = False
 
 
 @app.get("/api/market-ticker")
 def get_market_ticker():
-    """Get market indices, forex rates, and commodity prices."""
-    return _fetch_market_tickers()
+    """Get market indices, forex rates, and commodity prices.
+    Data is refreshed automatically every 5 minutes by background thread."""
+    with _ticker_lock:
+        if _ticker_cache:
+            return _ticker_cache
+    # Fallback: if background hasn't populated cache yet, load from file
+    saved = _load_ticker_file()
+    return saved if saved else []
+
+
+@app.post("/api/market-ticker/update")
+def update_market_ticker(tickers: List[dict]):
+    """Manually push market ticker data (bypass Yahoo).
+    Each item: {key, label, type, unit, price, change, change_pct}"""
+    global _ticker_cache, _ticker_cache_time
+    meta_map = {m["key"]: m for m in MARKET_TICKER_SYMBOLS}
+    pushed = []
+    for t in tickers:
+        key = t.get("key", "")
+        meta = meta_map.get(key, {})
+        pushed.append({
+            "key": key,
+            "label": t.get("label", meta.get("label", key)),
+            "type": t.get("type", meta.get("type", "index")),
+            "unit": t.get("unit", meta.get("unit", "")),
+            "price": float(t.get("price", 0)),
+            "change": float(t.get("change", 0)),
+            "change_pct": float(t.get("change_pct", 0)),
+        })
+    # Merge-safe save (non-zero pushed values win, zeros don't clobber)
+    _save_ticker_file(pushed)
+    # Update cache: merge pushed into current cache
+    with _ticker_lock:
+        cache_map = {t["key"]: t for t in _ticker_cache}
+        for p in pushed:
+            if p["price"] > 0:
+                cache_map[p["key"]] = p
+        _ticker_cache = [cache_map.get(m["key"], {"key": m["key"], "label": m["label"],
+                         "type": m.get("type","index"), "unit": m.get("unit",""),
+                         "price": 0, "change": 0, "change_pct": 0})
+                         for m in MARKET_TICKER_SYMBOLS]
+        _ticker_cache_time = time.time()
+    print(f"[MarketTicker] Manual update: {len(pushed)} tickers")
+    return {"updated": len(pushed)}
 
 
 # ══════════════════════════════════════════════════════════
