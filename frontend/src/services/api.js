@@ -55,6 +55,11 @@ export async function getStockLive(symbol, exchange = 'NSE') {
   return data;
 }
 
+export async function lookupStockName(symbol, exchange = 'NSE') {
+  const { data } = await api.get(`/stock/lookup/${encodeURIComponent(symbol)}`, { params: { exchange } });
+  return data;
+}
+
 export async function searchStock(query, exchange = 'NSE') {
   const { data } = await api.get(`/stock/search/${query}`, { params: { exchange } });
   return data;

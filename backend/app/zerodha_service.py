@@ -54,6 +54,11 @@ _conn_fail_time = 0.0  # When connection last failed (retry after 60s)
 _instrument_cache: Dict[str, int] = {}
 _instruments_loaded = False
 
+# Instrument name cache: {"SYMBOL.EXCHANGE" → "Company Name"}
+_instrument_names: Dict[str, str] = {}
+_instrument_names_loaded = False
+_instrument_names_lock = threading.Lock()
+
 
 def _headers() -> dict:
     """Build auth headers for Kite API."""
@@ -506,6 +511,97 @@ def fetch_market_tickers() -> Dict[str, dict]:
         print(f"[Zerodha] Ticker {key} → {ticker_data['instrument']} "
               f"({ticker_data['price']})")
 
+    return results
+
+
+# ═══════════════════════════════════════════════════════════
+#  INSTRUMENT NAME LOOKUP
+# ═══════════════════════════════════════════════════════════
+
+def _load_instruments():
+    """Download instrument CSVs from Kite (NSE + BSE equity) and cache names.
+    The /instruments/{exchange} endpoint returns a CSV with columns:
+    instrument_token,exchange_token,tradingsymbol,name,last_price,expiry,
+    strike,tick_size,lot_size,instrument_type,segment,exchange
+    """
+    global _instrument_names_loaded
+    import csv
+    import io
+
+    if not _api_key or not _access_token:
+        return
+
+    with _instrument_names_lock:
+        if _instrument_names_loaded:
+            return
+
+    names: Dict[str, str] = {}
+    for exchange in ("NSE", "BSE"):
+        try:
+            resp = requests.get(
+                f"{_BASE_URL}/instruments/{exchange}",
+                headers=_headers(),
+                timeout=(5, 30),
+            )
+            if resp.status_code != 200:
+                print(f"[Zerodha] Instruments {exchange} failed: {resp.status_code}")
+                continue
+            reader = csv.DictReader(io.StringIO(resp.text))
+            count = 0
+            for row in reader:
+                segment = row.get("segment", "")
+                # Only equity instruments (skip F&O, CDS, etc.)
+                if segment not in (f"{exchange}", f"{exchange}-EQ"):
+                    continue
+                sym = row.get("tradingsymbol", "").strip()
+                name = row.get("name", "").strip()
+                if sym and name:
+                    names[f"{sym}.{exchange}"] = name
+                    count += 1
+            print(f"[Zerodha] Loaded {count} {exchange} instrument names")
+        except Exception as e:
+            print(f"[Zerodha] Instruments {exchange} error: {e}")
+
+    with _instrument_names_lock:
+        _instrument_names.update(names)
+        _instrument_names_loaded = True
+    print(f"[Zerodha] Total instrument names cached: {len(_instrument_names)}")
+
+
+def load_instruments_async():
+    """Load instruments in a background thread (call at startup)."""
+    t = threading.Thread(target=_load_instruments, daemon=True)
+    t.start()
+
+
+def lookup_instrument_name(symbol: str, exchange: str = "NSE") -> str:
+    """Look up company name for a symbol from cached instruments.
+    Returns empty string if not found."""
+    if not _instrument_names_loaded:
+        _load_instruments()  # Blocking load on first call if not yet loaded
+    key = f"{symbol.upper()}.{exchange.upper()}"
+    return _instrument_names.get(key, "")
+
+
+def search_instruments(query: str, exchange: str = "") -> list:
+    """Search instruments by symbol or name prefix.
+    Returns up to 10 matches: [{symbol, name, exchange}]."""
+    if not _instrument_names_loaded:
+        _load_instruments()
+    q = query.upper().strip()
+    if not q:
+        return []
+    results = []
+    for key, name in _instrument_names.items():
+        sym, exch = key.rsplit(".", 1)
+        if exchange and exch != exchange.upper():
+            continue
+        if sym.startswith(q) or q in name.upper():
+            results.append({"symbol": sym, "name": name, "exchange": exch})
+            if len(results) >= 10:
+                break
+    # Sort: exact prefix matches first, then alphabetical
+    results.sort(key=lambda r: (0 if r["symbol"].startswith(q) else 1, r["symbol"]))
     return results
 
 

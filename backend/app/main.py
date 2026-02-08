@@ -79,6 +79,10 @@ def on_startup():
         print("[App] Yahoo/Google fallback: DISABLED (set ENABLE_FALLBACK=1 to enable)")
     stock_service.start_background_refresh()
     print("[App] Background stock price refresh started")
+    # Load Zerodha instrument names in background for symbol→name lookup
+    if zerodha_service.is_configured():
+        zerodha_service.load_instruments_async()
+        print("[App] Loading Zerodha instrument names (background)...")
     _start_ticker_bg_refresh()
     print("[App] Background market ticker refresh started (every 300s)")
 
@@ -388,6 +392,29 @@ def get_stock_live(symbol: str, exchange: str = "NSE"):
     if not data:
         raise HTTPException(status_code=404, detail=f"No cached data for {symbol}")
     return data
+
+
+@app.get("/api/stock/lookup/{symbol}")
+def lookup_stock_name(symbol: str, exchange: str = "NSE"):
+    """Fast lookup of company name — tries Zerodha instruments, then saved prices."""
+    sym = symbol.upper()
+    exch = exchange.upper()
+    # Try Zerodha instrument cache first
+    name = zerodha_service.lookup_instrument_name(sym, exch)
+    if not name:
+        # Fallback: check saved stock_prices.json (has "name" field)
+        saved = stock_service._load_prices_file()
+        key = f"{sym}.{exch}"
+        info = saved.get(key)
+        if info and info.get("name"):
+            name = info["name"]
+        else:
+            # Try the other exchange
+            alt_exch = "BSE" if exch == "NSE" else "NSE"
+            alt_info = saved.get(f"{sym}.{alt_exch}")
+            if alt_info and alt_info.get("name"):
+                name = alt_info["name"]
+    return {"symbol": sym, "exchange": exch, "name": name}
 
 
 @app.get("/api/stock/search/{query}")
