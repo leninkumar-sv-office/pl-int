@@ -28,10 +28,9 @@ from . import zerodha_service
 #  CONFIG
 # ═══════════════════════════════════════════════════════════
 
-CACHE_TTL = 300           # 5 min cache
 BATCH_SIZE = 5            # tickers per yf.download()
 BATCH_DELAY = (2.0, 3.5)  # random delay between batches
-REFRESH_INTERVAL = 300    # background refresh every 5 min
+REFRESH_INTERVAL = 300    # (used by frontend auto-refresh setting)
 MAX_RETRIES = 3           # retry attempts per source
 
 # Fallback toggle — Yahoo/Google are OFF by default.
@@ -44,32 +43,23 @@ _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 _PRICES_FILE = os.path.join(_DATA_DIR, "stock_prices.json")
 
 # ═══════════════════════════════════════════════════════════
-#  CACHE
+#  CACHE  (simple dict — NO TTL, cleared explicitly on refresh)
 # ═══════════════════════════════════════════════════════════
 
-_cache: Dict[str, Tuple[float, StockLiveData]] = {}
+_cache: Dict[str, StockLiveData] = {}
 _cache_lock = threading.Lock()
 
 
 def _cache_get(key: str) -> Optional[StockLiveData]:
+    """Get from cache.  Returns data until explicitly cleared."""
     with _cache_lock:
-        if key in _cache:
-            ts, data = _cache[key]
-            if time.time() - ts < CACHE_TTL:
-                return data
-    return None
+        return _cache.get(key)
 
 
 def _cache_set(key: str, data: StockLiveData):
+    """Set a cache entry."""
     with _cache_lock:
-        _cache[key] = (time.time(), data)
-
-
-def _cache_get_stale(key: str) -> Optional[StockLiveData]:
-    with _cache_lock:
-        if key in _cache:
-            return _cache[key][1]
-    return None
+        _cache[key] = data
 
 
 # ═══════════════════════════════════════════════════════════
@@ -487,15 +477,11 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                 "week_52_low": data.week_52_low,
             }
         else:
-            # Try stale cache → saved JSON → xlsx
-            stale = _cache_get_stale(key)
-            if stale:
-                results[key] = stale
-            else:
-                fb = _file_fallback(sym, exch) or _xlsx_fallback(sym, exch)
-                if fb:
-                    _cache_set(key, fb)
-                    results[key] = fb
+            # Try saved JSON → xlsx
+            fb = _file_fallback(sym, exch) or _xlsx_fallback(sym, exch)
+            if fb:
+                _cache_set(key, fb)
+                results[key] = fb
 
     if yahoo_save:
         _save_prices_file(yahoo_save)
@@ -516,15 +502,9 @@ def get_cached_prices(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData
     # ── Pass 1: serve from memory cache (fast, no I/O) ──
     for sym, exch in symbols:
         key = f"{sym}.{exch}"
-        # 1. Memory cache (hot)
         c = _cache_get(key)
         if c:
             results[key] = c
-            continue
-        # 2. Stale cache
-        stale = _cache_get_stale(key)
-        if stale:
-            results[key] = stale
             continue
         need_file.append((sym, exch))
 
@@ -723,71 +703,55 @@ def bulk_update_prices(prices: Dict[str, dict]):
 
 
 # ═══════════════════════════════════════════════════════════
-#  BACKGROUND REFRESH
+#  INITIAL LIVE FETCH  (one-time on startup, then frontend controls)
 # ═══════════════════════════════════════════════════════════
+# No background loop — the frontend triggers all subsequent refreshes
+# via POST /api/prices/refresh.  This avoids race conditions where a
+# bg loop clears the cache while the frontend is reading it.
 
-_bg_thread: Optional[threading.Thread] = None
-_bg_running = False
 _last_refresh_time = 0.0
 _last_refresh_status = "not_started"
 _refresh_lock = threading.Lock()
 
 
-def _bg_loop():
+def _initial_live_fetch():
+    """One-time fetch from Zerodha at startup to replace JSON/xlsx prices
+    with fresh live data.  Runs in a background thread so server starts fast."""
     global _last_refresh_time, _last_refresh_status
-    print(f"[StockService] Background refresh started (every {REFRESH_INTERVAL}s)")
-    while _bg_running:
-        try:
-            # Re-scan dumps/ folder for new/modified xlsx files
-            db.reindex()
-            holdings = db.get_all_holdings()
-            if not holdings:
-                with _refresh_lock:
-                    _last_refresh_status = "no_holdings"
-                    _last_refresh_time = time.time()
-            else:
-                syms = list(set((h.symbol, h.exchange) for h in holdings))
-                with _refresh_lock:
-                    _last_refresh_status = "refreshing"
-                # Clear cache to force fresh fetch
-                with _cache_lock:
-                    _cache.clear()
-                res = fetch_multiple(syms)
-                live_keys = sorted(k for k, v in res.items() if not v.is_manual)
-                fb_keys = sorted(k for k, v in res.items() if v.is_manual)
-                live = len(live_keys)
-                fb = len(fb_keys)
-                with _refresh_lock:
-                    _last_refresh_time = time.time()
-                    _last_refresh_status = (
-                        f"ok: {live} live, {fb} fallback / {len(syms)}")
-                print(f"[StockService] Refresh: {live} zerodha, {fb} cached / {len(syms)} stocks")
-                if fb_keys:
-                    print(f"[StockService] Cached stocks: {', '.join(fb_keys)}")
-        except Exception as e:
-            print(f"[StockService] Refresh error: {e}")
+    try:
+        holdings = db.get_all_holdings()
+        if not holdings:
             with _refresh_lock:
-                _last_refresh_status = f"error: {e}"
+                _last_refresh_status = "no_holdings"
                 _last_refresh_time = time.time()
-
-        for _ in range(REFRESH_INTERVAL):
-            if not _bg_running:
-                break
-            time.sleep(1)
+            return
+        syms = list(set((h.symbol, h.exchange) for h in holdings))
+        with _refresh_lock:
+            _last_refresh_status = "refreshing"
+        # Don't clear cache — pre-warm data stays available while we fetch
+        res = fetch_multiple(syms)  # fresh data overwrites cache entries
+        live = sum(1 for v in res.values() if not v.is_manual)
+        fb = sum(1 for v in res.values() if v.is_manual)
+        with _refresh_lock:
+            _last_refresh_time = time.time()
+            _last_refresh_status = f"ok: {live} live, {fb} fallback / {len(syms)}"
+        print(f"[StockService] Initial fetch: {live} zerodha, {fb} cached / {len(syms)} stocks")
+    except Exception as e:
+        print(f"[StockService] Initial fetch error: {e}")
+        with _refresh_lock:
+            _last_refresh_status = f"error: {e}"
+            _last_refresh_time = time.time()
 
 
 def start_background_refresh():
-    global _bg_thread, _bg_running
-    if _bg_running:
-        return
-    _bg_running = True
-    _bg_thread = threading.Thread(target=_bg_loop, daemon=True)
-    _bg_thread.start()
+    """Fire one-time initial live fetch in background thread."""
+    t = threading.Thread(target=_initial_live_fetch, daemon=True)
+    t.start()
 
 
 def stop_background_refresh():
-    global _bg_running
-    _bg_running = False
+    """No-op — no background loop to stop."""
+    pass
 
 
 def get_refresh_status() -> dict:
