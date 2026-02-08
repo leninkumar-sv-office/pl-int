@@ -476,7 +476,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           )}
                         </div>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>--</span>
+                        <span style={{ color: stock.price_error ? 'var(--red)' : 'var(--text-muted)', fontSize: '12px' }}>
+                          {stock.price_error ? 'N/A' : '--'}
+                        </span>
                       )}
                     </td>
                     <td>

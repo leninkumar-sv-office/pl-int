@@ -202,17 +202,51 @@ def _update_env(key: str, value: str):
 #  STOCK QUOTES
 # ═══════════════════════════════════════════════════════════
 
+# ── Symbol mapping: xlsx symbol → correct Kite trading symbol ──
+# Some stocks have different trading symbols on exchanges than what's
+# stored in our xlsx files (due to name changes, demergers, IPO symbols, etc.)
+_KITE_SYMBOL_MAP: Dict[str, str] = {
+    # BSE symbol truncated
+    "HIGHENERGY.BSE": "BSE:HIGHENE",
+    # Company renamed: Antony Waste Handling Cell → AWHCL
+    "ANTONYWASTE.NSE": "NSE:AWHCL",
+    "ANTONYWASTE.BSE": "BSE:AWHCL",
+    # Company renamed: Majesco → Aurum PropTech (Oct 2021)
+    "MAJESCO.NSE": "NSE:AURUM",
+    # NSE symbol is AURUM (not AURUMPROP)
+    "AURUMPROP.NSE": "NSE:AURUM",
+    # Tata Capital IPO'd Oct 2025, symbol is TATACAP
+    "TATACAPITAL.NSE": "NSE:TATACAP",
+    # Priti International — NSE symbol is PRITI
+    "PRITIINTER.NSE": "NSE:PRITI",
+    # Tata Motors demerged Oct 2025: PV business = TMPV, CV business = TMCV
+    "TATAMOTORS.NSE": "NSE:TMPV",
+    "TATAMOTORS.BSE": "BSE:TMPV",
+    # LG Electronics India IPO'd Oct 2025, symbol is LGEINDIA
+    "LGEELECTRO.NSE": "NSE:LGEINDIA",
+    "LGEELECTRO.BSE": "BSE:LGEINDIA",
+    # Nippon India Silver ETF — symbol is SILVERBEES
+    "NIPPONSILV.NSE": "NSE:SILVERBEES",
+}
+
+
 def _kite_instrument(symbol: str, exchange: str) -> str:
     """Convert symbol + exchange to Kite instrument key.
+    Checks the override map first, then falls back to EXCHANGE:SYMBOL.
     e.g. ('RELIANCE', 'NSE') → 'NSE:RELIANCE'
-         ('RELIANCE', 'BSE') → 'BSE:RELIANCE'
+         ('ANTONYWASTE', 'NSE') → 'NSE:AWHCL' (from override map)
     """
+    sym = symbol.upper()
     exch = exchange.upper()
-    if exch == "BSE":
-        exch = "BSE"
-    else:
+    if exch not in ("BSE", "NSE"):
         exch = "NSE"
-    return f"{exch}:{symbol.upper()}"
+
+    # Check override map
+    lookup_key = f"{sym}.{exch}"
+    if lookup_key in _KITE_SYMBOL_MAP:
+        return _KITE_SYMBOL_MAP[lookup_key]
+
+    return f"{exch}:{sym}"
 
 
 def fetch_ltp(symbols: List[Tuple[str, str]]) -> Dict[str, float]:
@@ -222,12 +256,17 @@ def fetch_ltp(symbols: List[Tuple[str, str]]) -> Dict[str, float]:
         return {}
 
     # Build instrument list: i=NSE:RELIANCE&i=BSE:TCS
+    # Use list of keys (not single) to handle multiple symbols → same Kite instrument
+    seen_instruments = set()
     instruments = []
-    inst_to_key: Dict[str, str] = {}
+    inst_to_keys: Dict[str, List[str]] = {}  # kite_inst → [sym.exch, ...]
     for sym, exch in symbols:
         inst = _kite_instrument(sym, exch)
-        instruments.append(inst)
-        inst_to_key[inst] = f"{sym}.{exch}"
+        key = f"{sym}.{exch}"
+        inst_to_keys.setdefault(inst, []).append(key)
+        if inst not in seen_instruments:
+            instruments.append(inst)
+            seen_instruments.add(inst)
 
     # Kite allows up to 500 instruments per LTP call
     results: Dict[str, float] = {}
@@ -238,9 +277,11 @@ def fetch_ltp(symbols: List[Tuple[str, str]]) -> Dict[str, float]:
         data = _api_get("/quote/ltp", params)
         if data and "data" in data:
             for inst_key, info in data["data"].items():
-                mapped_key = inst_to_key.get(inst_key, "")
-                if mapped_key and info.get("last_price", 0) > 0:
-                    results[mapped_key] = float(info["last_price"])
+                mapped_keys = inst_to_keys.get(inst_key, [])
+                if mapped_keys and info.get("last_price", 0) > 0:
+                    price = float(info["last_price"])
+                    for mk in mapped_keys:
+                        results[mk] = price
 
     return results
 
@@ -251,12 +292,16 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
     if not is_session_valid():
         return {}
 
+    seen_instruments = set()
     instruments = []
-    inst_to_key: Dict[str, str] = {}
+    inst_to_keys: Dict[str, List[str]] = {}
     for sym, exch in symbols:
         inst = _kite_instrument(sym, exch)
-        instruments.append(inst)
-        inst_to_key[inst] = f"{sym}.{exch}"
+        key = f"{sym}.{exch}"
+        inst_to_keys.setdefault(inst, []).append(key)
+        if inst not in seen_instruments:
+            instruments.append(inst)
+            seen_instruments.add(inst)
 
     results: Dict[str, dict] = {}
     batch_size = 500
@@ -266,8 +311,8 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         data = _api_get("/quote", params)
         if data and "data" in data:
             for inst_key, info in data["data"].items():
-                mapped_key = inst_to_key.get(inst_key, "")
-                if not mapped_key:
+                mapped_keys = inst_to_keys.get(inst_key, [])
+                if not mapped_keys:
                     continue
                 ltp = float(info.get("last_price", 0))
                 if ltp <= 0:
@@ -278,7 +323,7 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 day_change = ltp - prev_close if prev_close > 0 else 0
                 day_change_pct = (day_change / prev_close * 100) if prev_close > 0 else 0
 
-                results[mapped_key] = {
+                quote_data = {
                     "price": round(ltp, 2),
                     "open": float(ohlc.get("open", 0)),
                     "high": float(ohlc.get("high", 0)),
@@ -293,6 +338,8 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "week_52_low": float(info.get("ohlc", {}).get("low", 0) or 0),
                     "name": "",  # Kite doesn't return company name in quotes
                 }
+                for mk in mapped_keys:
+                    results[mk] = quote_data
 
     return results
 
@@ -303,12 +350,16 @@ def fetch_ohlc(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
     if not is_session_valid():
         return {}
 
+    seen_instruments = set()
     instruments = []
-    inst_to_key: Dict[str, str] = {}
+    inst_to_keys: Dict[str, List[str]] = {}
     for sym, exch in symbols:
         inst = _kite_instrument(sym, exch)
-        instruments.append(inst)
-        inst_to_key[inst] = f"{sym}.{exch}"
+        key = f"{sym}.{exch}"
+        inst_to_keys.setdefault(inst, []).append(key)
+        if inst not in seen_instruments:
+            instruments.append(inst)
+            seen_instruments.add(inst)
 
     results: Dict[str, dict] = {}
     batch_size = 500
@@ -318,14 +369,14 @@ def fetch_ohlc(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         data = _api_get("/quote/ohlc", params)
         if data and "data" in data:
             for inst_key, info in data["data"].items():
-                mapped_key = inst_to_key.get(inst_key, "")
-                if not mapped_key:
+                mapped_keys = inst_to_keys.get(inst_key, [])
+                if not mapped_keys:
                     continue
                 ltp = float(info.get("last_price", 0))
                 if ltp <= 0:
                     continue
                 ohlc = info.get("ohlc", {})
-                results[mapped_key] = {
+                ohlc_data = {
                     "price": round(ltp, 2),
                     "open": float(ohlc.get("open", 0)),
                     "high": float(ohlc.get("high", 0)),
@@ -333,6 +384,8 @@ def fetch_ohlc(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "close": float(ohlc.get("close", 0)),
                     "volume": 0,  # Not in OHLC response
                 }
+                for mk in mapped_keys:
+                    results[mk] = ohlc_data
 
     return results
 

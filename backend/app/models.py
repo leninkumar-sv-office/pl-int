@@ -108,6 +108,7 @@ class HoldingWithLive(BaseModel):
     current_value: float = 0.0
     is_above_buy_price: bool = False
     can_sell: bool = True
+    price_error: str = ""  # Non-empty when price is unavailable
 
 
 class StockSummaryItem(BaseModel):
@@ -135,3 +136,4 @@ class StockSummaryItem(BaseModel):
     dividend_units: int = 0          # total units that received dividends
     live: Optional[StockLiveData] = None
     is_above_avg_buy: bool = False
+    price_error: str = ""  # Non-empty when price is unavailable

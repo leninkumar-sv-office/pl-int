@@ -33,18 +33,30 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState('');
 
   // Read cached data from backend (fast, no external calls)
+  // Uses allSettled so one failing endpoint doesn't block the rest
   const loadData = useCallback(async () => {
     try {
-      const [portfolioData, summaryData, txData, stockSummaryData] = await Promise.all([
+      const [pResult, sResult, tResult, ssResult] = await Promise.allSettled([
         getPortfolio(),
         getDashboardSummary(),
         getTransactions(),
         getStockSummary(),
       ]);
-      setPortfolio(portfolioData);
-      setSummary(summaryData);
-      setTransactions(txData);
-      setStockSummary(stockSummaryData);
+      if (pResult.status === 'fulfilled') setPortfolio(pResult.value);
+      else console.error('Portfolio load failed:', pResult.reason);
+
+      if (sResult.status === 'fulfilled') setSummary(sResult.value);
+      else console.error('Summary load failed:', sResult.reason);
+
+      if (tResult.status === 'fulfilled') setTransactions(tResult.value);
+      else console.error('Transactions load failed:', tResult.reason);
+
+      if (ssResult.status === 'fulfilled') setStockSummary(ssResult.value);
+      else console.error('Stock summary load failed:', ssResult.reason);
+
+      // Show toast only if ALL failed
+      const allFailed = [pResult, sResult, tResult, ssResult].every(r => r.status === 'rejected');
+      if (allFailed) toast.error('Failed to load portfolio data');
     } catch (err) {
       console.error('Failed to load data:', err);
       toast.error('Failed to load portfolio data');

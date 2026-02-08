@@ -88,24 +88,38 @@ def get_portfolio():
 
     result = []
     for h in holdings:
-        key = f"{h.symbol}.{h.exchange}"
-        live = live_data.get(key)
+        try:
+            key = f"{h.symbol}.{h.exchange}"
+            live = live_data.get(key)
 
-        current_price = live.current_price if live else 0
-        invested = h.buy_price * h.quantity
-        current_value = current_price * h.quantity
-        unrealized_pl = current_value - invested
-        unrealized_pl_pct = (unrealized_pl / invested * 100) if invested > 0 else 0
+            current_price = live.current_price if live else 0
+            invested = h.buy_price * h.quantity
+            current_value = current_price * h.quantity
+            unrealized_pl = current_value - invested
+            unrealized_pl_pct = (unrealized_pl / invested * 100) if invested > 0 else 0
 
-        result.append(HoldingWithLive(
-            holding=h,
-            live=live,
-            unrealized_pl=round(unrealized_pl, 2),
-            unrealized_pl_pct=round(unrealized_pl_pct, 2),
-            current_value=round(current_value, 2),
-            is_above_buy_price=current_price > h.buy_price if current_price > 0 else False,
-            can_sell=h.quantity > 0,
-        ))
+            price_error = ""
+            if not live or current_price <= 0:
+                price_error = f"Price unavailable for {h.symbol}.{h.exchange}"
+
+            result.append(HoldingWithLive(
+                holding=h,
+                live=live,
+                unrealized_pl=round(unrealized_pl, 2),
+                unrealized_pl_pct=round(unrealized_pl_pct, 2),
+                current_value=round(current_value, 2),
+                is_above_buy_price=current_price > h.buy_price if current_price > 0 else False,
+                can_sell=h.quantity > 0,
+                price_error=price_error,
+            ))
+        except Exception as e:
+            # Per-stock error: log and continue with remaining stocks
+            print(f"[Portfolio] Error processing {h.symbol}.{h.exchange}: {e}")
+            result.append(HoldingWithLive(
+                holding=h,
+                live=None,
+                price_error=f"Error: {str(e)[:100]}",
+            ))
 
     return result
 
@@ -233,76 +247,90 @@ def get_stock_summary():
 
     result = []
     for sym in all_symbols:
-        held_info = held_by_symbol.get(sym, {"lots": [], "exchange": "NSE", "name": sym})
-        sold_info = sold_by_symbol.get(sym, {"lots": [], "exchange": "NSE", "name": sym})
+        try:
+            held_info = held_by_symbol.get(sym, {"lots": [], "exchange": "NSE", "name": sym})
+            sold_info = sold_by_symbol.get(sym, {"lots": [], "exchange": "NSE", "name": sym})
 
-        held_lots = held_info["lots"]
-        sold_lots = sold_info["lots"]
-        exchange = held_info["exchange"] if held_lots else sold_info["exchange"]
-        name = held_info["name"] if held_lots else sold_info["name"]
+            held_lots = held_info["lots"]
+            sold_lots = sold_info["lots"]
+            exchange = held_info["exchange"] if held_lots else sold_info["exchange"]
+            name = held_info["name"] if held_lots else sold_info["name"]
 
-        total_held_qty = sum(h.quantity for h in held_lots)
-        total_sold_qty = sum(s.quantity for s in sold_lots)
-        # total_invested = sum of column F (COST) for held lots
-        total_invested = sum(
-            h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
-            for h in held_lots
-        )
-        avg_buy_price = (total_invested / total_held_qty) if total_held_qty > 0 else 0
-        # avg_price = weighted average of raw transaction price (column E)
-        avg_price = (
-            sum(h.price * h.quantity for h in held_lots) / total_held_qty
-        ) if total_held_qty > 0 else 0
-        realized_pl = sum(s.realized_pl for s in sold_lots)
+            total_held_qty = sum(h.quantity for h in held_lots)
+            total_sold_qty = sum(s.quantity for s in sold_lots)
+            # total_invested = sum of column F (COST) for held lots
+            total_invested = sum(
+                h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
+                for h in held_lots
+            )
+            avg_buy_price = (total_invested / total_held_qty) if total_held_qty > 0 else 0
+            # avg_price = weighted average of raw transaction price (column E)
+            avg_price = (
+                sum(h.price * h.quantity for h in held_lots) / total_held_qty
+            ) if total_held_qty > 0 else 0
+            realized_pl = sum(s.realized_pl for s in sold_lots)
 
-        # Live data
-        live_key = f"{sym}.{exchange}"
-        live = live_data.get(live_key)
-        current_price = live.current_price if live else 0
-        current_value = current_price * total_held_qty
-        unrealized_pl = current_value - total_invested
-        unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0
+            # Live data
+            live_key = f"{sym}.{exchange}"
+            live = live_data.get(live_key)
+            current_price = live.current_price if live else 0
+            current_value = current_price * total_held_qty
+            unrealized_pl = current_value - total_invested
+            unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0
 
-        # Per-lot profitability: split into profitable vs loss lots
-        profitable_qty = 0
-        loss_qty = 0
-        unrealized_profit = 0.0  # P&L sum from lots where current > buy
-        unrealized_loss = 0.0    # P&L sum from lots where current <= buy
-        if current_price > 0:
-            for h in held_lots:
-                lot_pl = (current_price - h.buy_price) * h.quantity
-                if current_price > h.buy_price:
-                    profitable_qty += h.quantity
-                    unrealized_profit += lot_pl
-                else:
-                    loss_qty += h.quantity
-                    unrealized_loss += lot_pl
+            # Per-lot profitability: split into profitable vs loss lots
+            profitable_qty = 0
+            loss_qty = 0
+            unrealized_profit = 0.0  # P&L sum from lots where current > buy
+            unrealized_loss = 0.0    # P&L sum from lots where current <= buy
+            if current_price > 0:
+                for h in held_lots:
+                    lot_pl = (current_price - h.buy_price) * h.quantity
+                    if current_price > h.buy_price:
+                        profitable_qty += h.quantity
+                        unrealized_profit += lot_pl
+                    else:
+                        loss_qty += h.quantity
+                        unrealized_loss += lot_pl
 
-        result.append(StockSummaryItem(
-            symbol=sym,
-            exchange=exchange,
-            name=name,
-            total_held_qty=total_held_qty,
-            total_sold_qty=total_sold_qty,
-            avg_price=round(avg_price, 2),
-            avg_buy_price=round(avg_buy_price, 2),
-            total_invested=round(total_invested, 2),
-            current_value=round(current_value, 2),
-            unrealized_pl=round(unrealized_pl, 2),
-            unrealized_pl_pct=round(unrealized_pl_pct, 2),
-            unrealized_profit=round(unrealized_profit, 2),
-            unrealized_loss=round(unrealized_loss, 2),
-            realized_pl=round(realized_pl, 2),
-            total_dividend=round(dividends_by_symbol.get(sym, {}).get("amount", 0), 2),
-            dividend_count=dividends_by_symbol.get(sym, {}).get("count", 0),
-            dividend_units=dividends_by_symbol.get(sym, {}).get("units", 0),
-            num_held_lots=len(held_lots),
-            num_sold_lots=len(sold_lots),
-            profitable_qty=profitable_qty,
-            loss_qty=loss_qty,
-            live=live,
-            is_above_avg_buy=current_price > avg_buy_price if current_price > 0 and avg_buy_price > 0 else False,
-        ))
+            price_error = ""
+            if total_held_qty > 0 and (not live or current_price <= 0):
+                price_error = f"Price unavailable for {sym}.{exchange}"
+
+            result.append(StockSummaryItem(
+                symbol=sym,
+                exchange=exchange,
+                name=name,
+                total_held_qty=total_held_qty,
+                total_sold_qty=total_sold_qty,
+                avg_price=round(avg_price, 2),
+                avg_buy_price=round(avg_buy_price, 2),
+                total_invested=round(total_invested, 2),
+                current_value=round(current_value, 2),
+                unrealized_pl=round(unrealized_pl, 2),
+                unrealized_pl_pct=round(unrealized_pl_pct, 2),
+                unrealized_profit=round(unrealized_profit, 2),
+                unrealized_loss=round(unrealized_loss, 2),
+                realized_pl=round(realized_pl, 2),
+                total_dividend=round(dividends_by_symbol.get(sym, {}).get("amount", 0), 2),
+                dividend_count=dividends_by_symbol.get(sym, {}).get("count", 0),
+                dividend_units=dividends_by_symbol.get(sym, {}).get("units", 0),
+                num_held_lots=len(held_lots),
+                num_sold_lots=len(sold_lots),
+                profitable_qty=profitable_qty,
+                loss_qty=loss_qty,
+                live=live,
+                is_above_avg_buy=current_price > avg_buy_price if current_price > 0 and avg_buy_price > 0 else False,
+                price_error=price_error,
+            ))
+        except Exception as e:
+            # Per-stock error: log and continue with remaining stocks
+            print(f"[StockSummary] Error processing {sym}: {e}")
+            exchange = held_by_symbol.get(sym, sold_by_symbol.get(sym, {})).get("exchange", "NSE")
+            result.append(StockSummaryItem(
+                symbol=sym, exchange=exchange, name=sym,
+                price_error=f"Error: {str(e)[:100]}",
+            ))
 
     # Sort: stocks with held shares first, then by unrealized P&L
     result.sort(key=lambda x: (-x.total_held_qty, -abs(x.unrealized_pl)))
@@ -567,18 +595,21 @@ def get_dashboard_summary():
     stocks_in_loss = 0
 
     for h in holdings:
-        invested = h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
-        total_invested += invested
+        try:
+            invested = h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
+            total_invested += invested
 
-        key = f"{h.symbol}.{h.exchange}"
-        live = live_data.get(key)
-        if live:
-            cv = live.current_price * h.quantity
-            current_value += cv
-            if live.current_price > h.buy_price:
-                stocks_in_profit += 1
-            elif live.current_price < h.buy_price:
-                stocks_in_loss += 1
+            key = f"{h.symbol}.{h.exchange}"
+            live = live_data.get(key)
+            if live:
+                cv = live.current_price * h.quantity
+                current_value += cv
+                if live.current_price > h.buy_price:
+                    stocks_in_profit += 1
+                elif live.current_price < h.buy_price:
+                    stocks_in_loss += 1
+        except Exception as e:
+            print(f"[Dashboard] Error processing {h.symbol}.{h.exchange}: {e}")
 
     unrealized_pl = current_value - total_invested
     unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0

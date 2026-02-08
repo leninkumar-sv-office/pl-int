@@ -878,5 +878,105 @@
     "day_change_pct": 5.09,
     "volume": 0,
     "previous_close": 310.25
+  },
+  "TATACAPITAL.NSE": {
+    "price": 346.3,
+    "name": "TATA Capital",
+    "week_52_high": 347.8,
+    "week_52_low": 340.7,
+    "day_change": 0.2,
+    "day_change_pct": 0.06,
+    "volume": 0,
+    "previous_close": 346.1
+  },
+  "NIPPONSILV.NSE": {
+    "price": 224.46,
+    "name": "Nippon Silver",
+    "week_52_high": 229.2,
+    "week_52_low": 218.2,
+    "day_change": -11.96,
+    "day_change_pct": -5.06,
+    "volume": 0,
+    "previous_close": 236.42
+  },
+  "PRITIINTER.NSE": {
+    "price": 51.68,
+    "name": "Priti International Ltd",
+    "week_52_high": 53.98,
+    "week_52_low": 51.53,
+    "day_change": -0.86,
+    "day_change_pct": -1.64,
+    "volume": 0,
+    "previous_close": 52.54
+  },
+  "AURUMPROP.NSE": {
+    "price": 178.01,
+    "name": "Aurum Proptech Ltd",
+    "week_52_high": 179.9,
+    "week_52_low": 175.98,
+    "day_change": -0.67,
+    "day_change_pct": -0.37,
+    "volume": 0,
+    "previous_close": 178.68
+  },
+  "HIGHENERGY.BSE": {
+    "price": 584.4,
+    "name": "High Energy Batteries (India) Ltd",
+    "week_52_high": 588.0,
+    "week_52_low": 575.0,
+    "day_change": -2.2,
+    "day_change_pct": -0.38,
+    "volume": 0,
+    "previous_close": 586.6
+  },
+  "LGEELECTRO.NSE": {
+    "price": 1502.8,
+    "name": "LG Electronics India",
+    "week_52_high": 1517.0,
+    "week_52_low": 1495.0,
+    "day_change": -14.7,
+    "day_change_pct": -0.97,
+    "volume": 0,
+    "previous_close": 1517.5
+  },
+  "ANTONYWASTE.BSE": {
+    "price": 513.25,
+    "name": "Antony Waste Handling Cell Ltd",
+    "week_52_high": 516.7,
+    "week_52_low": 505.7,
+    "day_change": -5.5,
+    "day_change_pct": -1.06,
+    "volume": 0,
+    "previous_close": 518.75
+  },
+  "TATAMOTORS.NSE": {
+    "price": 369.5,
+    "name": "Tata Motors Ltd",
+    "week_52_high": 381.8,
+    "week_52_low": 361.0,
+    "day_change": -4.65,
+    "day_change_pct": -1.24,
+    "volume": 0,
+    "previous_close": 374.15
+  },
+  "ANTONYWASTE.NSE": {
+    "price": 512.4,
+    "name": "Antony Waste Handling Cell Ltd",
+    "week_52_high": 518.0,
+    "week_52_low": 506.05,
+    "day_change": -6.15,
+    "day_change_pct": -1.19,
+    "volume": 0,
+    "previous_close": 518.55
+  },
+  "MAJESCO.NSE": {
+    "price": 178.01,
+    "name": "Majesco Ltd",
+    "week_52_high": 179.9,
+    "week_52_low": 175.98,
+    "day_change": -0.67,
+    "day_change_pct": -0.37,
+    "volume": 0,
+    "previous_close": 178.68
   }
 }

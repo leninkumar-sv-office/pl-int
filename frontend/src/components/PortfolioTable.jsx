@@ -128,7 +128,9 @@ export default function PortfolioTable({ portfolio, loading, onSell, onAddStock 
                         )}
                       </div>
                     ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>--</span>
+                      <span style={{ color: item.price_error ? 'var(--red)' : 'var(--text-muted)', fontSize: '12px' }}>
+                        {item.price_error ? 'N/A' : '--'}
+                      </span>
                     )}
                   </td>
                   <td>

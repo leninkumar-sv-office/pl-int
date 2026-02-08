@@ -455,8 +455,9 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
             ys = _yahoo_sym(sym, exch)
             ymap[ys] = (sym, exch)
         if still_need:
-            print(f"[StockService] {len(still_need)} stocks pending — "
-                  f"using saved JSON/xlsx fallback")
+            missed = [f"{s}.{e}" for s, e in still_need]
+            print(f"[StockService] {len(still_need)} stocks not on Zerodha — "
+                  f"fallback: {', '.join(missed)}")
 
     # ── BUILD RESULTS + fallback chain ─────────────────────
     yahoo_save: Dict[str, dict] = {}
@@ -723,13 +724,17 @@ def _bg_loop():
                 with _cache_lock:
                     _cache.clear()
                 res = fetch_multiple(syms)
-                live = sum(1 for v in res.values() if not v.is_manual)
-                fb = sum(1 for v in res.values() if v.is_manual)
+                live_keys = sorted(k for k, v in res.items() if not v.is_manual)
+                fb_keys = sorted(k for k, v in res.items() if v.is_manual)
+                live = len(live_keys)
+                fb = len(fb_keys)
                 with _refresh_lock:
                     _last_refresh_time = time.time()
                     _last_refresh_status = (
                         f"ok: {live} live, {fb} fallback / {len(syms)}")
                 print(f"[StockService] Refresh: {live} zerodha, {fb} cached / {len(syms)} stocks")
+                if fb_keys:
+                    print(f"[StockService] Cached stocks: {', '.join(fb_keys)}")
         except Exception as e:
             print(f"[StockService] Refresh error: {e}")
             with _refresh_lock:
