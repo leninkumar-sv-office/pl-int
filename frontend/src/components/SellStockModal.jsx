@@ -88,13 +88,17 @@ export default function SellStockModal({ holding, onSell, onClose }) {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Sell Date</label>
-            <input
-              type="date"
-              value={sellDate}
-              onChange={(e) => setSellDate(e.target.value)}
-            />
+          <div className="form-row">
+            <div className="form-group">
+              <label>Sell Date *</label>
+              <input
+                type="date"
+                value={sellDate}
+                onChange={(e) => setSellDate(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group" />
           </div>
 
           {/* Estimated P&L */}
