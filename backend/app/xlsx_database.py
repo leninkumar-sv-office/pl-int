@@ -273,16 +273,21 @@ def _find_realised_columns(ws, header_row: int) -> dict:
 
 
 def _parse_trading_history(wb) -> Tuple[list, list, list]:
-    """Parse Buy and Sell rows from Trading History sheet using column layout.
+    """Parse Buy and Sell rows from Trading History sheet.
 
-    The xlsx format tracks sold lots directly in the Realised section:
-      - Core: A=Date, B=Exch, C=Action, D=Qty, E=Price, F=Cost, ...
-      - Realised section (position varies): Price, Date, Gain, Units
+    ALL Buy rows go into held[]; ALL Sell rows go into sell_rows[].
+    Held/sold determination is done purely via FIFO matching of Sell rows
+    against Buy rows (in _parse_and_match_symbol).
+
+    The Realised columns (W–AB) in dump files often have broken formula
+    references (stale row numbers after row insertions) and cannot be
+    trusted for held/sold assignment.  They are still written by the app's
+    add_sell_transaction for display in Excel.
 
     Returns (held_lots, column_sold_lots, sell_rows, dividends):
-      - held_lots: Buy rows WITHOUT Realised data (or partial remaining)
-      - column_sold_lots: Buy rows WITH Realised data tracking sold lots
-      - sell_rows: Explicit Sell action rows (for FIFO matching against held)
+      - held_lots: ALL Buy rows (non-DIV)
+      - column_sold_lots: always empty (FIFO handles sold determination)
+      - sell_rows: ALL Sell action rows
       - dividends: List of {date, amount, remarks} for dividend rows
     """
     held, sold, sell_rows, dividends = [], [], [], []
@@ -302,10 +307,6 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             break
     if header_row is None:
         return held, sold, sell_rows, dividends
-
-    # Dynamically find the Realised section columns
-    rcols = _find_realised_columns(ws, header_row)
-    has_realised_section = rcols["sell_price"] is not None
 
     for row_idx in range(header_row + 1, max_row + 1):
         date_val = ws.cell(row_idx, 1).value        # A: DATE
@@ -338,30 +339,22 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
                 })
             continue
 
-        # Collect Sell rows for FIFO matching against held lots.
-        # IMPORTANT: Original dump files have Sell rows alongside Realised
-        # columns on Buy rows for the SAME sales — these would double-count.
-        # So when a Realised section exists, only collect app-initiated sells
-        # (marked with "APP_SELL" remark). When no Realised section exists,
-        # collect all Sell rows (file was created by app or has no column data).
+        # Collect ALL Sell rows for FIFO matching
         if action == "Sell":
-            remarks_val = str(ws.cell(row_idx, 7).value or "").strip()
-            is_app_sell = remarks_val == "APP_SELL"
-            if not has_realised_section or is_app_sell:
-                tx_date = _parse_date(date_val)
-                if not tx_date:
-                    continue
-                qty_int = _safe_int(qty)
-                price_f = _safe_float(price)
-                if qty_int > 0 and price_f > 0:
-                    exchange = exch if exch in ("NSE", "BSE") else "NSE"
-                    sell_rows.append({
-                        "date": tx_date,
-                        "quantity": qty_int,
-                        "price": price_f,
-                        "exchange": exchange,
-                        "row_idx": row_idx,
-                    })
+            tx_date = _parse_date(date_val)
+            if not tx_date:
+                continue
+            qty_int = _safe_int(qty)
+            price_f = _safe_float(price)
+            if qty_int > 0 and price_f > 0:
+                exchange = exch if exch in ("NSE", "BSE") else "NSE"
+                sell_rows.append({
+                    "date": tx_date,
+                    "quantity": qty_int,
+                    "price": price_f,
+                    "exchange": exchange,
+                    "row_idx": row_idx,
+                })
             continue
 
         # Only process Buy rows
@@ -387,66 +380,16 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
 
         exchange = exch if exch in ("NSE", "BSE") else "NSE"
 
-        # Check Realised section columns for sold data
-        sell_price = 0.0
-        sell_date_val = None
-        sell_gain = 0.0
-        sold_units = 0
-
-        if has_realised_section:
-            if rcols["sell_price"]:
-                sell_price = _safe_float(ws.cell(row_idx, rcols["sell_price"]).value)
-            if rcols["sell_date"]:
-                sell_date_val = ws.cell(row_idx, rcols["sell_date"]).value
-            if rcols["sell_gain"]:
-                sell_gain = _safe_float(ws.cell(row_idx, rcols["sell_gain"]).value)
-            if rcols["sold_units"]:
-                sold_units = _safe_int(ws.cell(row_idx, rcols["sold_units"]).value)
-
-        if sold_units > 0 and sell_price > 0:
-            # This buy lot has been sold (fully or partially)
-            sell_date = _parse_excel_serial_date(sell_date_val)
-            if not sell_date:
-                sell_date = tx_date  # fallback
-
-            realized_pl = sell_gain if sell_gain != 0 else round((sell_price - buy_price) * sold_units, 2)
-
-            sold.append({
-                "buy_date": tx_date,
-                "buy_price": buy_price,
-                "buy_cost": cost_f,
-                "sell_date": sell_date,
-                "sell_price": sell_price,
-                "quantity": sold_units,
-                "realized_pl": round(realized_pl, 2),
-                "exchange": exchange,
-                "row_idx": row_idx,
-            })
-
-            # Check for partial sell (held = D - sold_units)
-            held_qty = qty_int - sold_units
-            if held_qty > 0:
-                per_unit_cost = cost_f / qty_int if qty_int > 0 else buy_price
-                held.append({
-                    "date": tx_date,
-                    "exchange": exchange,
-                    "quantity": held_qty,
-                    "price": buy_price,
-                    "raw_price": price_e,
-                    "cost": round(per_unit_cost * held_qty, 2),
-                    "row_idx": row_idx,
-                })
-        else:
-            # Not sold — entire lot is held
-            held.append({
-                "date": tx_date,
-                "exchange": exchange,
-                "quantity": qty_int,
-                "price": buy_price,
-                "raw_price": price_e,
-                "cost": cost_f,
-                "row_idx": row_idx,
-            })
+        # Every Buy row goes into held; FIFO matching (later) moves sold lots out
+        held.append({
+            "date": tx_date,
+            "exchange": exchange,
+            "quantity": qty_int,
+            "price": buy_price,
+            "raw_price": price_e,
+            "cost": cost_f,
+            "row_idx": row_idx,
+        })
 
     return held, sold, sell_rows, dividends
 
@@ -461,7 +404,7 @@ class XlsxPortfolio:
     def __init__(self, stocks_dir: str | Path):
         self.stocks_dir = Path(stocks_dir)
         self.stocks_dir.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Reentrant — nested calls OK
 
         # Caches keyed by symbol (combined data from all files)
         self._cache: Dict[str, Tuple[float, List[Holding], List[SoldPosition]]] = {}
@@ -803,26 +746,151 @@ class XlsxPortfolio:
 
     def add_sell_transaction(self, symbol: str, exchange: str,
                              quantity: int, price: float, sell_date: str):
-        """Insert a Sell row into the stock's xlsx file.
+        """Write Realised data (columns W–AB) onto BUY rows in FIFO order.
 
-        Marks the row with 'APP_SELL' so the parser knows to FIFO-match it
-        against held lots (as opposed to original Sell rows that are already
-        tracked via Realised columns on Buy rows).
+        For each BUY row being sold, writes computed values into:
+          W: sell price    X: sell date
+          Y: gain %        Z: gain (net of commission)
+          AA: gross         AB: units sold
+
+        Also inserts a Sell record row at the top for tracking.
+        Values are computed to match the original dump formulas:
+          Z  = (1 - commission*2) * ((sell_price * units) - (E * units))
+          AA = (E * units) + Z
+          Y  = Z / SUM(F:I)
+          AB = units
         """
         symbol = symbol.upper()
         filepath = self._find_file_for_symbol(symbol)
         if filepath is None:
             raise FileNotFoundError(f"No xlsx file for symbol {symbol}")
 
-        tx = Transaction(
-            date=sell_date,
-            exchange=exchange,
-            action="Sell",
-            quantity=quantity,
-            price=price,
-            remarks="APP_SELL",
-        )
-        self._insert_transaction(filepath, tx)
+        with self._lock:
+            # Convert Realised formulas → values so insert_rows won't break them
+            self._convert_realised_formulas(filepath)
+
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+            header_row = self._find_header_row(ws)
+
+            # ── Ensure Realised section headers exist ───────────
+            self._ensure_realised_headers(ws, header_row)
+            rcols = _find_realised_columns(ws, header_row)
+
+            col_w = rcols["sell_price"]     # W: Price
+            col_x = rcols["sell_date"]      # X: Date
+            col_z = rcols["sell_gain"]      # Z: Gain
+            col_ab = rcols["sold_units"]    # AB: Units
+
+            # Derive Gain% (between Date and Gain) and Gross (between Gain and Units)
+            col_y = None
+            if col_x and col_z and col_z - col_x == 2:
+                col_y = col_x + 1
+            col_aa = None
+            if col_z and col_ab and col_ab - col_z == 2:
+                col_aa = col_z + 1
+
+            # ── Read commission rate from Index sheet ───────────
+            commission = 0.007  # default
+            if "Index" in wb.sheetnames:
+                idx_ws = wb["Index"]
+                comm_val = idx_ws.cell(2, 6).value  # Index!$F$2
+                if comm_val and isinstance(comm_val, (int, float)):
+                    commission = float(comm_val)
+
+            # ── Step 1: Insert Sell record row at top ───────────
+            max_row_before = ws.max_row or header_row
+            insert_at = header_row + 1
+            ws.insert_rows(insert_at)
+
+            try:
+                sell_dt = datetime.strptime(sell_date, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                sell_dt = datetime.now()
+
+            ws.cell(insert_at, 1, value=sell_dt)                          # A: DATE
+            ws.cell(insert_at, 2, value=exchange)                         # B: EXCH
+            ws.cell(insert_at, 3, value="Sell")                           # C: ACTION
+            ws.cell(insert_at, 4, value=quantity)                         # D: QTY
+            ws.cell(insert_at, 5, value=price)                            # E: PRICE
+            ws.cell(insert_at, 6, value=round(price * quantity, 2))       # F: COST
+            ws.cell(insert_at, 7, value="~")                              # G: REMARKS
+
+            # ── Step 2: Find unsold BUY rows (after the insert) ─
+            unsold = []
+            for row_idx in range(insert_at + 1, max_row_before + 2):
+                action = ws.cell(row_idx, 3).value
+                exch_val = ws.cell(row_idx, 2).value
+                if not action or str(action).strip() != "Buy":
+                    continue
+                if exch_val and str(exch_val).strip() == "DIV":
+                    continue
+                # Skip rows that already have Realised data (W column filled)
+                sp = ws.cell(row_idx, col_w).value
+                if sp is not None and sp != "" and _safe_float(sp) > 0:
+                    continue
+                qty = _safe_int(ws.cell(row_idx, 4).value)
+                if qty <= 0:
+                    continue
+                dt = _parse_date(ws.cell(row_idx, 1).value)
+                unsold.append({"row": row_idx, "qty": qty, "date": dt})
+
+            # ── Step 3: FIFO sort (oldest first) and allocate ───
+            unsold.sort(key=lambda x: (x["date"] or "", x["row"]))
+
+            remaining_to_sell = quantity
+            to_fill = []
+            for u in unsold:
+                if remaining_to_sell <= 0:
+                    break
+                sell_qty = min(u["qty"], remaining_to_sell)
+                to_fill.append({
+                    "row": u["row"],
+                    "total_qty": u["qty"],
+                    "sell_qty": sell_qty,
+                    "is_full": sell_qty == u["qty"],
+                })
+                remaining_to_sell -= sell_qty
+
+            if remaining_to_sell > 0:
+                wb.close()
+                raise ValueError(
+                    f"Cannot sell {quantity} shares of {symbol}: "
+                    f"only {quantity - remaining_to_sell} unsold shares available"
+                )
+
+            # ── Step 4: Write Realised data to BUY rows ─────────
+            for info in to_fill:
+                r = info["row"]
+                sell_qty = info["sell_qty"]
+                price_e = _safe_float(ws.cell(r, 5).value)   # E: PRICE per share
+                cost_f = _safe_float(ws.cell(r, 6).value)     # F: COST
+                stt = _safe_float(ws.cell(r, 8).value)        # H: STT
+                add_chrg = _safe_float(ws.cell(r, 9).value)   # I: ADD CHRG
+                total_cost = cost_f + stt + add_chrg           # = SUM(F:I)
+
+                # Z: Gain = (1 - commission*2) * ((sell_price * units) - (E * units))
+                gain = (1 - commission * 2) * ((price * sell_qty) - (price_e * sell_qty))
+                gain = round(gain, 2)
+
+                # AA: Gross = (E * units) + gain
+                gross = round((price_e * sell_qty) + gain, 2)
+
+                # Y: Gain% = Z / SUM(F:I)
+                gain_pct = round(gain / total_cost, 6) if total_cost > 0 else 0
+
+                # Write cells
+                ws.cell(r, col_w, value=round(price, 2))           # W: Sell price
+                ws.cell(r, col_x, value=sell_dt)                   # X: Sell date
+                if col_y:
+                    ws.cell(r, col_y, value=gain_pct)              # Y: Gain %
+                if col_z:
+                    ws.cell(r, col_z, value=gain)                  # Z: Gain
+                if col_aa:
+                    ws.cell(r, col_aa, value=gross)                # AA: Gross
+                ws.cell(r, col_ab, value=sell_qty)                 # AB: Units
+
+            wb.save(filepath)
         self._invalidate_symbol(symbol)
 
     def add_dividend(self, symbol: str, exchange: str, amount: float,
@@ -883,6 +951,74 @@ class XlsxPortfolio:
 
     # ── XLSX Write Helpers ────────────────────────────────
 
+    def _convert_realised_formulas(self, filepath: Path):
+        """Replace Realised section formulas with cached values.
+
+        Row insertion shifts cells; openpyxl updates formula text but
+        drops cached computed values. Converting formulas → values first
+        ensures the data survives row insertions intact.
+        """
+        # Read cached values
+        wb_data = openpyxl.load_workbook(filepath, data_only=True)
+        ws_data = wb_data["Trading History"]
+        hr = self._find_header_row(ws_data)
+        rcols = _find_realised_columns(ws_data, hr)
+        cols = [c for c in [
+            rcols.get("sell_price"), rcols.get("sell_date"),
+            rcols.get("sell_gain"), rcols.get("sold_units"),
+        ] if c is not None]
+        # Derived: Gain%, Gross
+        if rcols.get("sell_date") and rcols.get("sell_gain"):
+            if rcols["sell_gain"] - rcols["sell_date"] == 2:
+                cols.append(rcols["sell_date"] + 1)
+        if rcols.get("sell_gain") and rcols.get("sold_units"):
+            if rcols["sold_units"] - rcols["sell_gain"] == 2:
+                cols.append(rcols["sell_gain"] + 1)
+
+        cached: Dict[Tuple[int, int], object] = {}
+        for r in range(hr + 1, (ws_data.max_row or hr) + 1):
+            for c in cols:
+                val = ws_data.cell(r, c).value
+                if val is not None:
+                    cached[(r, c)] = val
+        wb_data.close()
+
+        if not cached:
+            return
+
+        # Replace formulas with values
+        wb = openpyxl.load_workbook(filepath)
+        ws = wb["Trading History"]
+        changed = False
+        for (r, c), val in cached.items():
+            cell = ws.cell(r, c)
+            if isinstance(cell.value, str) and str(cell.value).startswith("="):
+                cell.value = val
+                changed = True
+        if changed:
+            wb.save(filepath)
+        else:
+            wb.close()
+
+    def _ensure_realised_headers(self, ws, header_row: int):
+        """Create Realised section headers (W–AB) if they don't already exist."""
+        rcols = _find_realised_columns(ws, header_row)
+        if rcols["sell_price"] is not None:
+            return  # Already has Realised section
+
+        # Standard positions: W=23, X=24, Y=25, Z=26, AA=27, AB=28
+        # Row 2: "Realised" marker
+        ws.cell(2, 23, value="Realised")
+
+        # Row header_row: sub-headers
+        headers = {23: "Price", 24: "Date", 25: "Gain %", 26: "Gain", 27: "Gross", 28: "Units"}
+        hdr_font = Font(bold=True)
+        hdr_fill = PatternFill("solid", fgColor="FF967BB6")
+        for col, name in headers.items():
+            cell = ws.cell(header_row, col, value=name)
+            cell.font = hdr_font
+            cell.fill = hdr_fill
+
     def _find_header_row(self, ws) -> int:
         """Find the header row in a Trading History sheet."""
         for r in range(1, 11):
@@ -894,6 +1030,9 @@ class XlsxPortfolio:
     def _insert_transaction(self, filepath: Path, tx: Transaction):
         """Insert a transaction row at the top of Trading History."""
         with self._lock:
+            # Preserve cached formula values before row insertion
+            self._convert_realised_formulas(filepath)
+
             wb = openpyxl.load_workbook(filepath)
             ws = wb["Trading History"]
             header_row = self._find_header_row(ws)
@@ -960,6 +1099,14 @@ class XlsxPortfolio:
         # Sub-headers (rows 2-3) to match existing format
         ws.cell(2, 10, value="UnRealised")
         ws.cell(3, 10, value="Total")
+
+        # Realised section headers (W=23 through AB=28)
+        ws.cell(2, 23, value="Realised")
+        realised_headers = {23: "Price", 24: "Date", 25: "Gain %", 26: "Gain", 27: "Gross", 28: "Units"}
+        for col, h in realised_headers.items():
+            cell = ws.cell(4, col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
 
         # Column widths
         widths = {1: 12, 2: 6, 3: 6, 4: 6, 5: 10, 6: 12,
