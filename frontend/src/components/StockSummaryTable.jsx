@@ -254,6 +254,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [sortField, setSortField] = useState('unrealized_pl');
   const [sortDir, setSortDir] = useState('desc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   if (loading && stocks.length === 0) {
     return (
@@ -288,7 +289,16 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     setExpandedSymbol(prev => prev === symbol ? null : symbol);
   };
 
-  const sorted = [...stocks].sort((a, b) => {
+  // Filter stocks by search query (matches symbol or name)
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = q
+    ? stocks.filter(s =>
+        s.symbol.toLowerCase().includes(q) ||
+        (s.name || '').toLowerCase().includes(q)
+      )
+    : stocks;
+
+  const sorted = [...filtered].sort((a, b) => {
     let aVal, bVal;
     switch (sortField) {
       case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
@@ -352,8 +362,45 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         </div>
       </div>
 
-      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-        Click any row to view lots, transactions, and Buy/Sell actions
+      {/* Search bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+        <div style={{ position: 'relative', flex: '1', maxWidth: '360px' }}>
+          <input
+            type="text"
+            placeholder="Search stocks by symbol or name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px 8px 34px',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text)',
+              fontSize: '13px',
+              outline: 'none',
+            }}
+          />
+          <span style={{
+            position: 'absolute',
+            left: '10px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--text-muted)',
+            fontSize: '14px',
+            pointerEvents: 'none',
+          }}>
+            &#x1F50D;
+          </span>
+        </div>
+        {q && (
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {filtered.length} of {stocks.length} stocks
+          </span>
+        )}
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+          Click any row to view lots, transactions, and Buy/Sell actions
+        </span>
       </div>
 
       <div className="table-container" style={{ overflowX: 'auto' }}>
