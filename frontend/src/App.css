@@ -305,6 +305,14 @@ tr.highlight-profit:hover {
   font-size: 14px;
   font-family: inherit;
   transition: border-color 0.2s;
+  color-scheme: dark;
+}
+.form-group input[type="date"] {
+  cursor: pointer;
+}
+.form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
 }
 .form-group input:focus, .form-group select:focus {
   outline: none;

@@ -732,7 +732,7 @@ class XlsxPortfolio:
         self._invalidate_symbol(symbol)
 
         # Re-parse to get the proper deterministic ID
-        holdings, _ = self._get_stock_data(symbol)
+        holdings, _, _ = self._get_stock_data(symbol)
         # Find the one we just added (most recent buy matching date+price+qty)
         for h in holdings:
             if (h.buy_date == holding.buy_date and
@@ -1138,6 +1138,9 @@ class XlsxPortfolio:
         # Register in maps
         self._file_map[symbol] = filepath
         self._name_map[symbol] = company_name
+        if symbol not in self._all_files:
+            self._all_files[symbol] = []
+        self._all_files[symbol].append(filepath)
 
         print(f"[XlsxDB] Created new stock file: {filename}")
         return filepath
