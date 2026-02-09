@@ -737,12 +737,40 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <td>
                       {hasHeld ? (() => {
                         const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
+                        const uplPct = stock.total_invested > 0 ? (upl / stock.total_invested) * 100 : 0;
+                        const heldLots = (portfolio || []).filter(item => item.holding.symbol === stock.symbol && item.holding.quantity > 0);
+                        const earliestDate = heldLots.reduce((min, item) => {
+                          const d = item.holding.buy_date;
+                          return d && d < min ? d : min;
+                        }, '9999-12-31');
+                        let durationStr = '';
+                        if (earliestDate !== '9999-12-31') {
+                          const start = new Date(earliestDate + 'T00:00:00');
+                          const now = new Date();
+                          const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+                          if (diffDays >= 365) {
+                            const y = Math.floor(diffDays / 365);
+                            const m = Math.floor((diffDays % 365) / 30);
+                            durationStr = `in ${y}y${m > 0 ? ` ${m}m` : ''}`;
+                          } else if (diffDays >= 30) {
+                            const m = Math.floor(diffDays / 30);
+                            const d = diffDays % 30;
+                            durationStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
+                          } else {
+                            durationStr = `in ${diffDays}d`;
+                          }
+                        }
                         return (
-                          <div style={{
-                            fontWeight: 600,
-                            color: upl >= 0 ? 'var(--green)' : 'var(--red)',
-                          }}>
-                            {upl >= 0 ? '+' : ''}{formatINR(upl)}
+                          <div>
+                            <div style={{
+                              fontWeight: 600,
+                              color: upl >= 0 ? 'var(--green)' : 'var(--red)',
+                            }}>
+                              {upl >= 0 ? '+' : ''}{formatINR(upl)}
+                            </div>
+                            <div style={{ fontSize: '11px', color: upl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85 }}>
+                              {uplPct >= 0 ? '+' : ''}{uplPct.toFixed(1)}%{durationStr ? ` ${durationStr}` : ''}
+                            </div>
                           </div>
                         );
                       })() : (
