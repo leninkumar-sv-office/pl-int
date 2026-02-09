@@ -390,7 +390,21 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
       case 'unrealized_profit': aVal = a.unrealized_profit; bVal = b.unrealized_profit; break;
       case 'unrealized_loss': aVal = a.unrealized_loss; bVal = b.unrealized_loss; break;
-      case 'unrealized_pl': aVal = a.unrealized_pl; bVal = b.unrealized_pl; break;
+      case 'unrealized_pl': {
+        const calcAnnualized = (s) => {
+          const upl = (s.unrealized_profit || 0) + (s.unrealized_loss || 0);
+          if (s.total_invested <= 0 || s.total_held_qty <= 0) return -9999;
+          const lots = (portfolio || []).filter(item => item.holding.symbol === s.symbol && item.holding.quantity > 0);
+          const earliest = lots.reduce((min, item) => { const d = item.holding.buy_date; return d && d < min ? d : min; }, '9999-12-31');
+          if (earliest === '9999-12-31') return -9999;
+          const days = Math.floor((new Date() - new Date(earliest + 'T00:00:00')) / (1000 * 60 * 60 * 24));
+          if (days <= 0) return -9999;
+          return (Math.pow(1 + upl / s.total_invested, 365 / days) - 1) * 100;
+        };
+        aVal = calcAnnualized(a);
+        bVal = calcAnnualized(b);
+        break;
+      }
       case 'realized_pl': aVal = a.realized_pl; bVal = b.realized_pl; break;
       case 'total_dividend': aVal = a.total_dividend || 0; bVal = b.total_dividend || 0; break;
       case 'week_52_low': {
