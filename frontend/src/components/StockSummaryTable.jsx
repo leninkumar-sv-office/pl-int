@@ -744,10 +744,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           return d && d < min ? d : min;
                         }, '9999-12-31');
                         let durationStr = '';
+                        let annualizedPct = null;
+                        let diffDays = 0;
                         if (earliestDate !== '9999-12-31') {
                           const start = new Date(earliestDate + 'T00:00:00');
                           const now = new Date();
-                          const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+                          diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
                           if (diffDays >= 365) {
                             const y = Math.floor(diffDays / 365);
                             const m = Math.floor((diffDays % 365) / 30);
@@ -758,6 +760,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             durationStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
                           } else {
                             durationStr = `in ${diffDays}d`;
+                          }
+                          // Annualized return: ((1 + totalReturn) ^ (365 / days)) - 1
+                          if (diffDays > 0 && stock.total_invested > 0) {
+                            const totalReturn = upl / stock.total_invested;
+                            annualizedPct = (Math.pow(1 + totalReturn, 365 / diffDays) - 1) * 100;
                           }
                         }
                         return (
@@ -771,6 +778,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             <div style={{ fontSize: '11px', color: upl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85 }}>
                               {uplPct >= 0 ? '+' : ''}{uplPct.toFixed(1)}%{durationStr ? ` ${durationStr}` : ''}
                             </div>
+                            {annualizedPct !== null && (
+                              <div style={{ fontSize: '11px', color: upl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85, marginTop: '1px' }}>
+                                {annualizedPct >= 0 ? '+' : ''}{annualizedPct.toFixed(1)}% p.a.
+                              </div>
+                            )}
                           </div>
                         );
                       })() : (
