@@ -32,3 +32,5 @@ node_modules/
 .env.local
 backend/venv/
 .DS_Store
+frontend/dist/
+frontend/vite.config.*

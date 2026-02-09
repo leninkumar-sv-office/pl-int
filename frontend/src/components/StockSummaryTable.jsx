@@ -294,6 +294,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hideZeroHeld, setHideZeroHeld] = useState(true);
   const searchRef = useRef(null);
   // Bulk selection tracks individual lot (holding) IDs
   const [selectedLots, setSelectedLots] = useState(new Set());
@@ -371,14 +372,13 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     }
   };
 
-  // Filter stocks by search query (matches symbol or name)
+  // Filter stocks by search query (matches symbol or name) and held-units toggle
   const q = searchQuery.trim().toLowerCase();
-  const filtered = q
-    ? stocks.filter(s =>
-        s.symbol.toLowerCase().includes(q) ||
-        (s.name || '').toLowerCase().includes(q)
-      )
-    : stocks;
+  const filtered = stocks.filter(s => {
+    if (hideZeroHeld && s.total_held_qty <= 0) return false;
+    if (q && !s.symbol.toLowerCase().includes(q) && !(s.name || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   const sorted = [...filtered].sort((a, b) => {
     let aVal, bVal;
@@ -484,14 +484,29 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             &#x1F50D;
           </span>
         </div>
-        {q && (
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          fontSize: '13px',
+          color: 'var(--text-dim)',
+          whiteSpace: 'nowrap',
+          userSelect: 'none',
+        }}>
+          <input
+            type="checkbox"
+            checked={hideZeroHeld}
+            onChange={(e) => setHideZeroHeld(e.target.checked)}
+            style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+          />
+          Held only
+        </label>
+        {(q || hideZeroHeld) && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             {filtered.length} of {stocks.length} stocks
           </span>
         )}
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-          Click any row to view lots, transactions, and Buy/Sell actions
-        </span>
       </div>
 
       <div className="table-container" style={{ overflowX: 'auto' }}>
