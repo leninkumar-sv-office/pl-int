@@ -988,5 +988,25 @@
     "day_change_pct": 1.11,
     "volume": 1645440,
     "previous_close": 971.85
+  },
+  "BHARATCOAL.NSE": {
+    "price": 36.61,
+    "name": "BHARAT COKING COAL",
+    "week_52_high": 37.58,
+    "week_52_low": 36.5,
+    "day_change": -0.43,
+    "day_change_pct": -1.16,
+    "volume": 16783982,
+    "previous_close": 37.04
+  },
+  "BHARTIARTL.NSE": {
+    "price": 2038.2,
+    "name": "BHARTI AIRTEL",
+    "week_52_high": 2055.2,
+    "week_52_low": 2028.7,
+    "day_change": -0.2,
+    "day_change_pct": -0.01,
+    "volume": 7570161,
+    "previous_close": 2038.4
   }
 }
