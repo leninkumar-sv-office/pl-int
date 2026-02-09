@@ -463,7 +463,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: '100%',
-              padding: '8px 12px 8px 34px',
+              padding: '8px 30px 8px 34px',
               background: 'var(--bg-input)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
@@ -483,6 +483,25 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           }}>
             &#x1F50D;
           </span>
+          {searchQuery && (
+            <span
+              onClick={() => { setSearchQuery(''); if (searchRef.current) searchRef.current.focus(); }}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-muted)',
+                fontSize: '16px',
+                cursor: 'pointer',
+                lineHeight: 1,
+                userSelect: 'none',
+              }}
+              title="Clear search"
+            >
+              &#x2715;
+            </span>
+          )}
         </div>
         <label style={{
           display: 'flex',
