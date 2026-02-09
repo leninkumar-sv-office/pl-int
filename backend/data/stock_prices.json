@@ -1008,5 +1008,25 @@
     "day_change_pct": -0.01,
     "volume": 7570161,
     "previous_close": 2038.4
+  },
+  "CENTRALBK.NSE": {
+    "price": 37.74,
+    "name": "CENTRAL BANK OF INDIA",
+    "week_52_high": 37.98,
+    "week_52_low": 37.25,
+    "day_change": 0.74,
+    "day_change_pct": 2.0,
+    "volume": 5823510,
+    "previous_close": 37.0
+  },
+  "DIXON.NSE": {
+    "price": 11757.0,
+    "name": "DIXON TECHNO (INDIA)",
+    "week_52_high": 11845.0,
+    "week_52_low": 11550.0,
+    "day_change": 255.0,
+    "day_change_pct": 2.22,
+    "volume": 485574,
+    "previous_close": 11502.0
   }
 }
