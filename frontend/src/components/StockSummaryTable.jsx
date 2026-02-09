@@ -856,7 +856,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             onClick={handleBulkSell}
             style={{ fontWeight: 600, padding: '8px 24px' }}
           >
-            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''}
+            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} shares)
           </button>
         </div>
       )}

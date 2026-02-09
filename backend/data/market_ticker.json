@@ -24,9 +24,9 @@
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/10g",
-    "price": 156743.0,
-    "change": 1292.0,
-    "change_pct": 0.83,
+    "price": 156860.0,
+    "change": 1409.0,
+    "change_pct": 0.91,
     "source": "zerodha"
   },
   {
@@ -34,9 +34,9 @@
     "label": "Silver",
     "type": "commodity",
     "unit": "\u20b9/kg",
-    "price": 254361.0,
-    "change": 4469.0,
-    "change_pct": 1.79,
+    "price": 255299.0,
+    "change": 5407.0,
+    "change_pct": 2.16,
     "source": "zerodha"
   },
   {
@@ -84,9 +84,9 @@
     "label": "Crude Oil",
     "type": "commodity",
     "unit": "\u20b9/bbl",
-    "price": 5739.0,
-    "change": -85.0,
-    "change_pct": -1.46,
+    "price": 5729.0,
+    "change": -95.0,
+    "change_pct": -1.63,
     "source": "zerodha"
   }
 ]
