@@ -388,25 +388,51 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'total_sold_qty': aVal = a.total_sold_qty; bVal = b.total_sold_qty; break;
       case 'total_invested': aVal = a.total_invested; bVal = b.total_invested; break;
       case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
-      case 'unrealized_profit': aVal = a.unrealized_profit; bVal = b.unrealized_profit; break;
-      case 'unrealized_loss': aVal = a.unrealized_loss; bVal = b.unrealized_loss; break;
-      case 'unrealized_pl': {
+      case 'unrealized_profit':
+      case 'unrealized_loss':
+      case 'unrealized_pl':
+      case 'total_dividend': {
+        const getVal = (s) => {
+          switch (sortField) {
+            case 'unrealized_profit': return s.unrealized_profit || 0;
+            case 'unrealized_loss': return s.unrealized_loss || 0;
+            case 'unrealized_pl': return (s.unrealized_profit || 0) + (s.unrealized_loss || 0);
+            case 'total_dividend': return s.total_dividend || 0;
+            default: return 0;
+          }
+        };
         const calcAnnualized = (s) => {
-          const upl = (s.unrealized_profit || 0) + (s.unrealized_loss || 0);
+          const val = getVal(s);
           if (s.total_invested <= 0 || s.total_held_qty <= 0) return -9999;
           const lots = (portfolio || []).filter(item => item.holding.symbol === s.symbol && item.holding.quantity > 0);
           const earliest = lots.reduce((min, item) => { const d = item.holding.buy_date; return d && d < min ? d : min; }, '9999-12-31');
           if (earliest === '9999-12-31') return -9999;
           const days = Math.floor((new Date() - new Date(earliest + 'T00:00:00')) / (1000 * 60 * 60 * 24));
           if (days <= 0) return -9999;
-          return (Math.pow(1 + upl / s.total_invested, 365 / days) - 1) * 100;
+          return (Math.pow(1 + val / s.total_invested, 365 / days) - 1) * 100;
         };
         aVal = calcAnnualized(a);
         bVal = calcAnnualized(b);
         break;
       }
-      case 'realized_pl': aVal = a.realized_pl; bVal = b.realized_pl; break;
-      case 'total_dividend': aVal = a.total_dividend || 0; bVal = b.total_dividend || 0; break;
+      case 'realized_pl': {
+        const calcSoldAnnualized = (s) => {
+          const val = s.realized_pl || 0;
+          const txns = (transactions || []).filter(t => t.symbol === s.symbol);
+          if (txns.length === 0) return -9999;
+          const earliestBuy = txns.reduce((min, t) => { const d = t.buy_date; return d && d < min ? d : min; }, '9999-12-31');
+          const latestSell = txns.reduce((max, t) => { const d = t.sell_date; return d && d > max ? d : max; }, '0000-01-01');
+          if (earliestBuy === '9999-12-31' || latestSell === '0000-01-01') return -9999;
+          const days = Math.floor((new Date(latestSell + 'T00:00:00') - new Date(earliestBuy + 'T00:00:00')) / (1000 * 60 * 60 * 24));
+          if (days <= 0) return -9999;
+          const cost = txns.reduce((sum, t) => sum + (t.buy_price * t.quantity), 0);
+          if (cost <= 0) return -9999;
+          return (Math.pow(1 + val / cost, 365 / days) - 1) * 100;
+        };
+        aVal = calcSoldAnnualized(a);
+        bVal = calcSoldAnnualized(b);
+        break;
+      }
       case 'week_52_low': {
         const aCP = a.live?.current_price || 0, aLow = a.live?.week_52_low || 0;
         const bCP = b.live?.current_price || 0, bLow = b.live?.week_52_low || 0;
@@ -591,6 +617,62 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               const hasHeld = stock.total_held_qty > 0;
               const isExpanded = expandedSymbol === stock.symbol;
 
+              // Shared row-level: earliest buy date, holding duration, duration string
+              const _heldLots = (portfolio || []).filter(item => item.holding.symbol === stock.symbol && item.holding.quantity > 0);
+              const _earliestDate = _heldLots.reduce((min, item) => { const d = item.holding.buy_date; return d && d < min ? d : min; }, '9999-12-31');
+              let _durationStr = '';
+              let _diffDays = 0;
+              if (_earliestDate !== '9999-12-31') {
+                const _start = new Date(_earliestDate + 'T00:00:00');
+                const _now = new Date();
+                _diffDays = Math.floor((_now - _start) / (1000 * 60 * 60 * 24));
+                if (_diffDays >= 365) {
+                  const y = Math.floor(_diffDays / 365);
+                  const m = Math.floor((_diffDays % 365) / 30);
+                  _durationStr = `in ${y}y${m > 0 ? ` ${m}m` : ''}`;
+                } else if (_diffDays >= 30) {
+                  const m = Math.floor(_diffDays / 30);
+                  const d = _diffDays % 30;
+                  _durationStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
+                } else {
+                  _durationStr = `in ${_diffDays}d`;
+                }
+              }
+              const _calcPa = (val) => {
+                if (_diffDays <= 0 || stock.total_invested <= 0) return null;
+                return (Math.pow(1 + val / stock.total_invested, 365 / _diffDays) - 1) * 100;
+              };
+              const _pctOf = (val) => stock.total_invested > 0 ? (val / stock.total_invested) * 100 : 0;
+
+              // Sold transaction duration: earliest buy_date → latest sell_date
+              const _soldTxns = (transactions || []).filter(t => t.symbol === stock.symbol);
+              const _soldEarliestBuy = _soldTxns.reduce((min, t) => { const d = t.buy_date; return d && d < min ? d : min; }, '9999-12-31');
+              const _soldLatestSell = _soldTxns.reduce((max, t) => { const d = t.sell_date; return d && d > max ? d : max; }, '0000-01-01');
+              let _soldDurationStr = '';
+              let _soldDiffDays = 0;
+              if (_soldEarliestBuy !== '9999-12-31' && _soldLatestSell !== '0000-01-01') {
+                const _sStart = new Date(_soldEarliestBuy + 'T00:00:00');
+                const _sEnd = new Date(_soldLatestSell + 'T00:00:00');
+                _soldDiffDays = Math.floor((_sEnd - _sStart) / (1000 * 60 * 60 * 24));
+                if (_soldDiffDays >= 365) {
+                  const y = Math.floor(_soldDiffDays / 365);
+                  const m = Math.floor((_soldDiffDays % 365) / 30);
+                  _soldDurationStr = `in ${y}y${m > 0 ? ` ${m}m` : ''}`;
+                } else if (_soldDiffDays >= 30) {
+                  const m = Math.floor(_soldDiffDays / 30);
+                  const d = _soldDiffDays % 30;
+                  _soldDurationStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
+                } else {
+                  _soldDurationStr = `in ${_soldDiffDays}d`;
+                }
+              }
+              const _soldCost = _soldTxns.reduce((sum, t) => sum + (t.buy_price * t.quantity), 0);
+              const _calcSoldPa = (val) => {
+                if (_soldDiffDays <= 0 || _soldCost <= 0) return null;
+                return (Math.pow(1 + val / _soldCost, 365 / _soldDiffDays) - 1) * 100;
+              };
+              const _pctOfSold = (val) => _soldCost > 0 ? (val / _soldCost) * 100 : 0;
+
               return (
                 <React.Fragment key={stock.symbol}>
                   {/* ── Main summary row (clickable) ─────────── */}
@@ -721,80 +803,23 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       )}
                     </td>
                     <td>
-                      {hasHeld && stock.unrealized_profit > 0 ? (
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--green)' }}>
-                            +{formatINR(stock.unrealized_profit)}
-                          </div>
-                          <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
-                            on {stock.profitable_qty} units
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td>
-                      {hasHeld && stock.unrealized_loss < 0 ? (
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--red)' }}>
-                            {formatINR(stock.unrealized_loss)}
-                          </div>
-                          <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85 }}>
-                            on {stock.loss_qty} units
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td>
-                      {hasHeld ? (() => {
-                        const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
-                        const uplPct = stock.total_invested > 0 ? (upl / stock.total_invested) * 100 : 0;
-                        const heldLots = (portfolio || []).filter(item => item.holding.symbol === stock.symbol && item.holding.quantity > 0);
-                        const earliestDate = heldLots.reduce((min, item) => {
-                          const d = item.holding.buy_date;
-                          return d && d < min ? d : min;
-                        }, '9999-12-31');
-                        let durationStr = '';
-                        let annualizedPct = null;
-                        let diffDays = 0;
-                        if (earliestDate !== '9999-12-31') {
-                          const start = new Date(earliestDate + 'T00:00:00');
-                          const now = new Date();
-                          diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-                          if (diffDays >= 365) {
-                            const y = Math.floor(diffDays / 365);
-                            const m = Math.floor((diffDays % 365) / 30);
-                            durationStr = `in ${y}y${m > 0 ? ` ${m}m` : ''}`;
-                          } else if (diffDays >= 30) {
-                            const m = Math.floor(diffDays / 30);
-                            const d = diffDays % 30;
-                            durationStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
-                          } else {
-                            durationStr = `in ${diffDays}d`;
-                          }
-                          // Annualized return: ((1 + totalReturn) ^ (365 / days)) - 1
-                          if (diffDays > 0 && stock.total_invested > 0) {
-                            const totalReturn = upl / stock.total_invested;
-                            annualizedPct = (Math.pow(1 + totalReturn, 365 / diffDays) - 1) * 100;
-                          }
-                        }
+                      {hasHeld && stock.unrealized_profit > 0 ? (() => {
+                        const pfPct = _pctOf(stock.unrealized_profit);
+                        const pfPa = _calcPa(stock.unrealized_profit);
                         return (
                           <div>
-                            <div style={{
-                              fontWeight: 600,
-                              color: upl >= 0 ? 'var(--green)' : 'var(--red)',
-                            }}>
-                              {upl >= 0 ? '+' : ''}{formatINR(upl)}
+                            <div style={{ fontWeight: 600, color: 'var(--green)' }}>
+                              +{formatINR(stock.unrealized_profit)}
                             </div>
-                            <div style={{ fontSize: '11px', color: upl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85 }}>
-                              {uplPct >= 0 ? '+' : ''}{uplPct.toFixed(1)}%{durationStr ? ` ${durationStr}` : ''}
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
+                              on {stock.profitable_qty} units
                             </div>
-                            {annualizedPct !== null && (
-                              <div style={{ fontSize: '11px', color: upl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85, marginTop: '1px' }}>
-                                {annualizedPct >= 0 ? '+' : ''}{annualizedPct.toFixed(1)}% p.a.
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
+                              +{pfPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
+                            </div>
+                            {pfPa !== null && (
+                              <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, marginTop: '1px' }}>
+                                +{pfPa.toFixed(1)}% p.a.
                               </div>
                             )}
                           </div>
@@ -804,30 +829,105 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       )}
                     </td>
                     <td>
-                      {stock.realized_pl !== 0 ? (
-                        <div style={{
-                          fontWeight: 600,
-                          color: stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)',
-                        }}>
-                          {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
-                        </div>
-                      ) : (
+                      {hasHeld && stock.unrealized_loss < 0 ? (() => {
+                        const lossPct = _pctOf(stock.unrealized_loss);
+                        const lossPa = _calcPa(stock.unrealized_loss);
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--red)' }}>
+                              {formatINR(stock.unrealized_loss)}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85 }}>
+                              on {stock.loss_qty} units
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85 }}>
+                              {lossPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
+                            </div>
+                            {lossPa !== null && (
+                              <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, marginTop: '1px' }}>
+                                {lossPa.toFixed(1)}% p.a.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
                     </td>
                     <td>
-                      {(stock.total_dividend || 0) > 0 ? (
-                        <div>
-                          <div style={{ fontWeight: 600, color: 'var(--green)' }}>
-                            +{formatINR(stock.total_dividend)}
-                          </div>
-                          {(stock.dividend_units || 0) > 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
-                              on {stock.dividend_units} units
+                      {hasHeld ? (() => {
+                        const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
+                        const uplPct = _pctOf(upl);
+                        const uplPa = _calcPa(upl);
+                        const uplColor = upl >= 0 ? 'var(--green)' : 'var(--red)';
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, color: uplColor }}>
+                              {upl >= 0 ? '+' : ''}{formatINR(upl)}
                             </div>
-                          )}
-                        </div>
-                      ) : (
+                            <div style={{ fontSize: '11px', color: uplColor, opacity: 0.85 }}>
+                              {uplPct >= 0 ? '+' : ''}{uplPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
+                            </div>
+                            {uplPa !== null && (
+                              <div style={{ fontSize: '11px', color: uplColor, opacity: 0.85, marginTop: '1px' }}>
+                                {uplPa >= 0 ? '+' : ''}{uplPa.toFixed(1)}% p.a.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td>
+                      {stock.realized_pl !== 0 ? (() => {
+                        const rplPct = _pctOfSold(stock.realized_pl);
+                        const rplPa = _calcSoldPa(stock.realized_pl);
+                        const rplColor = stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, color: rplColor }}>
+                              {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
+                            </div>
+                            <div style={{ fontSize: '11px', color: rplColor, opacity: 0.85 }}>
+                              {rplPct >= 0 ? '+' : ''}{rplPct.toFixed(1)}%{_soldDurationStr ? ` ${_soldDurationStr}` : ''}
+                            </div>
+                            {rplPa !== null && (
+                              <div style={{ fontSize: '11px', color: rplColor, opacity: 0.85, marginTop: '1px' }}>
+                                {rplPa >= 0 ? '+' : ''}{rplPa.toFixed(1)}% p.a.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td>
+                      {(stock.total_dividend || 0) > 0 ? (() => {
+                        const divPct = _pctOf(stock.total_dividend);
+                        const divPa = _calcPa(stock.total_dividend);
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--green)' }}>
+                              +{formatINR(stock.total_dividend)}
+                            </div>
+                            {(stock.dividend_units || 0) > 0 && (
+                              <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
+                                on {stock.dividend_units} units
+                              </div>
+                            )}
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
+                              +{divPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
+                            </div>
+                            {divPa !== null && (
+                              <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, marginTop: '1px' }}>
+                                +{divPa.toFixed(1)}% p.a.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
                     </td>
