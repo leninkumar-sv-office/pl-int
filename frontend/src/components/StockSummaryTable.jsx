@@ -312,7 +312,8 @@ function loadVisibleCols() {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
   } catch (_) {}
-  return new Set(ALL_COL_IDS); // default: all visible
+  const DEFAULT_HIDDEN = ['sold', 'price', 'unrealizedPL'];
+  return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
 
 /* ── Main Table ───────────────────────────────────────── */
