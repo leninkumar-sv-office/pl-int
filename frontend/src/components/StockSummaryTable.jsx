@@ -392,15 +392,33 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
       case 'unrealized_profit':
         aVal = a.unrealized_profit || 0; bVal = b.unrealized_profit || 0; break;
+      case 'ltcg_unrealized_profit':
+        aVal = a.ltcg_unrealized_profit || 0; bVal = b.ltcg_unrealized_profit || 0; break;
+      case 'stcg_unrealized_profit':
+        aVal = a.stcg_unrealized_profit || 0; bVal = b.stcg_unrealized_profit || 0; break;
       case 'unrealized_loss':
         aVal = a.unrealized_loss || 0; bVal = b.unrealized_loss || 0; break;
+      case 'ltcg_unrealized_loss':
+        aVal = a.ltcg_unrealized_loss || 0; bVal = b.ltcg_unrealized_loss || 0; break;
+      case 'stcg_unrealized_loss':
+        aVal = a.stcg_unrealized_loss || 0; bVal = b.stcg_unrealized_loss || 0; break;
       case 'unrealized_pl':
         aVal = (a.unrealized_profit || 0) + (a.unrealized_loss || 0);
         bVal = (b.unrealized_profit || 0) + (b.unrealized_loss || 0); break;
+      case 'ltcg_unrealized_pl':
+        aVal = (a.ltcg_unrealized_profit || 0) + (a.ltcg_unrealized_loss || 0);
+        bVal = (b.ltcg_unrealized_profit || 0) + (b.ltcg_unrealized_loss || 0); break;
+      case 'stcg_unrealized_pl':
+        aVal = (a.stcg_unrealized_profit || 0) + (a.stcg_unrealized_loss || 0);
+        bVal = (b.stcg_unrealized_profit || 0) + (b.stcg_unrealized_loss || 0); break;
       case 'total_dividend':
         aVal = a.total_dividend || 0; bVal = b.total_dividend || 0; break;
       case 'realized_pl':
         aVal = a.realized_pl || 0; bVal = b.realized_pl || 0; break;
+      case 'ltcg_realized_pl':
+        aVal = a.ltcg_realized_pl || 0; bVal = b.ltcg_realized_pl || 0; break;
+      case 'stcg_realized_pl':
+        aVal = a.stcg_realized_pl || 0; bVal = b.stcg_realized_pl || 0; break;
       case 'week_52_low': {
         const aCP = a.live?.current_price || 0, aLow = a.live?.week_52_low || 0;
         const bCP = b.live?.current_price || 0, bLow = b.live?.week_52_low || 0;
@@ -624,13 +642,25 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>
               <th rowSpan={2}>Status</th>
             </tr>
-            {/* Row 2: sub-column headers for the 4 grouped columns */}
+            {/* Row 2: sortable sub-column headers for the 4 grouped columns */}
             <tr>
-              {[0,1,2,3].map(i => (
+              {[
+                { total: 'unrealized_profit', ltcg: 'ltcg_unrealized_profit', stcg: 'stcg_unrealized_profit' },
+                { total: 'unrealized_loss',   ltcg: 'ltcg_unrealized_loss',   stcg: 'stcg_unrealized_loss' },
+                { total: 'unrealized_pl',     ltcg: 'ltcg_unrealized_pl',     stcg: 'stcg_unrealized_pl' },
+                { total: 'realized_pl',       ltcg: 'ltcg_realized_pl',       stcg: 'stcg_realized_pl' },
+              ].map((group, i) => (
                 <React.Fragment key={i}>
-                  <th style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.8 }}>Total</th>
-                  <th style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.8 }}>LTCG</th>
-                  <th style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.8 }}>STCG</th>
+                  {[
+                    { label: 'Total', field: group.total },
+                    { label: 'LTCG',  field: group.ltcg },
+                    { label: 'STCG',  field: group.stcg },
+                  ].map(col => (
+                    <th key={col.field} onClick={() => handleSort(col.field)}
+                        style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.85, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {col.label}<SortIcon field={col.field} />
+                    </th>
+                  ))}
                 </React.Fragment>
               ))}
             </tr>

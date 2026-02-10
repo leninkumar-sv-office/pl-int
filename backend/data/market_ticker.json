@@ -24,9 +24,9 @@
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/10g",
-    "price": 158105.0,
-    "change": 39.0,
-    "change_pct": 0.02,
+    "price": 158121.0,
+    "change": 55.0,
+    "change_pct": 0.03,
     "source": "zerodha"
   },
   {
