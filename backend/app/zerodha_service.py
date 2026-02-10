@@ -225,7 +225,7 @@ def _kite_instrument(symbol: str, exchange: str) -> str:
     """Convert symbol + exchange to Kite instrument key.
     Checks the override map first, then falls back to EXCHANGE:SYMBOL.
     e.g. ('RELIANCE', 'NSE') → 'NSE:RELIANCE'
-         ('ANTONYWASTE', 'NSE') → 'NSE:AWHCL' (from override map)
+         ('MAJESCO', 'NSE') → 'NSE:AURUM' (from override map)
     """
     sym = symbol.upper()
     exch = exchange.upper()

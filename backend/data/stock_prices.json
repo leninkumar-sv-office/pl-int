@@ -1138,5 +1138,55 @@
     "day_change_pct": -0.57,
     "volume": 113306,
     "previous_close": 530.5
+  },
+  "SBICARD.NSE": {
+    "price": 765.9,
+    "name": "SBI",
+    "week_52_high": 772.0,
+    "week_52_low": 763.0,
+    "day_change": 0.35,
+    "day_change_pct": 0.05,
+    "volume": 830688,
+    "previous_close": 765.55
+  },
+  "TMCV.NSE": {
+    "price": 472.55,
+    "name": "Tata Motors Ltd",
+    "week_52_high": 476.9,
+    "week_52_low": 467.8,
+    "day_change": 5.75,
+    "day_change_pct": 1.23,
+    "volume": 4679330,
+    "previous_close": 466.8
+  },
+  "HIGHENE.BSE": {
+    "price": 570.0,
+    "name": "High Energy Batteries (India) Ltd",
+    "week_52_high": 594.85,
+    "week_52_low": 570.0,
+    "day_change": -7.8,
+    "day_change_pct": -1.35,
+    "volume": 4981,
+    "previous_close": 577.8
+  },
+  "SBICARD.BSE": {
+    "price": 763.0,
+    "name": "SBI",
+    "week_52_high": 772.0,
+    "week_52_low": 763.0,
+    "day_change": -3.2,
+    "day_change_pct": -0.42,
+    "volume": 38857,
+    "previous_close": 766.2
+  },
+  "MASTEK.NSE": {
+    "price": 1956.2,
+    "name": "Majesco Ltd",
+    "week_52_high": 1994.0,
+    "week_52_low": 1941.1,
+    "day_change": -14.6,
+    "day_change_pct": -0.74,
+    "volume": 353159,
+    "previous_close": 1970.8
   }
 }

@@ -20,84 +20,21 @@ from openpyxl.styles import Font, PatternFill
 from .models import Holding, SoldPosition, Transaction
 
 # ═══════════════════════════════════════════════════════════
-#  SYMBOL ↔ COMPANY-NAME MAP  (from existing dump filenames)
+#  SYMBOL RESOLUTION  (dynamic from Zerodha + NSE, no hardcoding)
 # ═══════════════════════════════════════════════════════════
+#
+# Symbols are resolved dynamically from Zerodha instruments CSV
+# and NSE EQUITY_L.csv via the shared symbol_resolver module.
+# No hardcoded symbol map — all lookups go through Zerodha/NSE.
+#
+from . import symbol_resolver as _sym_resolver
 
-SYMBOL_MAP: Dict[str, str] = {
-    "ABB India Ltd": "ABB",
-    "Afcons Infrastructure Ltd": "AFCONS",
-    "Antony Waste Handling Cell Ltd": "AWHCL",
-    "Apollo Hospitals Enterprise Ltd": "APOLLOHOSP",
-    "Apollo Tyres Ltd": "APOLLOTYRE",
-    "Ashok Leyland Ltd": "ASHOKLEY",
-    "Asian Paints Ltd": "ASIANPAINT",
-    "Aurobindo Pharma Ltd": "AUROPHARMA",
-    "Aurum Proptech Ltd": "AURUM",
-    "Avanti Feeds": "AVANTIFEED",
-    "Avanti Feeds Ltd - Archive": "AVANTIFEED",
-    "Bharat Electronics Ltd": "BEL",
-    "Bharat Wire Ropes Ltd": "BHARATWIRE",
-    "Biocon Ltd": "BIOCON",
-    "Bombay Burmah Trading Corporation Ltd": "BBTC",
-    "Carysil Ltd": "CARYSIL",
-    "Coal India Ltd": "COALINDIA",
-    "Gautam Gems Ltd": "GAUTAMGEM",
-    "Graphite India Ltd": "GRAPHITE",
-    "Hero MotoCorp Ltd": "HEROMOTOCO",
-    "High Energy Batteries (India) Ltd": "HIGHENERGY",
-    "Hindustan Copper Ltd": "HINDCOPPER",
-    "IRB Infra": "IRB",
-    "ITC Hotels Ltd": "ITCHOTELS",
-    "ITC Ltd": "ITC",
-    "Indian Oil Corporation Ltd": "IOC",
-    "Indian Rail Tour Corp Ltd": "IRCTC",
-    "Indian Railway Fin Corp": "IRFC",
-    "Indian Renewable Energy Dev Agency Ltd": "IREDA",
-    "Ircon International Ltd": "IRCON",
-    "Jio Financial Services Ltd": "JIOFIN",
-    "Jio Financial Services Ltd(1)": "JIOFIN",
-    "Kajaria Ceramics Ltd": "KAJARIACER",
-    "LG Electronics India": "LGEINDIA",
-    "Larsen and Toubro Ltd": "LT",
-    "Majesco Ltd": "MAJESCO",
-    "Manuppuram Finance Ltd": "MANAPPURAM",
-    "Nippon Silver": "SILVERBEES",
-    "ONGC": "ONGC",
-    "Oil India Ltd": "OIL",
-    "PI Industries Ltd": "PIIND",
-    "PNC Infratech Ltd": "PNCINFRA",
-    "Priti International Ltd": "PRITI",
-    "Rail Vikas Nigam": "RVNL",
-    "Railtel Corporation of India Ltd": "RAILTEL",
-    "Rallis India Ltd": "RALLIS",
-    "Ramco Systems Ltd": "RAMCOSYS",
-    "Reliance Industries Ltd": "RELIANCE",
-    "Rites Ltd": "RITES",
-    "SBI ETF Gold": "SETFGOLD",
-    "SBI Life Insurance Company Ltd": "SBILIFE",
-    "SBI": "SBIN",
-    "Sun TV Network Ltd": "SUNTV",
-    "Suzlon Energy": "SUZLON",
-    "Syngene International Ltd": "SYNGENE",
-    "TATA Capital": "TATACAP",
-    "TATA Power": "TATAPOWER",
-    "Tata Chemicals": "TATACHEM",
-    "Tata Motors Ltd": "TMPV",
-    "Tata Steel Ltd": "TATASTEEL",
-    "Tata Technologies Ltd": "TATATECH",
-    "Trent": "TRENT",
-    "Union Bank of India Ltd": "UNIONBANK",
-    "Va Tech Wabag Ltd": "WABAG",
-    "Vikas Lifecare Ltd": "VIKASLIFE",
-    "Wipro Ltd": "WIPRO",
-    "Archive_Indian Railway Ctrng nd Trsm Corp Ltd": "IRCTC",
-}
+# Resolved symbol map: populated at runtime during _build_file_map().
+# Maps company name (xlsx stem) → trading symbol.
+SYMBOL_MAP: Dict[str, str] = {}
 
-# Reverse map: symbol → list of possible company names
+# Reverse map: symbol → company name (for display)
 _REVERSE_MAP: Dict[str, str] = {}
-for _name, _sym in SYMBOL_MAP.items():
-    if _sym not in _REVERSE_MAP:
-        _REVERSE_MAP[_sym] = _name
 
 
 # ═══════════════════════════════════════════════════════════
@@ -440,20 +377,32 @@ class XlsxPortfolio:
         Multiple files for the same symbol (main + archive + duplicates)
         are all stored so that transactions can be merged during parsing.
         The non-archive file is treated as the primary (for writes).
+
+        Symbol resolution order (no hardcoded map):
+          1. Zerodha/NSE name→symbol lookup (dynamic, always fresh)
+          2. Index sheet in the xlsx file (has "Code" like "NSE:RELIANCE")
+          3. Derive from filename as last resort
         """
+        # Ensure Zerodha/NSE symbol data is loaded (cached to disk, fast)
+        _sym_resolver.ensure_loaded()
+
         for fp in sorted(self.stocks_dir.glob("*.xlsx")):
             if fp.name.startswith("~") or fp.name.startswith("."):
                 continue
 
             stem = fp.stem
-            # Try SYMBOL_MAP first (fast, no xlsx open)
-            symbol = SYMBOL_MAP.get(stem)
-            if not symbol:
-                clean = stem.replace("Archive_", "").replace(" - Archive", "").strip()
-                symbol = SYMBOL_MAP.get(clean)
 
+            # Skip "(1)" files — they are near-duplicates with rounding diffs
+            if "(1)" in stem:
+                continue
+
+            clean = stem.replace("Archive_", "").replace(" - Archive", "").strip()
+
+            # 1. Dynamic lookup: Zerodha/NSE name → symbol
+            symbol = _sym_resolver.resolve_by_name(clean)
+
+            # 2. Fallback: read Index sheet from xlsx (has Code like "NSE:RELIANCE")
             if not symbol:
-                # Try reading Index sheet
                 try:
                     wb = openpyxl.load_workbook(fp, data_only=True)
                     idx = _extract_index_data(wb)
@@ -462,12 +411,16 @@ class XlsxPortfolio:
                 except Exception:
                     pass
 
+            # 3. Last resort: derive from filename heuristic
             if not symbol:
-                symbol = stem.upper().replace(" LTD", "").replace(" ", "")[:12]
+                symbol = _sym_resolver.derive_symbol(clean)
+                print(f"[XlsxDB] WARNING: Could not resolve '{clean}', derived: {symbol}")
 
-            # Skip "(1)" files — they are near-duplicates with rounding diffs
-            if "(1)" in stem:
-                continue
+            # Populate the runtime SYMBOL_MAP so other modules can reference it
+            if clean not in SYMBOL_MAP:
+                SYMBOL_MAP[clean] = symbol
+                if symbol not in _REVERSE_MAP:
+                    _REVERSE_MAP[symbol] = clean
 
             # Accumulate all files for this symbol
             if symbol not in self._all_files:
@@ -479,10 +432,10 @@ class XlsxPortfolio:
             existing = self._file_map.get(symbol)
             if existing is None or (not is_archive):
                 self._file_map[symbol] = fp
-                clean_name = stem.replace("Archive_", "").replace(" - Archive", "").strip()
-                self._name_map[symbol] = clean_name
+                self._name_map[symbol] = clean
 
-        print(f"[XlsxDB] Indexed {len(self._file_map)} stock files ({sum(len(v) for v in self._all_files.values())} total including archives)")
+        print(f"[XlsxDB] Indexed {len(self._file_map)} stock files "
+              f"({sum(len(v) for v in self._all_files.values())} total including archives)")
 
     def reindex(self):
         """Re-scan the dumps folder for new/removed/modified xlsx files.

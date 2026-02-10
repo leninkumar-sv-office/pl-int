@@ -23,75 +23,10 @@ SCRIPT_DIR = Path(__file__).parent
 DUMP_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else SCRIPT_DIR.parent / "dumps" / "Stocks"
 DB_FILE = SCRIPT_DIR / "data" / "portfolio.json"
 
-# ── Known symbol overrides (company name → NSE symbol) ─
-SYMBOL_MAP = {
-    "ABB India Ltd": "ABB",
-    "Afcons Infrastructure Ltd": "AFCONS",
-    "Antony Waste Handling Cell Ltd": "ANTONYWASTE",
-    "Apollo Hospitals Enterprise Ltd": "APOLLOHOSP",
-    "Apollo Tyres Ltd": "APOLLOTYRE",
-    "Ashok Leyland Ltd": "ASHOKLEY",
-    "Asian Paints Ltd": "ASIANPAINT",
-    "Aurobindo Pharma Ltd": "AUROPHARMA",
-    "Aurum Proptech Ltd": "AURUMPROP",
-    "Avanti Feeds": "AVANTIFEED",
-    "Avanti Feeds Ltd - Archive": "AVANTIFEED",
-    "Bharat Electronics Ltd": "BEL",
-    "Bharat Wire Ropes Ltd": "BHARATWIRE",
-    "Biocon Ltd": "BIOCON",
-    "Bombay Burmah Trading Corporation Ltd": "BBTC",
-    "Carysil Ltd": "CARYSIL",
-    "Coal India Ltd": "COALINDIA",
-    "Gautam Gems Ltd": "GAUTAMGEM",
-    "Graphite India Ltd": "GRAPHITE",
-    "Hero MotoCorp Ltd": "HEROMOTOCO",
-    "High Energy Batteries (India) Ltd": "HIGHENERGY",
-    "Hindustan Copper Ltd": "HINDCOPPER",
-    "IRB Infra": "IRB",
-    "ITC Hotels Ltd": "ITCHOTELS",
-    "ITC Ltd": "ITC",
-    "Indian Oil Corporation Ltd": "IOC",
-    "Indian Rail Tour Corp Ltd": "IRCTC",
-    "Indian Railway Fin Corp": "IRFC",
-    "Indian Renewable Energy Dev Agency Ltd": "IREDA",
-    "Ircon International Ltd": "IRCON",
-    "Jio Financial Services Ltd": "JIOFIN",
-    "Kajaria Ceramics Ltd": "KAJARIACER",
-    "LG Electronics India": "LGEELECTRO",
-    "Larsen and Toubro Ltd": "LT",
-    "Majesco Ltd": "MAJESCO",
-    "Manuppuram Finance Ltd": "MANAPPURAM",
-    "Nippon Silver": "NIPPONSILV",
-    "ONGC": "ONGC",
-    "Oil India Ltd": "OIL",
-    "PI Industries Ltd": "PIIND",
-    "PNC Infratech Ltd": "PNCINFRA",
-    "Priti International Ltd": "PRITIINTER",
-    "Rail Vikas Nigam": "RVNL",
-    "Railtel Corporation of India Ltd": "RAILTEL",
-    "Rallis India Ltd": "RALLIS",
-    "Ramco Systems Ltd": "RAMCOSYS",
-    "Reliance Industries Ltd": "RELIANCE",
-    "Rites Ltd": "RITES",
-    "SBI ETF Gold": "SETFGOLD",
-    "SBI Life Insurance Company Ltd": "SBILIFE",
-    "SBI": "SBIN",
-    "Sun TV Network Ltd": "SUNTV",
-    "Suzlon Energy": "SUZLON",
-    "Syngene International Ltd": "SYNGENE",
-    "TATA Capital": "TATACAPITAL",
-    "TATA Power": "TATAPOWER",
-    "Tata Chemicals": "TATACHEM",
-    "Tata Motors Ltd": "TATAMOTORS",
-    "Tata Steel Ltd": "TATASTEEL",
-    "Tata Technologies Ltd": "TATATECH",
-    "Trent": "TRENT",
-    "Union Bank of India Ltd": "UNIONBANK",
-    "Va Tech Wabag Ltd": "WABAG",
-    "Vikas Lifecare Ltd": "VIKASLIFE",
-    "Wipro Ltd": "WIPRO",
-    "Archive_Indian Railway Ctrng nd Trsm Corp Ltd": "IRCTC",
-}
+# ── Symbol resolution: dynamic from Zerodha + NSE (no hardcoded map) ──
+# import_dump.py runs as a standalone script, so we add app/ to sys.path
+sys.path.insert(0, str(SCRIPT_DIR))
+from app.symbol_resolver import ensure_loaded as _ensure_symbols, resolve_by_name as _resolve_name, derive_symbol as _derive
 
 
 def get_short_id():
@@ -313,13 +248,13 @@ def process_file(filepath):
     exchange = index_data.get("exchange", "NSE")
 
     if not symbol:
-        # Try symbol map
+        # Dynamic lookup: Zerodha/NSE name → symbol
         clean_name = filename.replace("Archive_", "").strip()
-        symbol = SYMBOL_MAP.get(filename) or SYMBOL_MAP.get(clean_name)
+        symbol = _resolve_name(clean_name)
 
     if not symbol:
         # Generate from filename (rough fallback)
-        symbol = filename.upper().replace(" LTD", "").replace(" ", "")[:12]
+        symbol = _derive(clean_name)
         print(f"    ⚠ No symbol found, using derived: {symbol}")
 
     # Parse transactions
@@ -383,6 +318,9 @@ def main():
     if not DUMP_DIR.exists():
         print(f"❌ Dump directory not found: {DUMP_DIR}")
         sys.exit(1)
+
+    # Load symbol data from Zerodha/NSE (cached to disk)
+    _ensure_symbols()
 
     # Find all xlsx files (skip duplicates with "(1)")
     xlsx_files = sorted(DUMP_DIR.glob("*.xlsx"))
