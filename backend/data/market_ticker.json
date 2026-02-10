@@ -4,9 +4,9 @@
     "label": "Sensex",
     "type": "index",
     "unit": "",
-    "price": 84350.98,
-    "change": 285.23,
-    "change_pct": 0.34,
+    "price": 84273.92,
+    "change": 208.17,
+    "change_pct": 0.25,
     "source": "zerodha"
   },
   {
@@ -14,9 +14,9 @@
     "label": "Nifty 50",
     "type": "index",
     "unit": "",
-    "price": 25957.5,
-    "change": 90.2,
-    "change_pct": 0.35,
+    "price": 25935.15,
+    "change": 67.85,
+    "change_pct": 0.26,
     "source": "zerodha"
   },
   {
@@ -24,9 +24,9 @@
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/10g",
-    "price": 157050.0,
-    "change": -1016.0,
-    "change_pct": -0.64,
+    "price": 157929.0,
+    "change": -137.0,
+    "change_pct": -0.09,
     "source": "zerodha"
   },
   {
@@ -34,9 +34,9 @@
     "label": "Silver",
     "type": "commodity",
     "unit": "\u20b9/kg",
-    "price": 256858.0,
-    "change": -5762.0,
-    "change_pct": -2.19,
+    "price": 260629.0,
+    "change": -1991.0,
+    "change_pct": -0.76,
     "source": "zerodha"
   },
   {
@@ -74,9 +74,9 @@
     "label": "USD/INR",
     "type": "forex",
     "unit": "",
-    "price": 90.72,
-    "change": -0.05,
-    "change_pct": -0.06,
+    "price": 90.6,
+    "change": -0.17,
+    "change_pct": -0.19,
     "source": "zerodha"
   },
   {
@@ -84,9 +84,9 @@
     "label": "Crude Oil",
     "type": "commodity",
     "unit": "\u20b9/bbl",
-    "price": 5850.0,
-    "change": -20.0,
-    "change_pct": -0.34,
+    "price": 5835.0,
+    "change": -35.0,
+    "change_pct": -0.6,
     "source": "zerodha"
   }
 ]
