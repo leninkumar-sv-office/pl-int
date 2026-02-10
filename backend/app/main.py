@@ -481,6 +481,14 @@ def get_stock_summary():
             # Split realized P&L by holding period (LTCG vs STCG)
             ltcg_realized_pl = 0.0
             stcg_realized_pl = 0.0
+            ltcg_sold_qty = 0
+            stcg_sold_qty = 0
+            ltcg_sold_cost = 0.0
+            stcg_sold_cost = 0.0
+            ltcg_sold_earliest_buy = ""
+            ltcg_sold_latest_sell = ""
+            stcg_sold_earliest_buy = ""
+            stcg_sold_latest_sell = ""
             for s in sold_lots:
                 try:
                     b_dt = datetime.strptime(s.buy_date, "%Y-%m-%d").date()
@@ -490,8 +498,20 @@ def get_stock_summary():
                     is_lt = False
                 if is_lt:
                     ltcg_realized_pl += s.realized_pl
+                    ltcg_sold_qty += s.quantity
+                    ltcg_sold_cost += s.buy_price * s.quantity
+                    if not ltcg_sold_earliest_buy or s.buy_date < ltcg_sold_earliest_buy:
+                        ltcg_sold_earliest_buy = s.buy_date
+                    if not ltcg_sold_latest_sell or s.sell_date > ltcg_sold_latest_sell:
+                        ltcg_sold_latest_sell = s.sell_date
                 else:
                     stcg_realized_pl += s.realized_pl
+                    stcg_sold_qty += s.quantity
+                    stcg_sold_cost += s.buy_price * s.quantity
+                    if not stcg_sold_earliest_buy or s.buy_date < stcg_sold_earliest_buy:
+                        stcg_sold_earliest_buy = s.buy_date
+                    if not stcg_sold_latest_sell or s.sell_date > stcg_sold_latest_sell:
+                        stcg_sold_latest_sell = s.sell_date
 
             # Live data
             live_key = f"{sym}.{exchange}"
@@ -510,30 +530,52 @@ def get_stock_summary():
             stcg_unrealized_profit = 0.0
             ltcg_unrealized_loss = 0.0
             stcg_unrealized_loss = 0.0
+            ltcg_profitable_qty = 0
+            stcg_profitable_qty = 0
+            ltcg_loss_qty = 0
+            stcg_loss_qty = 0
+            ltcg_invested = 0.0
+            stcg_invested = 0.0
+            ltcg_earliest_date = ""
+            stcg_earliest_date = ""
             today = date.today()
             if current_price > 0:
                 for h in held_lots:
                     lot_pl = (current_price - h.buy_price) * h.quantity
+                    lot_cost = h.buy_cost if h.buy_cost > 0 else (h.buy_price * h.quantity)
                     # Determine LTCG vs STCG (India: >365 days = long-term)
                     try:
                         buy_dt = datetime.strptime(h.buy_date, "%Y-%m-%d").date()
                         is_ltcg = (today - buy_dt).days > 365
                     except Exception:
                         is_ltcg = False
+                    # Track per-category invested & earliest date
+                    if is_ltcg:
+                        ltcg_invested += lot_cost
+                        if not ltcg_earliest_date or h.buy_date < ltcg_earliest_date:
+                            ltcg_earliest_date = h.buy_date
+                    else:
+                        stcg_invested += lot_cost
+                        if not stcg_earliest_date or h.buy_date < stcg_earliest_date:
+                            stcg_earliest_date = h.buy_date
                     if current_price > h.buy_price:
                         profitable_qty += h.quantity
                         unrealized_profit += lot_pl
                         if is_ltcg:
                             ltcg_unrealized_profit += lot_pl
+                            ltcg_profitable_qty += h.quantity
                         else:
                             stcg_unrealized_profit += lot_pl
+                            stcg_profitable_qty += h.quantity
                     else:
                         loss_qty += h.quantity
                         unrealized_loss += lot_pl
                         if is_ltcg:
                             ltcg_unrealized_loss += lot_pl
+                            ltcg_loss_qty += h.quantity
                         else:
                             stcg_unrealized_loss += lot_pl
+                            stcg_loss_qty += h.quantity
 
             price_error = ""
             if total_held_qty > 0 and (not live or current_price <= 0):
@@ -560,6 +602,22 @@ def get_stock_summary():
                 stcg_unrealized_loss=round(stcg_unrealized_loss, 2),
                 ltcg_realized_pl=round(ltcg_realized_pl, 2),
                 stcg_realized_pl=round(stcg_realized_pl, 2),
+                ltcg_profitable_qty=ltcg_profitable_qty,
+                stcg_profitable_qty=stcg_profitable_qty,
+                ltcg_loss_qty=ltcg_loss_qty,
+                stcg_loss_qty=stcg_loss_qty,
+                ltcg_invested=round(ltcg_invested, 2),
+                stcg_invested=round(stcg_invested, 2),
+                ltcg_earliest_date=ltcg_earliest_date,
+                stcg_earliest_date=stcg_earliest_date,
+                ltcg_sold_qty=ltcg_sold_qty,
+                stcg_sold_qty=stcg_sold_qty,
+                ltcg_sold_cost=round(ltcg_sold_cost, 2),
+                stcg_sold_cost=round(stcg_sold_cost, 2),
+                ltcg_sold_earliest_buy=ltcg_sold_earliest_buy,
+                ltcg_sold_latest_sell=ltcg_sold_latest_sell,
+                stcg_sold_earliest_buy=stcg_sold_earliest_buy,
+                stcg_sold_latest_sell=stcg_sold_latest_sell,
                 total_dividend=round(dividends_by_symbol.get(sym, {}).get("amount", 0), 2),
                 dividend_count=dividends_by_symbol.get(sym, {}).get("count", 0),
                 dividend_units=dividends_by_symbol.get(sym, {}).get("units", 0),

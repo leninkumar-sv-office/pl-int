@@ -699,6 +699,38 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               };
               const _pctOf = (val) => stock.total_invested > 0 ? (val / stock.total_invested) * 100 : 0;
 
+              // ── Per-category (LTCG/STCG) unrealized helpers ──
+              const _makeDateHelpers = (dateStr) => {
+                let diffDays = 0, durStr = '';
+                if (dateStr) {
+                  const s = new Date(dateStr + 'T00:00:00');
+                  const n = new Date();
+                  diffDays = Math.floor((n - s) / (1000 * 60 * 60 * 24));
+                  if (diffDays >= 365) {
+                    const y = Math.floor(diffDays / 365), m = Math.floor((diffDays % 365) / 30);
+                    durStr = `in ${y}y${m > 0 ? ` ${m}m` : ''}`;
+                  } else if (diffDays >= 30) {
+                    const m = Math.floor(diffDays / 30), d = diffDays % 30;
+                    durStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
+                  } else {
+                    durStr = `in ${diffDays}d`;
+                  }
+                }
+                return { diffDays, durStr };
+              };
+              const _ltcgH = _makeDateHelpers(stock.ltcg_earliest_date);
+              const _stcgH = _makeDateHelpers(stock.stcg_earliest_date);
+              const _ltcgPctOf = (val) => stock.ltcg_invested > 0 ? (val / stock.ltcg_invested) * 100 : 0;
+              const _stcgPctOf = (val) => stock.stcg_invested > 0 ? (val / stock.stcg_invested) * 100 : 0;
+              const _ltcgCalcPa = (val) => {
+                if (_ltcgH.diffDays <= 0 || stock.ltcg_invested <= 0) return null;
+                return (Math.pow(1 + val / stock.ltcg_invested, 365 / _ltcgH.diffDays) - 1) * 100;
+              };
+              const _stcgCalcPa = (val) => {
+                if (_stcgH.diffDays <= 0 || stock.stcg_invested <= 0) return null;
+                return (Math.pow(1 + val / stock.stcg_invested, 365 / _stcgH.diffDays) - 1) * 100;
+              };
+
               // Sold transaction duration: earliest buy_date → latest sell_date
               const _soldTxns = (transactions || []).filter(t => t.symbol === stock.symbol);
               const _soldEarliestBuy = _soldTxns.reduce((min, t) => { const d = t.buy_date; return d && d < min ? d : min; }, '9999-12-31');
@@ -727,6 +759,38 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                 return (Math.pow(1 + val / _soldCost, 365 / _soldDiffDays) - 1) * 100;
               };
               const _pctOfSold = (val) => _soldCost > 0 ? (val / _soldCost) * 100 : 0;
+
+              // ── Per-category (LTCG/STCG) realized helpers ──
+              const _makeSoldDateHelpers = (earliestBuy, latestSell) => {
+                let diffDays = 0, durStr = '';
+                if (earliestBuy && latestSell) {
+                  const s = new Date(earliestBuy + 'T00:00:00');
+                  const e = new Date(latestSell + 'T00:00:00');
+                  diffDays = Math.floor((e - s) / (1000 * 60 * 60 * 24));
+                  if (diffDays >= 365) {
+                    const y = Math.floor(diffDays / 365), m = Math.floor((diffDays % 365) / 30);
+                    durStr = `in ${y}y${m > 0 ? ` ${m}m` : ''}`;
+                  } else if (diffDays >= 30) {
+                    const m = Math.floor(diffDays / 30), d = diffDays % 30;
+                    durStr = `in ${m}m${d > 0 ? ` ${d}d` : ''}`;
+                  } else {
+                    durStr = `in ${diffDays}d`;
+                  }
+                }
+                return { diffDays, durStr };
+              };
+              const _ltcgSold = _makeSoldDateHelpers(stock.ltcg_sold_earliest_buy, stock.ltcg_sold_latest_sell);
+              const _stcgSold = _makeSoldDateHelpers(stock.stcg_sold_earliest_buy, stock.stcg_sold_latest_sell);
+              const _ltcgSoldPctOf = (val) => stock.ltcg_sold_cost > 0 ? (val / stock.ltcg_sold_cost) * 100 : 0;
+              const _stcgSoldPctOf = (val) => stock.stcg_sold_cost > 0 ? (val / stock.stcg_sold_cost) * 100 : 0;
+              const _ltcgCalcSoldPa = (val) => {
+                if (_ltcgSold.diffDays <= 0 || stock.ltcg_sold_cost <= 0) return null;
+                return (Math.pow(1 + val / stock.ltcg_sold_cost, 365 / _ltcgSold.diffDays) - 1) * 100;
+              };
+              const _stcgCalcSoldPa = (val) => {
+                if (_stcgSold.diffDays <= 0 || stock.stcg_sold_cost <= 0) return null;
+                return (Math.pow(1 + val / stock.stcg_sold_cost, 365 / _stcgSold.diffDays) - 1) * 100;
+              };
 
               return (
                 <React.Fragment key={stock.symbol}>
@@ -866,19 +930,23 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       const show = hasHeld && val > 0;
                       const pfPct = show ? _pctOf(val) : 0;
                       const pfPa = show ? _calcPa(val) : null;
-                      const sub = (v) => v > 0
-                        ? <span style={{ color: 'var(--green)', fontWeight: 600, ...nw }}>+{formatINR(v)}</span>
-                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      const ltcgPct = ltcg > 0 ? _ltcgPctOf(ltcg) : 0;
+                      const ltcgPa = ltcg > 0 ? _ltcgCalcPa(ltcg) : null;
+                      const stcgPct = stcg > 0 ? _stcgPctOf(stcg) : 0;
+                      const stcgPa = stcg > 0 ? _stcgCalcPa(stcg) : null;
+                      const subCell = (v, qty, pct, dur, pa) => v > 0 ? (
+                        <td style={nw}>
+                          <div style={{ fontWeight: 600, color: 'var(--green)', ...nw }}>+{formatINR(v)}</div>
+                          {qty > 0 && <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>on {qty} units</div>}
+                          <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>+{pct.toFixed(1)}%{dur ? ` ${dur}` : ''}</div>
+                          {pa !== null && <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>+{pa.toFixed(1)}% p.a.</div>}
+                        </td>
+                      ) : <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>;
                       return show ? (
                         <>
-                          <td style={nw}>
-                            <div style={{ fontWeight: 600, color: 'var(--green)', ...nw }}>+{formatINR(val)}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>on {stock.profitable_qty} units</div>
-                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>+{pfPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}</div>
-                            {pfPa !== null && <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>+{pfPa.toFixed(1)}% p.a.</div>}
-                          </td>
-                          <td style={nw}>{sub(ltcg)}</td>
-                          <td style={nw}>{sub(stcg)}</td>
+                          {subCell(val, stock.profitable_qty, pfPct, _durationStr, pfPa)}
+                          {subCell(ltcg, stock.ltcg_profitable_qty, ltcgPct, _ltcgH.durStr, ltcgPa)}
+                          {subCell(stcg, stock.stcg_profitable_qty, stcgPct, _stcgH.durStr, stcgPa)}
                         </>
                       ) : (
                         <>
@@ -898,19 +966,23 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       const show = hasHeld && val < 0;
                       const lossPct = show ? _pctOf(val) : 0;
                       const lossPa = show ? _calcPa(val) : null;
-                      const sub = (v) => v < 0
-                        ? <span style={{ color: 'var(--red)', fontWeight: 600, ...nw }}>{formatINR(v)}</span>
-                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      const ltcgPct = ltcg < 0 ? _ltcgPctOf(ltcg) : 0;
+                      const ltcgPa = ltcg < 0 ? _ltcgCalcPa(ltcg) : null;
+                      const stcgPct = stcg < 0 ? _stcgPctOf(stcg) : 0;
+                      const stcgPa = stcg < 0 ? _stcgCalcPa(stcg) : null;
+                      const subCell = (v, qty, pct, dur, pa) => v < 0 ? (
+                        <td style={nw}>
+                          <div style={{ fontWeight: 600, color: 'var(--red)', ...nw }}>{formatINR(v)}</div>
+                          {qty > 0 && <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>on {qty} units</div>}
+                          <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>{pct.toFixed(1)}%{dur ? ` ${dur}` : ''}</div>
+                          {pa !== null && <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>{pa.toFixed(1)}% p.a.</div>}
+                        </td>
+                      ) : <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>;
                       return show ? (
                         <>
-                          <td style={nw}>
-                            <div style={{ fontWeight: 600, color: 'var(--red)', ...nw }}>{formatINR(val)}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>on {stock.loss_qty} units</div>
-                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>{lossPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}</div>
-                            {lossPa !== null && <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>{lossPa.toFixed(1)}% p.a.</div>}
-                          </td>
-                          <td style={nw}>{sub(ltcg)}</td>
-                          <td style={nw}>{sub(stcg)}</td>
+                          {subCell(val, stock.loss_qty, lossPct, _durationStr, lossPa)}
+                          {subCell(ltcg, stock.ltcg_loss_qty, ltcgPct, _ltcgH.durStr, ltcgPa)}
+                          {subCell(stcg, stock.stcg_loss_qty, stcgPct, _stcgH.durStr, stcgPa)}
                         </>
                       ) : (
                         <>
@@ -929,20 +1001,24 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       const stcg = (stock.stcg_unrealized_profit || 0) + (stock.stcg_unrealized_loss || 0);
                       const uplPct = hasHeld ? _pctOf(upl) : 0;
                       const uplPa = hasHeld ? _calcPa(upl) : null;
+                      const ltcgPct = hasHeld && stock.ltcg_invested > 0 ? _ltcgPctOf(ltcg) : 0;
+                      const ltcgPa = hasHeld && ltcg !== 0 ? _ltcgCalcPa(ltcg) : null;
+                      const stcgPct = hasHeld && stock.stcg_invested > 0 ? _stcgPctOf(stcg) : 0;
+                      const stcgPa = hasHeld && stcg !== 0 ? _stcgCalcPa(stcg) : null;
                       const clr = (v) => v >= 0 ? 'var(--green)' : 'var(--red)';
                       const sign = (v) => v >= 0 ? '+' : '';
-                      const sub = (v) => v !== 0
-                        ? <span style={{ color: clr(v), fontWeight: 600, ...nw }}>{sign(v)}{formatINR(v)}</span>
-                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      const subCell = (v, pct, dur, pa) => v !== 0 ? (
+                        <td style={nw}>
+                          <div style={{ fontWeight: 600, color: clr(v), ...nw }}>{sign(v)}{formatINR(v)}</div>
+                          <div style={{ fontSize: '11px', color: clr(v), opacity: 0.85, ...nw }}>{sign(pct)}{pct.toFixed(1)}%{dur ? ` ${dur}` : ''}</div>
+                          {pa !== null && <div style={{ fontSize: '11px', color: clr(v), opacity: 0.85, ...nw }}>{sign(pa)}{pa.toFixed(1)}% p.a.</div>}
+                        </td>
+                      ) : <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>;
                       return hasHeld ? (
                         <>
-                          <td style={nw}>
-                            <div style={{ fontWeight: 600, color: clr(upl), ...nw }}>{sign(upl)}{formatINR(upl)}</div>
-                            <div style={{ fontSize: '11px', color: clr(upl), opacity: 0.85, ...nw }}>{sign(uplPct)}{uplPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}</div>
-                            {uplPa !== null && <div style={{ fontSize: '11px', color: clr(upl), opacity: 0.85, ...nw }}>{sign(uplPa)}{uplPa.toFixed(1)}% p.a.</div>}
-                          </td>
-                          <td style={nw}>{sub(ltcg)}</td>
-                          <td style={nw}>{sub(stcg)}</td>
+                          {subCell(upl, uplPct, _durationStr, uplPa)}
+                          {subCell(ltcg, ltcgPct, _ltcgH.durStr, ltcgPa)}
+                          {subCell(stcg, stcgPct, _stcgH.durStr, stcgPa)}
                         </>
                       ) : (
                         <>
@@ -962,20 +1038,25 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       const show = val !== 0;
                       const rplPct = show ? _pctOfSold(val) : 0;
                       const rplPa = show ? _calcSoldPa(val) : null;
+                      const ltcgPct = ltcg !== 0 ? _ltcgSoldPctOf(ltcg) : 0;
+                      const ltcgPa = ltcg !== 0 ? _ltcgCalcSoldPa(ltcg) : null;
+                      const stcgPct = stcg !== 0 ? _stcgSoldPctOf(stcg) : 0;
+                      const stcgPa = stcg !== 0 ? _stcgCalcSoldPa(stcg) : null;
                       const clr = (v) => v >= 0 ? 'var(--green)' : 'var(--red)';
                       const sign = (v) => v >= 0 ? '+' : '';
-                      const sub = (v) => v !== 0
-                        ? <span style={{ color: clr(v), fontWeight: 600, ...nw }}>{sign(v)}{formatINR(v)}</span>
-                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      const subCell = (v, qty, pct, dur, pa) => v !== 0 ? (
+                        <td style={nw}>
+                          <div style={{ fontWeight: 600, color: clr(v), ...nw }}>{sign(v)}{formatINR(v)}</div>
+                          {qty > 0 && <div style={{ fontSize: '11px', color: clr(v), opacity: 0.85, ...nw }}>on {qty} units</div>}
+                          <div style={{ fontSize: '11px', color: clr(v), opacity: 0.85, ...nw }}>{sign(pct)}{pct.toFixed(1)}%{dur ? ` ${dur}` : ''}</div>
+                          {pa !== null && <div style={{ fontSize: '11px', color: clr(v), opacity: 0.85, ...nw }}>{sign(pa)}{pa.toFixed(1)}% p.a.</div>}
+                        </td>
+                      ) : <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>;
                       return show ? (
                         <>
-                          <td style={nw}>
-                            <div style={{ fontWeight: 600, color: clr(val), ...nw }}>{sign(val)}{formatINR(val)}</div>
-                            <div style={{ fontSize: '11px', color: clr(val), opacity: 0.85, ...nw }}>{sign(rplPct)}{rplPct.toFixed(1)}%{_soldDurationStr ? ` ${_soldDurationStr}` : ''}</div>
-                            {rplPa !== null && <div style={{ fontSize: '11px', color: clr(val), opacity: 0.85, ...nw }}>{sign(rplPa)}{rplPa.toFixed(1)}% p.a.</div>}
-                          </td>
-                          <td style={nw}>{sub(ltcg)}</td>
-                          <td style={nw}>{sub(stcg)}</td>
+                          {subCell(val, stock.total_sold_qty, rplPct, _soldDurationStr, rplPa)}
+                          {subCell(ltcg, stock.ltcg_sold_qty, ltcgPct, _ltcgSold.durStr, ltcgPa)}
+                          {subCell(stcg, stock.stcg_sold_qty, stcgPct, _stcgSold.durStr, stcgPa)}
                         </>
                       ) : (
                         <>

@@ -134,6 +134,23 @@ class StockSummaryItem(BaseModel):
     stcg_unrealized_loss: float = 0.0
     ltcg_realized_pl: float = 0.0
     stcg_realized_pl: float = 0.0
+    # Per-category detail for metrics display (units, %, duration, p.a.)
+    ltcg_profitable_qty: int = 0
+    stcg_profitable_qty: int = 0
+    ltcg_loss_qty: int = 0
+    stcg_loss_qty: int = 0
+    ltcg_invested: float = 0.0       # total cost of LTCG held lots
+    stcg_invested: float = 0.0       # total cost of STCG held lots
+    ltcg_earliest_date: str = ""     # earliest buy_date among LTCG held lots
+    stcg_earliest_date: str = ""     # earliest buy_date among STCG held lots
+    ltcg_sold_qty: int = 0
+    stcg_sold_qty: int = 0
+    ltcg_sold_cost: float = 0.0      # sum of buy_price*qty for LTCG sold lots
+    stcg_sold_cost: float = 0.0
+    ltcg_sold_earliest_buy: str = ""
+    ltcg_sold_latest_sell: str = ""
+    stcg_sold_earliest_buy: str = ""
+    stcg_sold_latest_sell: str = ""
     num_held_lots: int = 0           # individual held lot count
     num_sold_lots: int = 0           # individual sold lot count
     profitable_qty: int = 0          # shares where lot buy_price < current_price
