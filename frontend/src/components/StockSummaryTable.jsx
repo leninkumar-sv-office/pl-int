@@ -328,9 +328,9 @@ const COL_DEFS = [
   { id: 'w52Low',         label: '52W Low',         grouped: false },
   { id: 'w52High',        label: '52W High',        grouped: false },
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
+  { id: 'status',         label: 'Status',          grouped: false },
   { id: 'unrealizedLoss', label: 'Unrealized Loss', grouped: true },
   { id: 'unrealizedPL',   label: 'Unrealized P/L',  grouped: true },
-  { id: 'status',         label: 'Status',          grouped: false },
   { id: 'realizedPL',     label: 'Realized P&L',    grouped: true },
   { id: 'dividends',      label: 'Dividends',       grouped: false },
 ];
@@ -790,13 +790,13 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
               </th>}
+              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ minWidth: '120px' }}>Status</th>}
               {col('unrealizedLoss') && <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
               </th>}
               {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
               </th>}
-              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ minWidth: '120px' }}>Status</th>}
               {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
               </th>}
@@ -1119,6 +1119,60 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       );
                     })()}
 
+                    {col('status') && <td style={{ whiteSpace: 'nowrap' }}>
+                      {hasHeld && stock.profitable_qty > 0 ? (
+                        <div>
+                          <div className="sell-tag" style={{ marginBottom: '2px' }}>
+                            ▲ Can Sell {stock.profitable_qty}
+                            {((stock.ltcg_profitable_qty || 0) > 0 || (stock.stcg_profitable_qty || 0) > 0) && (
+                              <span style={{ marginLeft: '4px' }}>
+                                ({[
+                                  (stock.ltcg_profitable_qty || 0) > 0 && `L:${stock.ltcg_profitable_qty}`,
+                                  (stock.stcg_profitable_qty || 0) > 0 && `S:${stock.stcg_profitable_qty}`,
+                                ].filter(Boolean).join(' · ')})
+                              </span>
+                            )}
+                          </div>
+                          {stock.loss_qty > 0 && (
+                            <div style={{ fontSize: '10px', color: 'var(--red)', marginTop: '3px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span>{stock.loss_qty} in loss</span>
+                              {(stock.ltcg_loss_qty || 0) > 0 && (
+                                <span style={{ color: '#22c55e', fontWeight: 600 }}>L:{stock.ltcg_loss_qty}</span>
+                              )}
+                              {(stock.stcg_loss_qty || 0) > 0 && (
+                                <span style={{ color: '#f59e0b', fontWeight: 600 }}>S:{stock.stcg_loss_qty}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : hasHeld ? (
+                        <div>
+                          <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
+                          {stock.loss_qty > 0 && (
+                            <div style={{ fontSize: '10px', color: 'var(--red)', marginTop: '2px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <span>{stock.loss_qty} in loss</span>
+                              {(stock.ltcg_loss_qty || 0) > 0 && (
+                                <span style={{ color: '#22c55e', fontWeight: 600 }}>L:{stock.ltcg_loss_qty}</span>
+                              )}
+                              {(stock.stcg_loss_qty || 0) > 0 && (
+                                <span style={{ color: '#f59e0b', fontWeight: 600 }}>S:{stock.stcg_loss_qty}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{
+                          fontSize: '11px',
+                          color: 'var(--text-muted)',
+                          background: 'var(--bg-input)',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                        }}>
+                          Fully Sold
+                        </span>
+                      )}
+                    </td>}
+
                     {/* ── Unrealized Loss: Total | LTCG | STCG ── */}
                     {col('unrealizedLoss') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
@@ -1190,40 +1244,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         </>
                       );
                     })()}
-
-                    {col('status') && <td>
-                      {hasHeld && stock.profitable_qty > 0 ? (
-                        <div>
-                          <div className="sell-tag">
-                            ▲ Can Sell {stock.profitable_qty}
-                          </div>
-                          {stock.loss_qty > 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '4px' }}>
-                              {stock.loss_qty} in loss
-                            </div>
-                          )}
-                        </div>
-                      ) : hasHeld ? (
-                        <div>
-                          <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
-                          {stock.loss_qty > 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '2px' }}>
-                              {stock.loss_qty} in loss
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{
-                          fontSize: '11px',
-                          color: 'var(--text-muted)',
-                          background: 'var(--bg-input)',
-                          padding: '2px 8px',
-                          borderRadius: '10px',
-                        }}>
-                          Fully Sold
-                        </span>
-                      )}
-                    </td>}
                     {/* ── Realized P&L: Total | LTCG | STCG ── */}
                     {col('realizedPL') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
