@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from typing import List, Dict
-from datetime import date
+from datetime import date, datetime
 import os
 import json
 import uuid
@@ -478,6 +478,20 @@ def get_stock_summary():
                 sum(h.price * h.quantity for h in held_lots) / total_held_qty
             ) if total_held_qty > 0 else 0
             realized_pl = sum(s.realized_pl for s in sold_lots)
+            # Split realized P&L by holding period (LTCG vs STCG)
+            ltcg_realized_pl = 0.0
+            stcg_realized_pl = 0.0
+            for s in sold_lots:
+                try:
+                    b_dt = datetime.strptime(s.buy_date, "%Y-%m-%d").date()
+                    s_dt = datetime.strptime(s.sell_date, "%Y-%m-%d").date()
+                    is_lt = (s_dt - b_dt).days > 365
+                except Exception:
+                    is_lt = False
+                if is_lt:
+                    ltcg_realized_pl += s.realized_pl
+                else:
+                    stcg_realized_pl += s.realized_pl
 
             # Live data
             live_key = f"{sym}.{exchange}"
@@ -487,20 +501,39 @@ def get_stock_summary():
             unrealized_pl = current_value - total_invested
             unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0
 
-            # Per-lot profitability: split into profitable vs loss lots
+            # Per-lot profitability: split into profitable vs loss lots AND LTCG vs STCG
             profitable_qty = 0
             loss_qty = 0
             unrealized_profit = 0.0  # P&L sum from lots where current > buy
             unrealized_loss = 0.0    # P&L sum from lots where current <= buy
+            ltcg_unrealized_profit = 0.0
+            stcg_unrealized_profit = 0.0
+            ltcg_unrealized_loss = 0.0
+            stcg_unrealized_loss = 0.0
+            today = date.today()
             if current_price > 0:
                 for h in held_lots:
                     lot_pl = (current_price - h.buy_price) * h.quantity
+                    # Determine LTCG vs STCG (India: >365 days = long-term)
+                    try:
+                        buy_dt = datetime.strptime(h.buy_date, "%Y-%m-%d").date()
+                        is_ltcg = (today - buy_dt).days > 365
+                    except Exception:
+                        is_ltcg = False
                     if current_price > h.buy_price:
                         profitable_qty += h.quantity
                         unrealized_profit += lot_pl
+                        if is_ltcg:
+                            ltcg_unrealized_profit += lot_pl
+                        else:
+                            stcg_unrealized_profit += lot_pl
                     else:
                         loss_qty += h.quantity
                         unrealized_loss += lot_pl
+                        if is_ltcg:
+                            ltcg_unrealized_loss += lot_pl
+                        else:
+                            stcg_unrealized_loss += lot_pl
 
             price_error = ""
             if total_held_qty > 0 and (not live or current_price <= 0):
@@ -521,6 +554,12 @@ def get_stock_summary():
                 unrealized_profit=round(unrealized_profit, 2),
                 unrealized_loss=round(unrealized_loss, 2),
                 realized_pl=round(realized_pl, 2),
+                ltcg_unrealized_profit=round(ltcg_unrealized_profit, 2),
+                stcg_unrealized_profit=round(stcg_unrealized_profit, 2),
+                ltcg_unrealized_loss=round(ltcg_unrealized_loss, 2),
+                stcg_unrealized_loss=round(stcg_unrealized_loss, 2),
+                ltcg_realized_pl=round(ltcg_realized_pl, 2),
+                stcg_realized_pl=round(stcg_realized_pl, 2),
                 total_dividend=round(dividends_by_symbol.get(sym, {}).get("amount", 0), 2),
                 dividend_count=dividends_by_symbol.get(sym, {}).get("count", 0),
                 dividend_units=dividends_by_symbol.get(sym, {}).get("units", 0),

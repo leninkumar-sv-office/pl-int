@@ -433,7 +433,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 16; // number of columns in the main table
+  const TOTAL_COLS = 24; // 10 regular + 4×3 sub-columns (PF/Loss/P-L/RPL) + Dividends + Status
 
   // ── Contract Note PDF Import ─────────────────────────
   const handleFileSelect = async (e) => {
@@ -585,43 +585,54 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       <div className="table-container" style={{ overflowX: 'auto' }}>
         <table>
           <thead>
+            {/* Row 1: grouped headers */}
             <tr>
-              <th style={{ width: '28px' }}></th>
-              <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={2} style={{ width: '28px' }}></th>
+              <th rowSpan={2} onClick={() => handleSort('symbol')} style={{ cursor: 'pointer' }}>
                 Stock<SortIcon field="symbol" />
               </th>
-              <th onClick={() => handleSort('total_held_qty')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={2} onClick={() => handleSort('total_held_qty')} style={{ cursor: 'pointer' }}>
                 Held<SortIcon field="total_held_qty" />
               </th>
-              <th onClick={() => handleSort('total_sold_qty')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={2} onClick={() => handleSort('total_sold_qty')} style={{ cursor: 'pointer' }}>
                 Sold<SortIcon field="total_sold_qty" />
               </th>
-              <th>Price</th>
-              <th>Buy Price</th>
-              <th>Total Cost</th>
-              <th>Current Price</th>
-              <th onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={2}>Price</th>
+              <th rowSpan={2}>Buy Price</th>
+              <th rowSpan={2}>Total Cost</th>
+              <th rowSpan={2}>Current Price</th>
+              <th rowSpan={2} onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="week_52_low" />
               </th>
-              <th onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={2} onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
               </th>
-              <th onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer' }}>
+              <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
               </th>
-              <th onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer' }}>
+              <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
               </th>
-              <th onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer' }}>
+              <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
               </th>
-              <th onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer' }}>
+              <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
               </th>
-              <th onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={2} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
                 Dividends<SortIcon field="total_dividend" />
               </th>
-              <th>Status</th>
+              <th rowSpan={2}>Status</th>
+            </tr>
+            {/* Row 2: sub-column headers for the 4 grouped columns */}
+            <tr>
+              {[0,1,2,3].map(i => (
+                <React.Fragment key={i}>
+                  <th style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.8 }}>Total</th>
+                  <th style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.8 }}>LTCG</th>
+                  <th style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.8 }}>STCG</th>
+                </React.Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -816,114 +827,141 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>
-                    <td>
-                      {hasHeld && stock.unrealized_profit > 0 ? (() => {
-                        const pfPct = _pctOf(stock.unrealized_profit);
-                        const pfPa = _calcPa(stock.unrealized_profit);
-                        return (
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--green)' }}>
-                              +{formatINR(stock.unrealized_profit)}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
-                              on {stock.profitable_qty} units
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
-                              +{pfPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
-                            </div>
-                            {pfPa !== null && (
-                              <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, marginTop: '1px' }}>
-                                +{pfPa.toFixed(1)}% p.a.
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })() : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td>
-                      {hasHeld && stock.unrealized_loss < 0 ? (() => {
-                        const lossPct = _pctOf(stock.unrealized_loss);
-                        const lossPa = _calcPa(stock.unrealized_loss);
-                        return (
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--red)' }}>
-                              {formatINR(stock.unrealized_loss)}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85 }}>
-                              on {stock.loss_qty} units
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85 }}>
-                              {lossPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
-                            </div>
-                            {lossPa !== null && (
-                              <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, marginTop: '1px' }}>
-                                {lossPa.toFixed(1)}% p.a.
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })() : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td>
-                      {hasHeld ? (() => {
-                        const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
-                        const uplPct = _pctOf(upl);
-                        const uplPa = _calcPa(upl);
-                        const uplColor = upl >= 0 ? 'var(--green)' : 'var(--red)';
-                        return (
-                          <div>
-                            <div style={{ fontWeight: 600, color: uplColor }}>
-                              {upl >= 0 ? '+' : ''}{formatINR(upl)}
-                            </div>
-                            <div style={{ fontSize: '11px', color: uplColor, opacity: 0.85 }}>
-                              {uplPct >= 0 ? '+' : ''}{uplPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
-                            </div>
-                            {uplPa !== null && (
-                              <div style={{ fontSize: '11px', color: uplColor, opacity: 0.85, marginTop: '1px' }}>
-                                {uplPa >= 0 ? '+' : ''}{uplPa.toFixed(1)}% p.a.
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })() : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td>
-                      {stock.realized_pl !== 0 ? (() => {
-                        const rplPct = _pctOfSold(stock.realized_pl);
-                        const rplPa = _calcSoldPa(stock.realized_pl);
-                        const rplColor = stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
-                        return (
-                          <div>
-                            <div style={{ fontWeight: 600, color: rplColor }}>
-                              {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
-                            </div>
-                            <div style={{ fontSize: '11px', color: rplColor, opacity: 0.85 }}>
-                              {rplPct >= 0 ? '+' : ''}{rplPct.toFixed(1)}%{_soldDurationStr ? ` ${_soldDurationStr}` : ''}
-                            </div>
-                            {rplPa !== null && (
-                              <div style={{ fontSize: '11px', color: rplColor, opacity: 0.85, marginTop: '1px' }}>
-                                {rplPa >= 0 ? '+' : ''}{rplPa.toFixed(1)}% p.a.
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })() : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td>
+                    {/* ── Unrealized PF: Total | LTCG | STCG ── */}
+                    {(() => {
+                      const nw = { whiteSpace: 'nowrap' };
+                      const val = stock.unrealized_profit || 0;
+                      const ltcg = stock.ltcg_unrealized_profit || 0;
+                      const stcg = stock.stcg_unrealized_profit || 0;
+                      const show = hasHeld && val > 0;
+                      const pfPct = show ? _pctOf(val) : 0;
+                      const pfPa = show ? _calcPa(val) : null;
+                      const sub = (v) => v > 0
+                        ? <span style={{ color: 'var(--green)', fontWeight: 600, ...nw }}>+{formatINR(v)}</span>
+                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      return show ? (
+                        <>
+                          <td style={nw}>
+                            <div style={{ fontWeight: 600, color: 'var(--green)', ...nw }}>+{formatINR(val)}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>on {stock.profitable_qty} units</div>
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>+{pfPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}</div>
+                            {pfPa !== null && <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, ...nw }}>+{pfPa.toFixed(1)}% p.a.</div>}
+                          </td>
+                          <td style={nw}>{sub(ltcg)}</td>
+                          <td style={nw}>{sub(stcg)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                        </>
+                      );
+                    })()}
+
+                    {/* ── Unrealized Loss: Total | LTCG | STCG ── */}
+                    {(() => {
+                      const nw = { whiteSpace: 'nowrap' };
+                      const val = stock.unrealized_loss || 0;
+                      const ltcg = stock.ltcg_unrealized_loss || 0;
+                      const stcg = stock.stcg_unrealized_loss || 0;
+                      const show = hasHeld && val < 0;
+                      const lossPct = show ? _pctOf(val) : 0;
+                      const lossPa = show ? _calcPa(val) : null;
+                      const sub = (v) => v < 0
+                        ? <span style={{ color: 'var(--red)', fontWeight: 600, ...nw }}>{formatINR(v)}</span>
+                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      return show ? (
+                        <>
+                          <td style={nw}>
+                            <div style={{ fontWeight: 600, color: 'var(--red)', ...nw }}>{formatINR(val)}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>on {stock.loss_qty} units</div>
+                            <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>{lossPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}</div>
+                            {lossPa !== null && <div style={{ fontSize: '11px', color: 'var(--red)', opacity: 0.85, ...nw }}>{lossPa.toFixed(1)}% p.a.</div>}
+                          </td>
+                          <td style={nw}>{sub(ltcg)}</td>
+                          <td style={nw}>{sub(stcg)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                        </>
+                      );
+                    })()}
+
+                    {/* ── Unrealized P/L: Total | LTCG | STCG ── */}
+                    {(() => {
+                      const nw = { whiteSpace: 'nowrap' };
+                      const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
+                      const ltcg = (stock.ltcg_unrealized_profit || 0) + (stock.ltcg_unrealized_loss || 0);
+                      const stcg = (stock.stcg_unrealized_profit || 0) + (stock.stcg_unrealized_loss || 0);
+                      const uplPct = hasHeld ? _pctOf(upl) : 0;
+                      const uplPa = hasHeld ? _calcPa(upl) : null;
+                      const clr = (v) => v >= 0 ? 'var(--green)' : 'var(--red)';
+                      const sign = (v) => v >= 0 ? '+' : '';
+                      const sub = (v) => v !== 0
+                        ? <span style={{ color: clr(v), fontWeight: 600, ...nw }}>{sign(v)}{formatINR(v)}</span>
+                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      return hasHeld ? (
+                        <>
+                          <td style={nw}>
+                            <div style={{ fontWeight: 600, color: clr(upl), ...nw }}>{sign(upl)}{formatINR(upl)}</div>
+                            <div style={{ fontSize: '11px', color: clr(upl), opacity: 0.85, ...nw }}>{sign(uplPct)}{uplPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}</div>
+                            {uplPa !== null && <div style={{ fontSize: '11px', color: clr(upl), opacity: 0.85, ...nw }}>{sign(uplPa)}{uplPa.toFixed(1)}% p.a.</div>}
+                          </td>
+                          <td style={nw}>{sub(ltcg)}</td>
+                          <td style={nw}>{sub(stcg)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                        </>
+                      );
+                    })()}
+
+                    {/* ── Realized P&L: Total | LTCG | STCG ── */}
+                    {(() => {
+                      const nw = { whiteSpace: 'nowrap' };
+                      const val = stock.realized_pl || 0;
+                      const ltcg = stock.ltcg_realized_pl || 0;
+                      const stcg = stock.stcg_realized_pl || 0;
+                      const show = val !== 0;
+                      const rplPct = show ? _pctOfSold(val) : 0;
+                      const rplPa = show ? _calcSoldPa(val) : null;
+                      const clr = (v) => v >= 0 ? 'var(--green)' : 'var(--red)';
+                      const sign = (v) => v >= 0 ? '+' : '';
+                      const sub = (v) => v !== 0
+                        ? <span style={{ color: clr(v), fontWeight: 600, ...nw }}>{sign(v)}{formatINR(v)}</span>
+                        : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                      return show ? (
+                        <>
+                          <td style={nw}>
+                            <div style={{ fontWeight: 600, color: clr(val), ...nw }}>{sign(val)}{formatINR(val)}</div>
+                            <div style={{ fontSize: '11px', color: clr(val), opacity: 0.85, ...nw }}>{sign(rplPct)}{rplPct.toFixed(1)}%{_soldDurationStr ? ` ${_soldDurationStr}` : ''}</div>
+                            {rplPa !== null && <div style={{ fontSize: '11px', color: clr(val), opacity: 0.85, ...nw }}>{sign(rplPa)}{rplPa.toFixed(1)}% p.a.</div>}
+                          </td>
+                          <td style={nw}>{sub(ltcg)}</td>
+                          <td style={nw}>{sub(stcg)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                          <td><span style={{ color: 'var(--text-muted)' }}>-</span></td>
+                        </>
+                      );
+                    })()}
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {(stock.total_dividend || 0) > 0 ? (() => {
                         const divPct = _pctOf(stock.total_dividend);
                         const divPa = _calcPa(stock.total_dividend);
                         return (
                           <div>
-                            <div style={{ fontWeight: 600, color: 'var(--green)' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--green)', whiteSpace: 'nowrap' }}>
                               +{formatINR(stock.total_dividend)}
                             </div>
                             {(stock.dividend_units || 0) > 0 && (
@@ -931,11 +969,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                                 on {stock.dividend_units} units
                               </div>
                             )}
-                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85 }}>
+                            <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, whiteSpace: 'nowrap' }}>
                               +{divPct.toFixed(1)}%{_durationStr ? ` ${_durationStr}` : ''}
                             </div>
                             {divPa !== null && (
-                              <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, marginTop: '1px' }}>
+                              <div style={{ fontSize: '11px', color: 'var(--green)', opacity: 0.85, whiteSpace: 'nowrap' }}>
                                 +{divPa.toFixed(1)}% p.a.
                               </div>
                             )}
