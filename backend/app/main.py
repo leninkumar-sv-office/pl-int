@@ -281,9 +281,60 @@ def _decode_and_parse_pdf(req: ContractNoteUpload) -> dict:
 def parse_contract_note_preview(req: ContractNoteUpload):
     """Parse a contract note PDF and return a preview — no data is written.
 
-    Use this to show the user what will be imported before confirming.
+    Also checks each transaction against existing xlsx data to flag duplicates.
+    Each transaction gets an `isDuplicate` boolean field.
     """
     parsed = _decode_and_parse_pdf(req)
+
+    # ── Duplicate detection ──
+    # Build a fingerprint cache: symbol → (fingerprints_set, remarks_set)
+    _fp_cache: dict = {}
+    contract_no = parsed.get("contract_no", "")
+    cn_remark = f"CN#{contract_no}" if contract_no else ""
+    dup_count = 0
+
+    for tx in parsed.get("transactions", []):
+        symbol = (tx.get("symbol") or "").upper()
+        if not symbol:
+            tx["isDuplicate"] = False
+            continue
+
+        # Lazy-load fingerprints per symbol
+        if symbol not in _fp_cache:
+            try:
+                _fp_cache[symbol] = db.get_existing_transaction_fingerprints(symbol)
+            except Exception:
+                _fp_cache[symbol] = (set(), set())
+
+        fingerprints, remarks_set = _fp_cache[symbol]
+
+        # Check 1: exact contract note number match → definitely duplicate
+        if cn_remark and cn_remark in remarks_set:
+            tx["isDuplicate"] = True
+            dup_count += 1
+            continue
+
+        # Check 2: transaction fingerprint match (date + action + qty + price)
+        # Try both WAP and effective_price since xlsx might store either
+        trade_date = tx.get("trade_date", parsed.get("trade_date", ""))
+        action = tx.get("action", "")
+        qty = int(tx.get("quantity", 0))
+        wap = round(tx.get("wap", 0), 2)
+        eff = round(tx.get("effective_price", 0), 2)
+
+        fp_wap = (trade_date, action, qty, wap)
+        fp_eff = (trade_date, action, qty, eff)
+        matched = fp_wap in fingerprints or fp_eff in fingerprints
+        print(f"[FP-DEBUG] PDF tx: symbol={symbol} fp_wap={fp_wap} fp_eff={fp_eff} | match={'YES' if matched else 'NO'} | xlsx has {len(fingerprints)} fps")
+        if matched:
+            tx["isDuplicate"] = True
+            dup_count += 1
+        else:
+            tx["isDuplicate"] = False
+
+    if dup_count > 0:
+        print(f"[Import] Found {dup_count} duplicate transaction(s) in preview")
+
     return parsed
 
 
@@ -308,12 +359,43 @@ def import_contract_note(req: ContractNoteUpload):
             "imported": {"buys": 0, "sells": 0},
         }
 
+    # ── Server-side duplicate detection ──
+    _fp_cache: dict = {}
+    cn_remark = f"CN#{contract_no}" if contract_no else ""
+    skipped_dups = 0
+
     imported_buys = []
     imported_sells = []
     errors = []
 
     for tx in transactions:
         try:
+            # Check for duplicates before writing
+            symbol = (tx.get("symbol") or "").upper()
+            if symbol:
+                if symbol not in _fp_cache:
+                    try:
+                        _fp_cache[symbol] = db.get_existing_transaction_fingerprints(symbol)
+                    except Exception:
+                        _fp_cache[symbol] = (set(), set())
+
+                fingerprints, remarks_set = _fp_cache[symbol]
+
+                if cn_remark and cn_remark in remarks_set:
+                    skipped_dups += 1
+                    continue
+
+                tx_date = tx.get("trade_date", trade_date)
+                action = tx.get("action", "")
+                qty = int(tx.get("quantity", 0))
+                wap = round(tx.get("wap", 0), 2)
+                eff = round(tx.get("effective_price", tx.get("wap", 0)), 2)
+                fp_wap = (tx_date, action, qty, wap)
+                fp_eff = (tx_date, action, qty, eff)
+                if fp_wap in fingerprints or fp_eff in fingerprints:
+                    skipped_dups += 1
+                    continue
+
             remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
 
             if tx["action"] == "Buy":
@@ -403,10 +485,14 @@ def import_contract_note(req: ContractNoteUpload):
     # Reindex to pick up any new files
     db.reindex()
 
+    if skipped_dups > 0:
+        print(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
+
     return {
         "message": (
             f"Imported {len(imported_buys)} buys, {len(imported_sells)} sells "
             f"from contract note dated {trade_date}"
+            + (f" ({skipped_dups} duplicates skipped)" if skipped_dups > 0 else "")
         ),
         "trade_date": trade_date,
         "contract_no": contract_no,
@@ -416,6 +502,7 @@ def import_contract_note(req: ContractNoteUpload):
             "buy_details": imported_buys,
             "sell_details": imported_sells,
         },
+        "skipped_duplicates": skipped_dups,
         "errors": errors if errors else None,
     }
 
@@ -445,12 +532,45 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
             "imported": {"buys": 0, "sells": 0},
         }
 
+    # ── Server-side duplicate detection (safety net) ──
+    _fp_cache: dict = {}
+    cn_remark = f"CN#{contract_no}" if contract_no else ""
+    skipped_dups = 0
+
     imported_buys = []
     imported_sells = []
     errors = []
 
     for tx in transactions:
         try:
+            # Check for duplicates before writing
+            symbol = (tx.get("symbol") or "").upper()
+            if symbol:
+                if symbol not in _fp_cache:
+                    try:
+                        _fp_cache[symbol] = db.get_existing_transaction_fingerprints(symbol)
+                    except Exception:
+                        _fp_cache[symbol] = (set(), set())
+
+                fingerprints, remarks_set = _fp_cache[symbol]
+
+                # Check 1: CN# remark match
+                if cn_remark and cn_remark in remarks_set:
+                    skipped_dups += 1
+                    continue
+
+                # Check 2: transaction fingerprint match (try both WAP and effective price)
+                tx_date = tx.get("trade_date", trade_date)
+                action = tx.get("action", "")
+                qty = int(tx.get("quantity", 0))
+                wap = round(tx.get("wap", 0), 2)
+                eff = round(tx.get("effective_price", tx.get("wap", 0)), 2)
+                fp_wap = (tx_date, action, qty, wap)
+                fp_eff = (tx_date, action, qty, eff)
+                if fp_wap in fingerprints or fp_eff in fingerprints:
+                    skipped_dups += 1
+                    continue
+
             remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
 
             if tx["action"] == "Buy":
@@ -516,10 +636,14 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
 
     db.reindex()
 
+    if skipped_dups > 0:
+        print(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
+
     return {
         "message": (
             f"Imported {len(imported_buys)} buys, {len(imported_sells)} sells "
             f"from contract note dated {trade_date}"
+            + (f" ({skipped_dups} duplicates skipped)" if skipped_dups > 0 else "")
         ),
         "trade_date": trade_date,
         "contract_no": contract_no,
@@ -529,6 +653,7 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
             "buy_details": imported_buys,
             "sell_details": imported_sells,
         },
+        "skipped_duplicates": skipped_dups,
         "errors": errors if errors else None,
     }
 

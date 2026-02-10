@@ -14,6 +14,11 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
 
   const { trade_date, contract_no, transactions, summary } = data;
 
+  // Debug: log isDuplicate status for each transaction
+  console.log('[ImportPreview] Transactions isDuplicate status:',
+    transactions.map(t => `${t.symbol}: isDuplicate=${t.isDuplicate}`));
+  console.log('[ImportPreview] Total dups:', transactions.filter(t => t.isDuplicate).length);
+
   // Apply symbol edits to transactions before filtering
   const editedTransactions = transactions.map((t, i) =>
     symbolEdits[i] !== undefined ? { ...t, symbol: symbolEdits[i] } : t
@@ -22,17 +27,25 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
   const buys = editedTransactions.filter(t => t.action === 'Buy');
   const sells = editedTransactions.filter(t => t.action === 'Sell');
 
-  const totalBuyCost = buys.reduce((s, t) => s + t.net_total_after_levies, 0);
-  const totalSellProceeds = sells.reduce((s, t) => s + t.net_total_after_levies, 0);
+  // Non-duplicate transactions (the ones that will actually be imported)
+  const importableBuys = buys.filter(t => !t.isDuplicate);
+  const importableSells = sells.filter(t => !t.isDuplicate);
+  const importableCount = importableBuys.length + importableSells.length;
+
+  const totalBuyCost = importableBuys.reduce((s, t) => s + t.net_total_after_levies, 0);
+  const totalSellProceeds = importableSells.reduce((s, t) => s + t.net_total_after_levies, 0);
 
   const handleSymbolChange = useCallback((globalIdx, value) => {
     setSymbolEdits(prev => ({ ...prev, [globalIdx]: value.toUpperCase() }));
   }, []);
 
   const handleConfirm = async () => {
+    if (importableCount === 0) return;
     setConfirming(true);
     try {
-      await onConfirm(editedTransactions);
+      // Only send non-duplicate transactions
+      const toImport = editedTransactions.filter(t => !t.isDuplicate);
+      await onConfirm(toImport);
     } finally {
       setConfirming(false);
     }
@@ -42,6 +55,8 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
 
   const newRowBg = 'rgba(239,68,68,0.08)';
   const newRowBorder = '1px solid rgba(239,68,68,0.25)';
+  const dupRowBg = 'rgba(251,191,36,0.10)';
+  const dupRowBorder = '1px solid rgba(251,191,36,0.25)';
 
   // Shared row renderer for both BUY and SELL tables
   const renderRow = (t, i, filterAction) => {
@@ -51,27 +66,51 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
       ? t.net_total_after_levies - (t.wap * t.quantity)
       : (t.wap * t.quantity) - t.net_total_after_levies;
     const isNew = isNewSymbol(t.symbol);
+    const isDup = !!t.isDuplicate;
+
+    // Priority: duplicate > new symbol (dup takes visual precedence)
+    const rowBg = isDup ? dupRowBg : isNew ? newRowBg : undefined;
+    const rowBorder = isDup ? dupRowBorder : isNew ? newRowBorder : '1px solid var(--border-light, rgba(255,255,255,0.05))';
 
     return (
       <tr key={i} style={{
-        borderBottom: isNew ? newRowBorder : '1px solid var(--border-light, rgba(255,255,255,0.05))',
-        background: isNew ? newRowBg : undefined,
+        borderBottom: rowBorder,
+        background: rowBg,
+        opacity: isDup ? 0.55 : 1,
       }}>
         <td style={tdStyle}>
           <input
             type="text"
             value={t.symbol}
             onChange={(e) => handleSymbolChange(globalIdx, e.target.value)}
+            disabled={isDup}
             style={{
-              background: isNew ? 'rgba(239,68,68,0.12)' : 'var(--bg-input)',
-              color: 'var(--text)',
-              border: isNew ? '1px solid rgba(239,68,68,0.4)' : '1px solid var(--border)',
+              background: isDup ? 'rgba(251,191,36,0.12)' : isNew ? 'rgba(239,68,68,0.12)' : 'var(--bg-input)',
+              color: isDup ? 'var(--text-muted)' : 'var(--text)',
+              border: isDup ? '1px solid rgba(251,191,36,0.4)' : isNew ? '1px solid rgba(239,68,68,0.4)' : '1px solid var(--border)',
               borderRadius: '3px',
               padding: '2px 6px', fontSize: '12px', fontWeight: 600,
               width: '140px',
+              textDecoration: isDup ? 'line-through' : 'none',
             }}
           />
-          {isNew && (
+          {isDup && (
+            <span style={{
+              display: 'inline-block',
+              marginLeft: '6px',
+              fontSize: '9px',
+              fontWeight: 700,
+              color: '#d97706',
+              background: 'rgba(251,191,36,0.18)',
+              padding: '1px 5px',
+              borderRadius: '3px',
+              letterSpacing: '0.5px',
+              verticalAlign: 'middle',
+            }}>
+              DUP
+            </span>
+          )}
+          {isNew && !isDup && (
             <span style={{
               display: 'inline-block',
               marginLeft: '6px',
@@ -88,7 +127,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
             </span>
           )}
         </td>
-        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '180px' }}>
+        <td style={{ ...tdStyle, color: isDup ? 'var(--text-muted)' : 'var(--text-dim)', maxWidth: '180px' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
           <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
         </td>
@@ -101,8 +140,11 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
     );
   };
 
-  const newBuyCount = buys.filter(t => isNewSymbol(t.symbol)).length;
-  const newSellCount = sells.filter(t => isNewSymbol(t.symbol)).length;
+  const newBuyCount = buys.filter(t => isNewSymbol(t.symbol) && !t.isDuplicate).length;
+  const newSellCount = sells.filter(t => isNewSymbol(t.symbol) && !t.isDuplicate).length;
+  const dupBuyCount = buys.filter(t => t.isDuplicate).length;
+  const dupSellCount = sells.filter(t => t.isDuplicate).length;
+  const totalDupCount = dupBuyCount + dupSellCount;
 
   return (
     <div style={{
@@ -128,7 +170,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
               Contract Note Preview
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Trade Date: {trade_date} &nbsp;|&nbsp; CN# {contract_no || '—'}
+              Trade Date: {trade_date} &nbsp;|&nbsp; CN# {contract_no || '\u2014'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -144,6 +186,14 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
             }}>
               {summary.sells} Sells
             </span>
+            {totalDupCount > 0 && (
+              <span style={{
+                padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600,
+                background: 'rgba(251,191,36,0.15)', color: '#d97706',
+              }}>
+                {totalDupCount} Duplicate{totalDupCount > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
         </div>
 
@@ -166,6 +216,15 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                     {newBuyCount} new symbol{newBuyCount > 1 ? 's' : ''}
                   </span>
                 )}
+                {dupBuyCount > 0 && (
+                  <span style={{
+                    fontSize: '10px', fontWeight: 600, color: '#d97706',
+                    background: 'rgba(251,191,36,0.12)', padding: '2px 7px',
+                    borderRadius: '8px',
+                  }}>
+                    {dupBuyCount} duplicate{dupBuyCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
@@ -182,8 +241,8 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <tbody>
                   {buys.map((t, i) => renderRow(t, i, 'Buy'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={2}>Total Buys</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{buys.reduce((s, t) => s + t.quantity, 0)}</td>
+                    <td style={tdStyle} colSpan={2}>Total Buys (excl. duplicates)</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{importableBuys.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalBuyCost)}</td>
@@ -211,6 +270,15 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                     {newSellCount} new symbol{newSellCount > 1 ? 's' : ''}
                   </span>
                 )}
+                {dupSellCount > 0 && (
+                  <span style={{
+                    fontSize: '10px', fontWeight: 600, color: '#d97706',
+                    background: 'rgba(251,191,36,0.12)', padding: '2px 7px',
+                    borderRadius: '8px',
+                  }}>
+                    {dupSellCount} duplicate{dupSellCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
@@ -227,8 +295,8 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <tbody>
                   {sells.map((t, i) => renderRow(t, i, 'Sell'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={2}>Total Sells</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{sells.reduce((s, t) => s + t.quantity, 0)}</td>
+                    <td style={tdStyle} colSpan={2}>Total Sells (excl. duplicates)</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{importableSells.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalSellProceeds)}</td>
@@ -247,6 +315,11 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
         }}>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             Net Obligation: {formatINR(totalBuyCost - totalSellProceeds)}
+            {totalDupCount > 0 && (
+              <span style={{ marginLeft: '12px', color: '#d97706' }}>
+                ({totalDupCount} duplicate{totalDupCount > 1 ? 's' : ''} will be skipped)
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
@@ -263,17 +336,21 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
             </button>
             <button
               onClick={handleConfirm}
-              disabled={confirming}
+              disabled={confirming || importableCount === 0}
               style={{
                 padding: '8px 20px', fontSize: '13px',
-                background: confirming ? 'var(--bg-input)' : 'var(--green)',
-                color: confirming ? 'var(--text-muted)' : '#fff',
+                background: (confirming || importableCount === 0) ? 'var(--bg-input)' : 'var(--green)',
+                color: (confirming || importableCount === 0) ? 'var(--text-muted)' : '#fff',
                 border: 'none', borderRadius: 'var(--radius-sm)',
-                cursor: confirming ? 'wait' : 'pointer',
+                cursor: (confirming || importableCount === 0) ? 'not-allowed' : 'pointer',
                 fontWeight: 600,
               }}
             >
-              {confirming ? 'Importing...' : `Confirm Import (${summary.total} transactions)`}
+              {confirming
+                ? 'Importing...'
+                : importableCount === 0
+                  ? 'All Duplicates \u2014 Nothing to Import'
+                  : `Confirm Import (${importableCount} transaction${importableCount > 1 ? 's' : ''})`}
             </button>
           </div>
         </div>

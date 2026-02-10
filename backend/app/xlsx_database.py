@@ -1018,6 +1018,77 @@ class XlsxPortfolio:
             cell.font = hdr_font
             cell.fill = hdr_fill
 
+    def get_existing_transaction_fingerprints(self, symbol: str):
+        """Return (fingerprints, remarks_set) for existing transactions in a stock's xlsx.
+
+        fingerprints: set of (date_str, action, qty, price_rounded) tuples
+        remarks_set: set of CN# remark strings
+        Used for duplicate detection before import.
+        """
+        symbol = symbol.upper()
+        files = self._all_files.get(symbol, [])
+        if not files:
+            return set(), set()
+
+        fingerprints = set()
+        remarks_set = set()
+
+        for fp in files:
+            try:
+                wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+                if "Trading History" not in wb.sheetnames:
+                    wb.close()
+                    continue
+                ws = wb["Trading History"]
+
+                # Find header row
+                header_row = 4
+                for r in range(1, 11):
+                    vals = [ws.cell(r, c).value for c in range(1, 5)]
+                    if "DATE" in vals and "ACTION" in vals:
+                        header_row = r
+                        break
+
+                for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+                    if not row or len(row) < 7:
+                        continue
+                    raw_date, exch, action, qty, price, cost, remarks = (
+                        row[0], row[1], row[2], row[3], row[4], row[5], row[6]
+                    )
+                    if not action or str(action).strip() not in ("Buy", "Sell"):
+                        continue
+
+                    # Parse date
+                    date_str = ""
+                    if isinstance(raw_date, datetime):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif isinstance(raw_date, date):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif raw_date:
+                        date_str = _parse_date(raw_date) or ""
+
+                    qty_int = int(qty) if qty else 0
+                    price_r = round(float(price), 2) if price else 0.0
+
+                    if date_str and qty_int > 0:
+                        fp_tuple = (date_str, str(action).strip(), qty_int, price_r)
+                        fingerprints.add(fp_tuple)
+
+                    # Also track CN# remarks for contract-note-level dedup
+                    if remarks and str(remarks).startswith("CN#"):
+                        remarks_set.add(str(remarks).strip())
+
+                wb.close()
+            except Exception as e:
+                print(f"[XlsxDB] Error reading fingerprints from {fp.name}: {e}")
+
+        print(f"[FP-DEBUG] {symbol}: {len(fingerprints)} fingerprints, {len(remarks_set)} remarks from {len(files)} file(s)")
+        for fp_item in sorted(fingerprints):
+            print(f"  [FP-XLSX] {fp_item}")
+        for rm in sorted(remarks_set):
+            print(f"  [RM-XLSX] {rm}")
+        return fingerprints, remarks_set
+
     def _find_header_row(self, ws) -> int:
         """Find the header row in a Trading History sheet."""
         for r in range(1, 11):

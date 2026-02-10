@@ -1188,5 +1188,55 @@
     "day_change_pct": -0.74,
     "volume": 353159,
     "previous_close": 1970.8
+  },
+  "LGEINDIA.BSE": {
+    "price": 1541.25,
+    "name": "LG Electronics India",
+    "week_52_high": 1566.0,
+    "week_52_low": 1515.05,
+    "day_change": 19.6,
+    "day_change_pct": 1.29,
+    "volume": 70513,
+    "previous_close": 1521.65
+  },
+  "JWL.BSE": {
+    "price": 312.15,
+    "name": "Jupiter Wagons Limited",
+    "week_52_high": 322.6,
+    "week_52_low": 306.9,
+    "day_change": 3.45,
+    "day_change_pct": 1.12,
+    "volume": 143773,
+    "previous_close": 308.7
+  },
+  "ADANIGREEN.BSE": {
+    "price": 978.9,
+    "name": "ADANI GREEN ENERGY",
+    "week_52_high": 987.15,
+    "week_52_low": 953.15,
+    "day_change": -3.85,
+    "day_change_pct": -0.39,
+    "volume": 258751,
+    "previous_close": 982.75
+  },
+  "BHARTIARTL.BSE": {
+    "price": 2010.8,
+    "name": "BHARTI AIRTEL",
+    "week_52_high": 2057.0,
+    "week_52_low": 2008.0,
+    "day_change": -27.75,
+    "day_change_pct": -1.36,
+    "volume": 1191121,
+    "previous_close": 2038.55
+  },
+  "DIXON.BSE": {
+    "price": 11606.3,
+    "name": "DIXON TECHNO (INDIA)",
+    "week_52_high": 11842.8,
+    "week_52_low": 11564.0,
+    "day_change": -154.55,
+    "day_change_pct": -1.31,
+    "volume": 49999,
+    "previous_close": 11760.85
   }
 }
