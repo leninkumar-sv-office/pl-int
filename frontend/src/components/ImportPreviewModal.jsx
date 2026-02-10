@@ -5,7 +5,7 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
+export default function ImportPreviewModal({ data, existingSymbols = new Set(), onConfirm, onCancel }) {
   const [confirming, setConfirming] = useState(false);
   // Editable symbol overrides: { index: newSymbol }
   const [symbolEdits, setSymbolEdits] = useState({});
@@ -38,6 +38,72 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
     }
   };
 
+  const isNewSymbol = (symbol) => !existingSymbols.has(symbol);
+
+  const newRowBg = 'rgba(239,68,68,0.08)';
+  const newRowBorder = '1px solid rgba(239,68,68,0.25)';
+
+  // Shared row renderer for both BUY and SELL tables
+  const renderRow = (t, i, filterAction) => {
+    const globalIdx = transactions.indexOf(transactions.filter(x => x.action === filterAction)[i]);
+    const isBuy = filterAction === 'Buy';
+    const charges = isBuy
+      ? t.net_total_after_levies - (t.wap * t.quantity)
+      : (t.wap * t.quantity) - t.net_total_after_levies;
+    const isNew = isNewSymbol(t.symbol);
+
+    return (
+      <tr key={i} style={{
+        borderBottom: isNew ? newRowBorder : '1px solid var(--border-light, rgba(255,255,255,0.05))',
+        background: isNew ? newRowBg : undefined,
+      }}>
+        <td style={tdStyle}>
+          <input
+            type="text"
+            value={t.symbol}
+            onChange={(e) => handleSymbolChange(globalIdx, e.target.value)}
+            style={{
+              background: isNew ? 'rgba(239,68,68,0.12)' : 'var(--bg-input)',
+              color: 'var(--text)',
+              border: isNew ? '1px solid rgba(239,68,68,0.4)' : '1px solid var(--border)',
+              borderRadius: '3px',
+              padding: '2px 6px', fontSize: '12px', fontWeight: 600,
+              width: '140px',
+            }}
+          />
+          {isNew && (
+            <span style={{
+              display: 'inline-block',
+              marginLeft: '6px',
+              fontSize: '9px',
+              fontWeight: 700,
+              color: '#ef4444',
+              background: 'rgba(239,68,68,0.15)',
+              padding: '1px 5px',
+              borderRadius: '3px',
+              letterSpacing: '0.5px',
+              verticalAlign: 'middle',
+            }}>
+              NEW
+            </span>
+          )}
+        </td>
+        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '180px' }}>
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
+        </td>
+        <td style={{ ...tdStyle, textAlign: 'right' }}>{t.quantity}</td>
+        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.wap)}</td>
+        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(t.effective_price)}</td>
+        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.net_total_after_levies)}</td>
+        <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(charges)}</td>
+      </tr>
+    );
+  };
+
+  const newBuyCount = buys.filter(t => isNewSymbol(t.symbol)).length;
+  const newSellCount = sells.filter(t => isNewSymbol(t.symbol)).length;
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -47,7 +113,7 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
     }} onClick={onCancel}>
       <div style={{
         background: 'var(--bg-card)', borderRadius: 'var(--radius)',
-        border: '1px solid var(--border)', maxWidth: '900px', width: '100%',
+        border: '1px solid var(--border)', maxWidth: '950px', width: '100%',
         maxHeight: '85vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }} onClick={e => e.stopPropagation()}>
@@ -88,14 +154,23 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
             <>
               <div style={{
                 fontSize: '13px', fontWeight: 600, color: 'var(--green)',
-                marginBottom: '8px',
+                marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px',
               }}>
                 BUY Transactions ({buys.length})
+                {newBuyCount > 0 && (
+                  <span style={{
+                    fontSize: '10px', fontWeight: 600, color: '#ef4444',
+                    background: 'rgba(239,68,68,0.12)', padding: '2px 7px',
+                    borderRadius: '8px',
+                  }}>
+                    {newBuyCount} new symbol{newBuyCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={thStyle}>Symbol</th>
+                    <th style={{ ...thStyle, minWidth: '160px' }}>Symbol</th>
                     <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>WAP</th>
@@ -105,36 +180,7 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {buys.map((t, i) => {
-                    const globalIdx = transactions.indexOf(transactions.filter(x => x.action === 'Buy')[i]);
-                    const charges = t.net_total_after_levies - (t.wap * t.quantity);
-                    return (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border-light, rgba(255,255,255,0.05))' }}>
-                        <td style={tdStyle}>
-                          <input
-                            type="text"
-                            value={t.symbol}
-                            onChange={(e) => handleSymbolChange(globalIdx, e.target.value)}
-                            style={{
-                              background: 'var(--bg-input)', color: 'var(--text)',
-                              border: '1px solid var(--border)', borderRadius: '3px',
-                              padding: '2px 6px', fontSize: '12px', fontWeight: 600,
-                              width: '100px',
-                            }}
-                          />
-                        </td>
-                        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '180px' }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
-                          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{t.quantity}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.wap)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(t.effective_price)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.net_total_after_levies)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(charges)}</td>
-                      </tr>
-                    );
-                  })}
+                  {buys.map((t, i) => renderRow(t, i, 'Buy'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
                     <td style={tdStyle} colSpan={2}>Total Buys</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{buys.reduce((s, t) => s + t.quantity, 0)}</td>
@@ -153,14 +199,23 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
             <>
               <div style={{
                 fontSize: '13px', fontWeight: 600, color: 'var(--red)',
-                marginBottom: '8px',
+                marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px',
               }}>
                 SELL Transactions ({sells.length})
+                {newSellCount > 0 && (
+                  <span style={{
+                    fontSize: '10px', fontWeight: 600, color: '#ef4444',
+                    background: 'rgba(239,68,68,0.12)', padding: '2px 7px',
+                    borderRadius: '8px',
+                  }}>
+                    {newSellCount} new symbol{newSellCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={thStyle}>Symbol</th>
+                    <th style={{ ...thStyle, minWidth: '160px' }}>Symbol</th>
                     <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>WAP</th>
@@ -170,36 +225,7 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sells.map((t, i) => {
-                    const globalIdx = transactions.indexOf(transactions.filter(x => x.action === 'Sell')[i]);
-                    const charges = (t.wap * t.quantity) - t.net_total_after_levies;
-                    return (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border-light, rgba(255,255,255,0.05))' }}>
-                        <td style={tdStyle}>
-                          <input
-                            type="text"
-                            value={t.symbol}
-                            onChange={(e) => handleSymbolChange(globalIdx, e.target.value)}
-                            style={{
-                              background: 'var(--bg-input)', color: 'var(--text)',
-                              border: '1px solid var(--border)', borderRadius: '3px',
-                              padding: '2px 6px', fontSize: '12px', fontWeight: 600,
-                              width: '100px',
-                            }}
-                          />
-                        </td>
-                        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '180px' }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
-                          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{t.quantity}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.wap)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(t.effective_price)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.net_total_after_levies)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(charges)}</td>
-                      </tr>
-                    );
-                  })}
+                  {sells.map((t, i) => renderRow(t, i, 'Sell'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
                     <td style={tdStyle} colSpan={2}>Total Sells</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{sells.reduce((s, t) => s + t.quantity, 0)}</td>

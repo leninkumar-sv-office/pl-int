@@ -418,6 +418,7 @@ export default function App() {
       {importPreview && (
         <ImportPreviewModal
           data={importPreview}
+          existingSymbols={new Set(stockSummary.map(s => s.symbol))}
           onConfirm={handleConfirmImport}
           onCancel={() => setImportPreview(null)}
         />
