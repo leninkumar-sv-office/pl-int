@@ -39,118 +39,243 @@ _NUM_PATTERN = re.compile(r'-?[\d,]+\.[\d]+|-?[\d,]+')
 
 
 def _derive_symbol(name: str) -> str:
-    """Derive a stock symbol from the contract note security name."""
+    """Derive a stock symbol from the contract note security name.
+
+    Heuristic: use the first word of the cleaned name (most NSE symbols
+    are the first word of the company name). Falls back to concatenating
+    first two words if the first word is too short (≤2 chars).
+    """
     cleaned = name.upper()
-    for suffix in [" LIMITED", " LTD", " ENTER. L", " CORP", " OF INDIA"]:
+    for suffix in [" LIMITED", " LTD", " ENTER. L", " CORP", " OF INDIA",
+                   " INDUSTRIES", " INFRASTRUCTURE", " TECHNOLOGIES",
+                   " PHARMA", " FINANCIAL", " SERVICES", " HOLDINGS"]:
         cleaned = cleaned.replace(suffix, "")
     cleaned = re.sub(r'[^A-Z0-9 ]', '', cleaned).strip()
     parts = cleaned.split()
+    if not parts:
+        return "UNKNOWN"
     if len(parts) == 1:
-        return parts[0][:15]
-    return "".join(parts)[:15]
+        return parts[0][:20]
+    # Most NSE symbols are first word (AFCONS, RELIANCE, TATA, etc.)
+    if len(parts[0]) > 2:
+        return parts[0][:20]
+    # Very short first word → join first two
+    return (parts[0] + parts[1])[:20]
 
 
-# ── Zerodha Kite Instruments CSV → ISIN lookup ──
-_ZERODHA_ISIN_MAP: Dict[str, Tuple[str, str, str]] = {}
-_ZERODHA_LOADED_AT: float = 0  # timestamp of last successful load
-_ZERODHA_TTL = 86400  # re-download after 24 hours
+# ── ISIN → Symbol lookup (NSE equity list + Zerodha instruments) ──
+_ISIN_SYMBOL_MAP: Dict[str, Tuple[str, str, str]] = {}
+_ISIN_MAP_LOADED_OK: bool = False
+_ISIN_MAP_LOADED_AT: float = 0
+_ISIN_MAP_TTL = 86400  # re-download after 24 hours
+
+# Zerodha name → tradingsymbol map (built from instruments CSV)
+_ZERODHA_NAME_MAP: Dict[str, str] = {}
+
+# Data sources for ISIN → symbol mapping
+_NSE_EQUITY_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+_ZERODHA_INSTRUMENTS_URL = "https://api.kite.trade/instruments"
+
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
-def _load_zerodha_instruments():
-    """Download and parse Zerodha's instruments CSV into an ISIN → symbol map.
+def _normalize_name(name: str) -> str:
+    """Normalize company name for matching (uppercase, strip common suffixes)."""
+    n = name.upper().strip()
+    for suffix in [" LIMITED", " LTD", " LTD.", " PRIVATE", " PVT",
+                   " PVT.", " INC", " INC.", " CORP", " CORP."]:
+        if n.endswith(suffix):
+            n = n[:-len(suffix)].strip()
+    return n
 
-    CSV columns: instrument_token, exchange_token, tradingsymbol, name,
-                 last_price, expiry, strike, tick_size, lot_size,
-                 instrument_type, segment, exchange, isin
 
-    We filter for exchange=NSE or exchange=BSE, instrument_type=EQ (equity).
-    Prefer NSE over BSE for the same ISIN.
-    Re-downloads if data is older than 24 hours.
+def _load_isin_map():
+    """Download ISIN → symbol mapping from NSE and Zerodha. Called ONCE.
+
+    Sources (tried in order, results merged):
+      1. NSE EQUITY_L.csv — has ISIN NUMBER + SYMBOL for all NSE-listed equities
+      2. Zerodha instruments CSV — has tradingsymbol + name (no ISIN column)
+         Used to build name→symbol fallback for stocks not in NSE list.
     """
     import time as _time
-    global _ZERODHA_LOADED_AT
+    global _ISIN_MAP_LOADED_OK, _ISIN_MAP_LOADED_AT
 
     now = _time.time()
-    if _ZERODHA_ISIN_MAP and (now - _ZERODHA_LOADED_AT) < _ZERODHA_TTL:
-        return  # still fresh
+    if _ISIN_MAP_LOADED_OK and (now - _ISIN_MAP_LOADED_AT) < _ISIN_MAP_TTL:
+        return
+    if not _ISIN_MAP_LOADED_OK and _ISIN_MAP_LOADED_AT and (now - _ISIN_MAP_LOADED_AT) < 60:
+        return
 
-    _ZERODHA_LOADED_AT = now  # prevent rapid retries on failure
-    _ZERODHA_ISIN_MAP.clear()  # clear stale data before fresh download
+    _ISIN_MAP_LOADED_AT = now
+    _ISIN_SYMBOL_MAP.clear()
+    _ZERODHA_NAME_MAP.clear()
 
+    import urllib.request
+    import csv
+    import io
+
+    loaded_count = 0
+
+    # ── Source 1: NSE EQUITY_L.csv ──
+    # Columns: SYMBOL, NAME OF COMPANY,  SERIES, DATE OF LISTING, PAID UP VALUE,
+    #          MARKET LOT, ISIN NUMBER, FACE VALUE
     try:
-        import urllib.request
-        import csv
-        import io
-
-        url = "https://api.kite.trade/instruments"
-        print(f"[ContractNote] Downloading Zerodha instruments CSV...")
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0",
+        print("[ContractNote] Downloading NSE equity list (EQUITY_L.csv)...")
+        req = urllib.request.Request(_NSE_EQUITY_URL, headers={
+            "User-Agent": _BROWSER_UA,
+            "Accept": "text/csv,text/plain,*/*",
+            "Referer": "https://www.nseindia.com/",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "identity",
         })
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read().decode("utf-8")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
 
         reader = csv.DictReader(io.StringIO(raw))
-        bse_entries: Dict[str, Tuple[str, str, str]] = {}
+        if reader.fieldnames:
+            print(f"[ContractNote] NSE CSV columns: {reader.fieldnames}")
 
         for row in reader:
-            isin = (row.get("isin") or "").strip()
-            if not isin or not (isin.startswith("INE") or isin.startswith("INF")):
+            # Column names have trailing spaces in NSE CSV
+            isin = ""
+            symbol = ""
+            name = ""
+            for k, v in row.items():
+                kl = k.strip().upper()
+                if "ISIN" in kl:
+                    isin = (v or "").strip()
+                elif kl == "SYMBOL":
+                    symbol = (v or "").strip()
+                elif "NAME" in kl and "COMPANY" in kl:
+                    name = (v or "").strip()
+
+            if not isin or not symbol:
+                continue
+            if not (isin.startswith("INE") or isin.startswith("INF")):
                 continue
 
-            exchange = (row.get("exchange") or "").strip()
-            instrument_type = (row.get("instrument_type") or "").strip()
+            _ISIN_SYMBOL_MAP[isin] = (symbol, "NSE", name)
+            loaded_count += 1
 
-            # Only equity instruments
+        print(f"[ContractNote] NSE equity list: {loaded_count} ISIN mappings")
+
+    except Exception as e:
+        print(f"[ContractNote] NSE equity list failed: {e}")
+
+    # ── Source 2: Zerodha instruments (name→symbol fallback) ──
+    # Zerodha CSV has no ISIN column, but has tradingsymbol + name.
+    # We build a normalized name → symbol map for fuzzy matching.
+    try:
+        print("[ContractNote] Downloading Zerodha instruments CSV...")
+        req = urllib.request.Request(_ZERODHA_INSTRUMENTS_URL, headers={
+            "User-Agent": _BROWSER_UA,
+        })
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+
+        reader = csv.DictReader(io.StringIO(raw))
+        if reader.fieldnames:
+            print(f"[ContractNote] Zerodha CSV columns: {reader.fieldnames}")
+
+        zerodha_nse_count = 0
+        for row in reader:
+            instrument_type = (row.get("instrument_type") or "").strip()
+            exchange = (row.get("exchange") or "").strip()
             if instrument_type != "EQ":
                 continue
             if exchange not in ("NSE", "BSE"):
                 continue
-
-            symbol = (row.get("tradingsymbol") or "").strip()
+            tradingsymbol = (row.get("tradingsymbol") or "").strip()
             name = (row.get("name") or "").strip()
-            if not symbol:
+            if not tradingsymbol or not name:
                 continue
 
-            if exchange == "NSE":
-                # NSE takes priority — overwrite any BSE entry
-                _ZERODHA_ISIN_MAP[isin] = (symbol, "NSE", name)
-            elif exchange == "BSE" and isin not in _ZERODHA_ISIN_MAP:
-                bse_entries[isin] = (symbol, "BSE", name)
+            # Normalize name for matching: uppercase, strip suffixes
+            norm = _normalize_name(name)
+            # NSE preferred over BSE
+            if exchange == "NSE" or norm not in _ZERODHA_NAME_MAP:
+                _ZERODHA_NAME_MAP[norm] = tradingsymbol
+            zerodha_nse_count += 1
 
-        # Add BSE entries that have no NSE counterpart
-        for isin, info in bse_entries.items():
-            if isin not in _ZERODHA_ISIN_MAP:
-                _ZERODHA_ISIN_MAP[isin] = info
-
-        print(f"[ContractNote] Zerodha instruments loaded: {len(_ZERODHA_ISIN_MAP)} ISIN mappings")
+        print(f"[ContractNote] Zerodha instruments: {zerodha_nse_count} equity entries, "
+              f"{len(_ZERODHA_NAME_MAP)} unique name mappings")
 
     except Exception as e:
-        print(f"[ContractNote] Failed to load Zerodha instruments: {e}")
+        print(f"[ContractNote] Zerodha instruments failed: {e}")
+
+    _ISIN_MAP_LOADED_OK = len(_ISIN_SYMBOL_MAP) > 0 or len(_ZERODHA_NAME_MAP) > 0
+    print(f"[ContractNote] Total ISIN mappings: {len(_ISIN_SYMBOL_MAP)}, "
+          f"Zerodha name mappings: {len(_ZERODHA_NAME_MAP)}")
 
 
-def _lookup_isin_zerodha(isin: str) -> Optional[Tuple[str, str, str]]:
-    """Look up ISIN → (symbol, exchange, name) from Zerodha instruments data."""
-    _load_zerodha_instruments()
-    return _ZERODHA_ISIN_MAP.get(isin)
+def _ensure_isin_map_loaded():
+    """Ensure ISIN map is loaded. Call once before batch lookups."""
+    _load_isin_map()
+
+
+def _lookup_isin(isin: str) -> Optional[Tuple[str, str, str]]:
+    """Look up ISIN → (symbol, exchange, name) from already-loaded map."""
+    return _ISIN_SYMBOL_MAP.get(isin)
+
+
+def _lookup_by_name(sec_name: str) -> Optional[str]:
+    """Look up tradingsymbol from Zerodha name map by normalized name match.
+
+    Tries exact normalized match first, then partial match.
+    Returns the tradingsymbol or None.
+    """
+    if not _ZERODHA_NAME_MAP:
+        return None
+
+    norm = _normalize_name(sec_name)
+    # Exact match
+    if norm in _ZERODHA_NAME_MAP:
+        return _ZERODHA_NAME_MAP[norm]
+
+    # Partial match: contract note name "contains" a Zerodha name or vice versa
+    # E.g., contract note: "AFCONS INFRASTRUCTURE" → Zerodha: "AFCONS INFRA"
+    best_match = None
+    best_len = 0
+    for zname, zsymbol in _ZERODHA_NAME_MAP.items():
+        if zname in norm or norm in zname:
+            # Prefer longest match to avoid false positives
+            if len(zname) > best_len:
+                best_match = zsymbol
+                best_len = len(zname)
+    return best_match
 
 
 def _resolve_symbol(isin: str, sec_name: str,
                     exchange_map: Dict[str, str]) -> Tuple[str, str, str]:
     """Resolve symbol, exchange, and company name from ISIN.
 
-    Priority: Zerodha instruments CSV (fresh) → _derive_symbol fallback.
-    No hardcoded map — always fetches live data from Zerodha.
+    Uses the already-loaded ISIN map (call _ensure_isin_map_loaded()
+    once before any batch of calls to this function).
+
+    Lookup order:
+      1. ISIN → symbol from NSE equity list (primary, has ISIN column)
+      2. Name → symbol from Zerodha instruments (secondary, fuzzy name match)
+      3. Fallback: derive from security name heuristic
     """
-    # 1. Zerodha Kite instruments CSV (comprehensive, covers all NSE/BSE stocks)
-    zerodha_info = _lookup_isin_zerodha(isin)
-    if zerodha_info:
-        symbol, default_exchange, company_name = zerodha_info
+    # 1. ISIN map (NSE equity list — has ISIN NUMBER + SYMBOL)
+    isin_info = _lookup_isin(isin)
+    if isin_info:
+        symbol, default_exchange, company_name = isin_info
         exchange = exchange_map.get(isin, default_exchange)
-        print(f"[ContractNote] Zerodha ISIN lookup: {isin} → {symbol} ({exchange})")
         return symbol, exchange, company_name
 
-    # 2. Fallback: derive from security name
+    # 2. Zerodha name → symbol fallback
+    zerodha_symbol = _lookup_by_name(sec_name)
+    if zerodha_symbol:
+        exchange = exchange_map.get(isin, "NSE")
+        print(f"[ContractNote] Resolved '{sec_name}' → {zerodha_symbol} via Zerodha name match")
+        return zerodha_symbol, exchange, sec_name.title()
+
+    # 3. Last resort: derive from security name
     symbol = _derive_symbol(sec_name)
     default_exchange = "NSE"
     company_name = sec_name.title()
@@ -584,6 +709,9 @@ def parse_contract_note(pdf_path: str) -> dict:
             "summary": {"buys": 25, "sells": 3, "total": 28},
         }
     """
+    # Load ISIN map ONCE upfront (NSE equity list + Zerodha instruments)
+    _ensure_isin_map_loaded()
+
     # Extract text with layout mode for metadata
     text = extract_text_from_pdf(pdf_path, layout=True)
 
