@@ -138,8 +138,18 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
       {/* ── Held Lots sub-table ────────────────────────── */}
       {heldLots.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)' }}>
-            Held Lots ({heldLots.length})
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span>Held Lots ({heldLots.length})</span>
+            <span style={{ display: 'flex', gap: '8px', fontSize: '10px', fontWeight: 500 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#22c55e', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-muted)' }}>LTCG (&gt;1yr)</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#f59e0b', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-muted)' }}>STCG (&le;1yr)</span>
+              </span>
+            </span>
           </div>
           <div style={{
             border: '1px solid var(--border)',
@@ -175,12 +185,19 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                   const lotPL = cp > 0 ? (cp - h.buy_price) * h.quantity : 0;
                   const inProfit = cp > h.buy_price;
                   const isChecked = selectedLots.has(h.id);
+                  const _daysSinceBuy = h.buy_date ? Math.floor((Date.now() - new Date(h.buy_date).getTime()) / 86400000) : 0;
+                  const isLTCG = _daysSinceBuy > 365;
+                  const ltcgColor = 'rgba(34,197,94,0.12)';   // green tint
+                  const stcgColor = 'rgba(251,191,36,0.10)';  // amber tint
+                  const ltcgBorder = '#22c55e';
+                  const stcgBorder = '#f59e0b';
                   return (
                     <tr
                       key={h.id}
                       style={{
                         borderBottom: '1px solid var(--border)',
-                        background: isChecked ? 'rgba(59,130,246,0.08)' : undefined,
+                        background: isChecked ? 'rgba(59,130,246,0.08)' : (isLTCG ? ltcgColor : stcgColor),
+                        borderLeft: `3px solid ${isLTCG ? ltcgBorder : stcgBorder}`,
                       }}
                     >
                       <td style={{ textAlign: 'center', padding: '10px 6px', width: '36px' }}>
@@ -191,7 +208,20 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                           style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
                         />
                       </td>
-                      <td style={subTd}>{formatDate(h.buy_date)}</td>
+                      <td style={subTd}>
+                        <div>{formatDate(h.buy_date)}</div>
+                        <span style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          color: isLTCG ? '#22c55e' : '#f59e0b',
+                          background: isLTCG ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.15)',
+                          letterSpacing: '0.5px',
+                        }}>
+                          {isLTCG ? 'LTCG' : 'STCG'}
+                        </span>
+                      </td>
                       <td style={{ ...subTd, fontWeight: 600 }}>{h.quantity}</td>
                       <td style={subTd}>{formatINR(h.price || h.buy_price)}</td>
                       <td style={subTd}>{formatINR(h.buy_price)}</td>
@@ -300,9 +330,9 @@ const COL_DEFS = [
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
   { id: 'unrealizedLoss', label: 'Unrealized Loss', grouped: true },
   { id: 'unrealizedPL',   label: 'Unrealized P/L',  grouped: true },
+  { id: 'status',         label: 'Status',          grouped: false },
   { id: 'realizedPL',     label: 'Realized P&L',    grouped: true },
   { id: 'dividends',      label: 'Dividends',       grouped: false },
-  { id: 'status',         label: 'Status',          grouped: false },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
 const LS_KEY = 'stockSummaryVisibleCols';
@@ -766,13 +796,13 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
               </th>}
+              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Status</th>}
               {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
               </th>}
               {col('dividends') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
                 Dividends<SortIcon field="total_dividend" />
               </th>}
-              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Status</th>}
             </tr>
             {/* Row 2: sortable sub-column headers for visible grouped columns */}
             {hasAnyGroupedCol && <tr>
@@ -1161,6 +1191,39 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       );
                     })()}
 
+                    {col('status') && <td>
+                      {hasHeld && stock.profitable_qty > 0 ? (
+                        <div>
+                          <div className="sell-tag">
+                            ▲ Can Sell {stock.profitable_qty}
+                          </div>
+                          {stock.loss_qty > 0 && (
+                            <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '4px' }}>
+                              {stock.loss_qty} in loss
+                            </div>
+                          )}
+                        </div>
+                      ) : hasHeld ? (
+                        <div>
+                          <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
+                          {stock.loss_qty > 0 && (
+                            <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '2px' }}>
+                              {stock.loss_qty} in loss
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{
+                          fontSize: '11px',
+                          color: 'var(--text-muted)',
+                          background: 'var(--bg-input)',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                        }}>
+                          Fully Sold
+                        </span>
+                      )}
+                    </td>}
                     {/* ── Realized P&L: Total | LTCG | STCG ── */}
                     {col('realizedPL') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
@@ -1224,39 +1287,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         );
                       })() : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>}
-                    {col('status') && <td>
-                      {hasHeld && stock.profitable_qty > 0 ? (
-                        <div>
-                          <div className="sell-tag">
-                            ▲ Can Sell {stock.profitable_qty}
-                          </div>
-                          {stock.loss_qty > 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '4px' }}>
-                              {stock.loss_qty} in loss
-                            </div>
-                          )}
-                        </div>
-                      ) : hasHeld ? (
-                        <div>
-                          <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
-                          {stock.loss_qty > 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--red)', marginTop: '2px' }}>
-                              {stock.loss_qty} in loss
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{
-                          fontSize: '11px',
-                          color: 'var(--text-muted)',
-                          background: 'var(--bg-input)',
-                          padding: '2px 8px',
-                          borderRadius: '10px',
-                        }}>
-                          Fully Sold
-                        </span>
                       )}
                     </td>}
                   </tr>
