@@ -214,27 +214,10 @@ def _update_env(key: str, value: str):
 # Some stocks have different trading symbols on exchanges than what's
 # stored in our xlsx files (due to name changes, demergers, IPO symbols, etc.)
 _KITE_SYMBOL_MAP: Dict[str, str] = {
-    # BSE symbol truncated
+    # BSE symbol truncated (BSE uses max 10 chars)
     "HIGHENERGY.BSE": "BSE:HIGHENE",
-    # Company renamed: Antony Waste Handling Cell → AWHCL
-    "ANTONYWASTE.NSE": "NSE:AWHCL",
-    "ANTONYWASTE.BSE": "BSE:AWHCL",
-    # Company renamed: Majesco → Aurum PropTech (Oct 2021)
+    # Historical file still named "Majesco Ltd.xlsx" but company renamed to Aurum
     "MAJESCO.NSE": "NSE:AURUM",
-    # NSE symbol is AURUM (not AURUMPROP)
-    "AURUMPROP.NSE": "NSE:AURUM",
-    # Tata Capital IPO'd Oct 2025, symbol is TATACAP
-    "TATACAPITAL.NSE": "NSE:TATACAP",
-    # Priti International — NSE symbol is PRITI
-    "PRITIINTER.NSE": "NSE:PRITI",
-    # Tata Motors demerged Oct 2025: PV business = TMPV, CV business = TMCV
-    "TATAMOTORS.NSE": "NSE:TMPV",
-    "TATAMOTORS.BSE": "BSE:TMPV",
-    # LG Electronics India IPO'd Oct 2025, symbol is LGEINDIA
-    "LGEELECTRO.NSE": "NSE:LGEINDIA",
-    "LGEELECTRO.BSE": "BSE:LGEINDIA",
-    # Nippon India Silver ETF — symbol is SILVERBEES
-    "NIPPONSILV.NSE": "NSE:SILVERBEES",
 }
 
 

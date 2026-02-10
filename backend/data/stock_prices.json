@@ -1068,5 +1068,75 @@
     "day_change_pct": 1.18,
     "volume": 439830,
     "previous_close": 777.6
+  },
+  "LGEINDIA.NSE": {
+    "price": 1542.1,
+    "name": "LG Electronics India",
+    "week_52_high": 1566.0,
+    "week_52_low": 1512.7,
+    "day_change": 20.8,
+    "day_change_pct": 1.37,
+    "volume": 784324,
+    "previous_close": 1521.3
+  },
+  "TMPV.NSE": {
+    "price": 379.35,
+    "name": "Tata Motors Ltd",
+    "week_52_high": 382.5,
+    "week_52_low": 376.75,
+    "day_change": 1.95,
+    "day_change_pct": 0.52,
+    "volume": 8921719,
+    "previous_close": 377.4
+  },
+  "TATACAP.NSE": {
+    "price": 354.95,
+    "name": "TATA Capital",
+    "week_52_high": 358.25,
+    "week_52_low": 350.3,
+    "day_change": 3.8,
+    "day_change_pct": 1.08,
+    "volume": 2242653,
+    "previous_close": 351.15
+  },
+  "PRITI.NSE": {
+    "price": 52.98,
+    "name": "Priti International Ltd",
+    "week_52_high": 53.88,
+    "week_52_low": 52.0,
+    "day_change": 1.11,
+    "day_change_pct": 2.14,
+    "volume": 9022,
+    "previous_close": 51.87
+  },
+  "AWHCL.BSE": {
+    "price": 528.65,
+    "name": "Antony Waste Handling Cell Ltd",
+    "week_52_high": 544.0,
+    "week_52_low": 525.55,
+    "day_change": -1.8,
+    "day_change_pct": -0.34,
+    "volume": 8815,
+    "previous_close": 530.45
+  },
+  "SILVERBEES.NSE": {
+    "price": 243.82,
+    "name": "Nippon Silver",
+    "week_52_high": 244.75,
+    "week_52_low": 240.24,
+    "day_change": 0.12,
+    "day_change_pct": 0.05,
+    "volume": 64114549,
+    "previous_close": 243.7
+  },
+  "AWHCL.NSE": {
+    "price": 527.5,
+    "name": "Antony Waste Handling Cell Ltd",
+    "week_52_high": 541.05,
+    "week_52_low": 525.3,
+    "day_change": -3.0,
+    "day_change_pct": -0.57,
+    "volume": 113306,
+    "previous_close": 530.5
   }
 }
