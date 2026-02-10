@@ -1101,8 +1101,9 @@ class XlsxPortfolio:
             ws.cell(insert_at, 4, value=tx.quantity)
             # E: PRICE
             ws.cell(insert_at, 5, value=tx.price)
-            # F: COST
-            ws.cell(insert_at, 6, value=round(tx.price * tx.quantity, 2))
+            # F: COST (use explicit cost if provided, else compute from price * qty)
+            cost_val = tx.cost if tx.cost > 0 else round(tx.price * tx.quantity, 2)
+            ws.cell(insert_at, 6, value=cost_val)
             # G: REMARKS
             ws.cell(insert_at, 7, value=tx.remarks or "~")
             # H: STT

@@ -289,13 +289,15 @@ const subTd = {
 
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions }) {
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote }) {
   const [sortField, setSortField] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideZeroHeld, setHideZeroHeld] = useState(true);
   const searchRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
   // Bulk selection tracks individual lot (holding) IDs
   const [selectedLots, setSelectedLots] = useState(new Set());
 
@@ -467,6 +469,26 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
   const TOTAL_COLS = 16; // number of columns in the main table
 
+  // ── Contract Note PDF Import ─────────────────────────
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      return;
+    }
+    if (!onImportContractNote) return;
+    setImporting(true);
+    try {
+      await onImportContractNote(file);
+    } catch (err) {
+      // Error toast is handled in the parent
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // Count selected lots info for the action bar
   const selectedCount = selectedLots.size;
   const selectedQty = selectedCount > 0
@@ -489,6 +511,32 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           <span className="section-badge" style={{ background: 'var(--red-bg)', color: 'var(--red)' }}>
             {inLoss} in loss
           </span>
+          {/* PDF Import Button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            style={{
+              padding: '4px 12px',
+              fontSize: '12px',
+              background: importing ? 'var(--bg-input)' : 'var(--blue)',
+              color: importing ? 'var(--text-muted)' : '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              cursor: importing ? 'wait' : 'pointer',
+              whiteSpace: 'nowrap',
+              opacity: importing ? 0.7 : 1,
+            }}
+            title="Import transactions from SBICAP Securities contract note PDF"
+          >
+            {importing ? 'Importing...' : 'Import PDF'}
+          </button>
         </div>
       </div>
 

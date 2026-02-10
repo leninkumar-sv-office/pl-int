@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -11,6 +11,7 @@ import TransactionHistory from './components/TransactionHistory';
 import Charts from './components/Charts';
 import MarketTicker from './components/MarketTicker';
 import DividendModal from './components/DividendModal';
+import ImportPreviewModal from './components/ImportPreviewModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -33,6 +34,7 @@ export default function App() {
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  const [importPreview, setImportPreview] = useState(null); // parsed contract note preview
 
   // Read cached data from backend (fast, no external calls)
   // Uses allSettled so one failing endpoint doesn't block the rest
@@ -188,6 +190,39 @@ export default function App() {
     }
   };
 
+  // Step 1: Parse PDF → show preview modal
+  const handleParseContractNote = async (file) => {
+    try {
+      const parsed = await parseContractNote(file);
+      setImportPreview(parsed);  // opens the preview modal
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Failed to parse contract note';
+      toast.error(msg, { duration: 5000 });
+      throw err;
+    }
+  };
+
+  // Step 2: User confirms → actually import
+  const handleConfirmImport = async () => {
+    if (!importPreview?._payload) return;
+    try {
+      const result = await confirmImportContractNote(importPreview._payload);
+      const { imported, errors } = result;
+      toast.success(
+        `Imported ${imported.buys} buys, ${imported.sells} sells from ${result.trade_date}`,
+        { duration: 5000 }
+      );
+      if (errors && errors.length > 0) {
+        toast.error(`${errors.length} error(s): ${errors[0]}`, { duration: 5000 });
+      }
+      setImportPreview(null);
+      loadData();
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Failed to import contract note';
+      toast.error(msg, { duration: 5000 });
+    }
+  };
+
   const handleRefresh = async () => {
     setLoading(true);
     await liveRefresh();
@@ -312,6 +347,7 @@ export default function App() {
           onBulkSell={(items) => setBulkSellItems(items)}
           onAddStock={(stockData) => setAddModalData(stockData || {})}
           onDividend={(data) => setDividendTarget(data)}
+          onImportContractNote={handleParseContractNote}
         />
       )}
 
@@ -363,6 +399,14 @@ export default function App() {
           exchange={dividendTarget.exchange}
           onSubmit={handleAddDividend}
           onClose={() => setDividendTarget(null)}
+        />
+      )}
+
+      {importPreview && (
+        <ImportPreviewModal
+          data={importPreview}
+          onConfirm={handleConfirmImport}
+          onCancel={() => setImportPreview(null)}
         />
       )}
     </div>

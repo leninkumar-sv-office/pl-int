@@ -16,12 +16,13 @@ import traceback
 
 from .models import (
     AddStockRequest, SellStockRequest, AddDividendRequest, ManualPriceRequest,
-    Holding, SoldPosition, StockLiveData,
+    Holding, SoldPosition, StockLiveData, Transaction,
     PortfolioSummary, HoldingWithLive, StockSummaryItem,
 )
 from .xlsx_database import xlsx_db as db
 from . import stock_service
 from . import zerodha_service
+from . import contract_note_parser
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -241,6 +242,181 @@ def add_dividend(req: AddDividendRequest):
         raise HTTPException(status_code=404, detail=f"No xlsx file found for {req.symbol}")
     return {
         "message": f"Dividend of ₹{req.amount:.2f} recorded for {req.symbol.upper()}",
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  CONTRACT NOTE PDF IMPORT
+# ══════════════════════════════════════════════════════════
+
+class ContractNoteUpload(BaseModel):
+    """PDF file as base64-encoded string (avoids python-multipart dependency)."""
+    pdf_base64: str
+    filename: str = "contract_note.pdf"
+
+
+def _decode_and_parse_pdf(req: ContractNoteUpload) -> dict:
+    """Shared helper: decode base64 PDF and parse contract note."""
+    import base64
+
+    if not req.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
+    try:
+        pdf_bytes = base64.b64decode(req.pdf_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
+
+    try:
+        return contract_note_parser.parse_contract_note_from_bytes(pdf_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[Import] PDF parse error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)[:200]}")
+
+
+@app.post("/api/portfolio/parse-contract-note")
+def parse_contract_note_preview(req: ContractNoteUpload):
+    """Parse a contract note PDF and return a preview — no data is written.
+
+    Use this to show the user what will be imported before confirming.
+    """
+    parsed = _decode_and_parse_pdf(req)
+    return parsed
+
+
+@app.post("/api/portfolio/import-contract-note")
+def import_contract_note(req: ContractNoteUpload):
+    """Import transactions from an SBICAP Securities contract note PDF.
+
+    Parses Annexure B to extract per-stock buy/sell transactions with
+    all-inclusive pricing (WAP + brokerage + GST + STT + other levies).
+    Accepts PDF as base64-encoded string in JSON body.
+    """
+    parsed = _decode_and_parse_pdf(req)
+
+    trade_date = parsed["trade_date"]
+    contract_no = parsed.get("contract_no", "")
+    transactions = parsed["transactions"]
+
+    if not transactions:
+        return {
+            "message": "No transactions found in the contract note",
+            "trade_date": trade_date,
+            "imported": {"buys": 0, "sells": 0},
+        }
+
+    imported_buys = []
+    imported_sells = []
+    errors = []
+
+    for tx in transactions:
+        try:
+            remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
+
+            if tx["action"] == "Buy":
+                # Create holding with WAP in price column, net_after in cost column
+                holding = Holding(
+                    id="temp",
+                    symbol=tx["symbol"],
+                    exchange=tx["exchange"],
+                    name=tx["name"],
+                    quantity=tx["quantity"],
+                    price=tx["wap"],
+                    buy_price=tx["effective_price"],
+                    buy_cost=tx["net_total_after_levies"],
+                    buy_date=tx["trade_date"],
+                    notes=remark,
+                )
+
+                # Use _insert_transaction directly for precise cost control
+                filepath = db._find_file_for_symbol(tx["symbol"])
+                if filepath is None:
+                    filepath = db._create_stock_file(
+                        tx["symbol"], tx["exchange"], tx["name"]
+                    )
+
+                buy_tx = Transaction(
+                    date=tx["trade_date"],
+                    exchange=tx["exchange"],
+                    action="Buy",
+                    quantity=tx["quantity"],
+                    price=tx["wap"],           # Column E: raw WAP
+                    cost=tx["net_total_after_levies"],  # Column F: all-inclusive cost
+                    remarks=remark,
+                    stt=tx["stt"],
+                    add_chrg=tx["add_charges"],
+                )
+                db._insert_transaction(filepath, buy_tx)
+                db._invalidate_symbol(tx["symbol"])
+
+                imported_buys.append({
+                    "symbol": tx["symbol"],
+                    "name": tx["name"],
+                    "quantity": tx["quantity"],
+                    "wap": tx["wap"],
+                    "effective_price": tx["effective_price"],
+                    "total_cost": tx["net_total_after_levies"],
+                })
+
+            elif tx["action"] == "Sell":
+                # Insert Sell row — FIFO matching will handle lot assignment
+                filepath = db._find_file_for_symbol(tx["symbol"])
+                if filepath is None:
+                    errors.append(
+                        f"SELL {tx['symbol']}: No existing holding file found. "
+                        f"Cannot sell without prior buy records."
+                    )
+                    continue
+
+                sell_tx = Transaction(
+                    date=tx["trade_date"],
+                    exchange=tx["exchange"],
+                    action="Sell",
+                    quantity=tx["quantity"],
+                    price=tx["effective_price"],  # Column E: effective sell price
+                    cost=tx["net_total_after_levies"],
+                    remarks=remark,
+                    stt=tx["stt"],
+                    add_chrg=tx["add_charges"],
+                )
+                db._insert_transaction(filepath, sell_tx)
+                db._invalidate_symbol(tx["symbol"])
+
+                imported_sells.append({
+                    "symbol": tx["symbol"],
+                    "name": tx["name"],
+                    "quantity": tx["quantity"],
+                    "wap": tx["wap"],
+                    "effective_price": tx["effective_price"],
+                    "total_proceeds": tx["net_total_after_levies"],
+                })
+
+        except Exception as e:
+            error_msg = f"{tx['action']} {tx['symbol']}: {str(e)[:100]}"
+            errors.append(error_msg)
+            print(f"[Import] Error: {error_msg}")
+            traceback.print_exc()
+
+    # Reindex to pick up any new files
+    db.reindex()
+
+    return {
+        "message": (
+            f"Imported {len(imported_buys)} buys, {len(imported_sells)} sells "
+            f"from contract note dated {trade_date}"
+        ),
+        "trade_date": trade_date,
+        "contract_no": contract_no,
+        "imported": {
+            "buys": len(imported_buys),
+            "sells": len(imported_sells),
+            "buy_details": imported_buys,
+            "sell_details": imported_sells,
+        },
+        "errors": errors if errors else None,
     }
 
 

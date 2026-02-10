@@ -77,6 +77,35 @@ export async function addDividend(dividendData) {
   return data;
 }
 
+// ── Contract Note Import ─────────────────────────────
+
+function _readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const b64 = result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function parseContractNote(file) {
+  const base64 = await _readFileAsBase64(file);
+  const payload = { pdf_base64: base64, filename: file.name };
+  const { data } = await api.post('/portfolio/parse-contract-note', payload, { timeout: 120000 });
+  // Attach the payload so we can reuse it for the confirm step
+  data._payload = payload;
+  return data;
+}
+
+export async function confirmImportContractNote(payload) {
+  const { data } = await api.post('/portfolio/import-contract-note', payload, { timeout: 120000 });
+  return data;
+}
+
 // ── Market Ticker ────────────────────────────────────
 
 export async function getMarketTicker() {
