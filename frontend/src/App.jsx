@@ -209,11 +209,17 @@ export default function App() {
     }
   };
 
-  // Step 2: User confirms → actually import
-  const handleConfirmImport = async () => {
-    if (!importPreview?._payload) return;
+  // Step 2: User confirms → actually import (with possibly edited transactions)
+  const handleConfirmImport = async (editedTransactions) => {
+    if (!importPreview) return;
     try {
-      const result = await confirmImportContractNote(importPreview._payload);
+      // Send the parsed data with (possibly edited) transactions directly
+      const payload = {
+        trade_date: importPreview.trade_date,
+        contract_no: importPreview.contract_no,
+        transactions: editedTransactions || importPreview.transactions,
+      };
+      const result = await confirmImportContractNote(payload);
       const { imported, errors } = result;
       toast.success(
         `Imported ${imported.buys} buys, ${imported.sells} sells from ${result.trade_date}`,

@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import date, datetime
 import os
 import json
@@ -401,6 +401,119 @@ def import_contract_note(req: ContractNoteUpload):
             traceback.print_exc()
 
     # Reindex to pick up any new files
+    db.reindex()
+
+    return {
+        "message": (
+            f"Imported {len(imported_buys)} buys, {len(imported_sells)} sells "
+            f"from contract note dated {trade_date}"
+        ),
+        "trade_date": trade_date,
+        "contract_no": contract_no,
+        "imported": {
+            "buys": len(imported_buys),
+            "sells": len(imported_sells),
+            "buy_details": imported_buys,
+            "sell_details": imported_sells,
+        },
+        "errors": errors if errors else None,
+    }
+
+
+class ConfirmedImportPayload(BaseModel):
+    """Payload for the confirmed import — pre-parsed and possibly user-edited transactions."""
+    trade_date: str
+    contract_no: Optional[str] = ""
+    transactions: list
+
+
+@app.post("/api/portfolio/import-contract-note-confirmed")
+def import_contract_note_confirmed(req: ConfirmedImportPayload):
+    """Import pre-parsed transactions from the preview modal.
+
+    Receives transactions already parsed (and possibly symbol-edited by user).
+    No PDF re-parsing needed.
+    """
+    trade_date = req.trade_date
+    contract_no = req.contract_no or ""
+    transactions = req.transactions
+
+    if not transactions:
+        return {
+            "message": "No transactions to import",
+            "trade_date": trade_date,
+            "imported": {"buys": 0, "sells": 0},
+        }
+
+    imported_buys = []
+    imported_sells = []
+    errors = []
+
+    for tx in transactions:
+        try:
+            remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
+
+            if tx["action"] == "Buy":
+                filepath = db._find_file_for_symbol(tx["symbol"])
+                if filepath is None:
+                    filepath = db._create_stock_file(
+                        tx["symbol"], tx.get("exchange", "NSE"), tx.get("name", tx["symbol"])
+                    )
+
+                buy_tx = Transaction(
+                    date=tx.get("trade_date", trade_date),
+                    exchange=tx.get("exchange", "NSE"),
+                    action="Buy",
+                    quantity=tx["quantity"],
+                    price=tx.get("wap", tx.get("effective_price", 0)),
+                    cost=tx.get("net_total_after_levies", 0),
+                    remarks=remark,
+                    stt=tx.get("stt", 0),
+                    add_chrg=tx.get("add_charges", 0),
+                )
+                db._insert_transaction(filepath, buy_tx)
+                db._invalidate_symbol(tx["symbol"])
+
+                imported_buys.append({
+                    "symbol": tx["symbol"],
+                    "name": tx.get("name", ""),
+                    "quantity": tx["quantity"],
+                })
+
+            elif tx["action"] == "Sell":
+                filepath = db._find_file_for_symbol(tx["symbol"])
+                if filepath is None:
+                    errors.append(
+                        f"SELL {tx['symbol']}: No existing holding file found."
+                    )
+                    continue
+
+                sell_tx = Transaction(
+                    date=tx.get("trade_date", trade_date),
+                    exchange=tx.get("exchange", "NSE"),
+                    action="Sell",
+                    quantity=tx["quantity"],
+                    price=tx.get("effective_price", tx.get("wap", 0)),
+                    cost=tx.get("net_total_after_levies", 0),
+                    remarks=remark,
+                    stt=tx.get("stt", 0),
+                    add_chrg=tx.get("add_charges", 0),
+                )
+                db._insert_transaction(filepath, sell_tx)
+                db._invalidate_symbol(tx["symbol"])
+
+                imported_sells.append({
+                    "symbol": tx["symbol"],
+                    "name": tx.get("name", ""),
+                    "quantity": tx["quantity"],
+                })
+
+        except Exception as e:
+            error_msg = f"{tx.get('action', '?')} {tx.get('symbol', '?')}: {str(e)[:100]}"
+            errors.append(error_msg)
+            print(f"[Import] Error: {error_msg}")
+            traceback.print_exc()
+
     db.reindex()
 
     return {

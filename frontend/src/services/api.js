@@ -102,7 +102,7 @@ export async function parseContractNote(file) {
 }
 
 export async function confirmImportContractNote(payload) {
-  const { data } = await api.post('/portfolio/import-contract-note', payload, { timeout: 120000 });
+  const { data } = await api.post('/portfolio/import-contract-note-confirmed', payload, { timeout: 120000 });
   return data;
 }
 

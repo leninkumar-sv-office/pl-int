@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -7,20 +7,32 @@ const formatINR = (num) => {
 
 export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
   const [confirming, setConfirming] = useState(false);
+  // Editable symbol overrides: { index: newSymbol }
+  const [symbolEdits, setSymbolEdits] = useState({});
 
   if (!data) return null;
 
   const { trade_date, contract_no, transactions, summary } = data;
-  const buys = transactions.filter(t => t.action === 'Buy');
-  const sells = transactions.filter(t => t.action === 'Sell');
+
+  // Apply symbol edits to transactions before filtering
+  const editedTransactions = transactions.map((t, i) =>
+    symbolEdits[i] !== undefined ? { ...t, symbol: symbolEdits[i] } : t
+  );
+
+  const buys = editedTransactions.filter(t => t.action === 'Buy');
+  const sells = editedTransactions.filter(t => t.action === 'Sell');
 
   const totalBuyCost = buys.reduce((s, t) => s + t.net_total_after_levies, 0);
   const totalSellProceeds = sells.reduce((s, t) => s + t.net_total_after_levies, 0);
 
+  const handleSymbolChange = useCallback((globalIdx, value) => {
+    setSymbolEdits(prev => ({ ...prev, [globalIdx]: value.toUpperCase() }));
+  }, []);
+
   const handleConfirm = async () => {
     setConfirming(true);
     try {
-      await onConfirm();
+      await onConfirm(editedTransactions);
     } finally {
       setConfirming(false);
     }
@@ -84,7 +96,7 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <th style={thStyle}>Symbol</th>
-                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>WAP</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Effective Price</th>
@@ -94,11 +106,27 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
                 </thead>
                 <tbody>
                   {buys.map((t, i) => {
+                    const globalIdx = transactions.indexOf(transactions.filter(x => x.action === 'Buy')[i]);
                     const charges = t.net_total_after_levies - (t.wap * t.quantity);
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid var(--border-light, rgba(255,255,255,0.05))' }}>
-                        <td style={tdStyle}>{t.symbol}</td>
-                        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</td>
+                        <td style={tdStyle}>
+                          <input
+                            type="text"
+                            value={t.symbol}
+                            onChange={(e) => handleSymbolChange(globalIdx, e.target.value)}
+                            style={{
+                              background: 'var(--bg-input)', color: 'var(--text)',
+                              border: '1px solid var(--border)', borderRadius: '3px',
+                              padding: '2px 6px', fontSize: '12px', fontWeight: 600,
+                              width: '100px',
+                            }}
+                          />
+                        </td>
+                        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '180px' }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
+                        </td>
                         <td style={{ ...tdStyle, textAlign: 'right' }}>{t.quantity}</td>
                         <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.wap)}</td>
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(t.effective_price)}</td>
@@ -133,7 +161,7 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <th style={thStyle}>Symbol</th>
-                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>WAP</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Effective Price</th>
@@ -143,11 +171,27 @@ export default function ImportPreviewModal({ data, onConfirm, onCancel }) {
                 </thead>
                 <tbody>
                   {sells.map((t, i) => {
+                    const globalIdx = transactions.indexOf(transactions.filter(x => x.action === 'Sell')[i]);
                     const charges = (t.wap * t.quantity) - t.net_total_after_levies;
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid var(--border-light, rgba(255,255,255,0.05))' }}>
-                        <td style={tdStyle}>{t.symbol}</td>
-                        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</td>
+                        <td style={tdStyle}>
+                          <input
+                            type="text"
+                            value={t.symbol}
+                            onChange={(e) => handleSymbolChange(globalIdx, e.target.value)}
+                            style={{
+                              background: 'var(--bg-input)', color: 'var(--text)',
+                              border: '1px solid var(--border)', borderRadius: '3px',
+                              padding: '2px 6px', fontSize: '12px', fontWeight: 600,
+                              width: '100px',
+                            }}
+                          />
+                        </td>
+                        <td style={{ ...tdStyle, color: 'var(--text-dim)', maxWidth: '180px' }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
+                        </td>
                         <td style={{ ...tdStyle, textAlign: 'right' }}>{t.quantity}</td>
                         <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.wap)}</td>
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(t.effective_price)}</td>

@@ -24,60 +24,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 
-# ═══════════════════════════════════════════════════════════
-#  ISIN → NSE/BSE Symbol Mapping
-# ═══════════════════════════════════════════════════════════
-
-ISIN_MAP: Dict[str, Tuple[str, str, str]] = {
-    # ISIN: (symbol, exchange, company_name)
-    # ── A ──
-    "INE018A01030": ("ADANIENT", "NSE", "Adani Enterprises Ltd"),
-    "INE814H01029": ("ADANIPOWER", "NSE", "Adani Power Ltd"),
-    "INE101I01011": ("AFCONS", "NSE", "Afcons Infrastructure Ltd"),
-    "INE437A01024": ("APOLLOHOSP", "NSE", "Apollo Hospitals Enterprise Ltd"),
-    "INE871C01038": ("AVANTIFEED", "NSE", "Avanti Feeds Ltd"),
-    "INE04Z101016": ("AWL", "BSE", "Asian Warehousing Limited"),
-    # ── B ──
-    "INE05XR01022": ("BCCL", "NSE", "Bharat Coking Coal Ltd"),
-    "INE397D01024": ("BHARTIARTL", "NSE", "Bharti Airtel Limited"),
-    "INE050A01025": ("BBTC", "NSE", "Bombay Burmah Trading Corporation Ltd"),
-    "INE522F01014": ("COALINDIA", "NSE", "Coal India Ltd"),
-    "INE483A01010": ("CENTRALBK", "NSE", "Central Bank of India"),
-    # ── G-H ──
-    "INE158A01026": ("HEROMOTOCO", "NSE", "Hero MotoCorp Ltd"),
-    # ── I ──
-    "INE335Y01020": ("IRCTC", "NSE", "Indian Rail Tour Corp Ltd"),
-    "INE379A01028": ("ITCHOTELS", "NSE", "ITC Hotels Ltd"),
-    "INE154A01025": ("ITC", "NSE", "ITC Ltd"),
-    "INE053F01010": ("IOC", "NSE", "Indian Oil Corporation Ltd"),
-    # ── J ──
-    "INE758E01017": ("JIOFIN", "NSE", "Jio Financial Services Ltd"),
-    "INE209L01016": ("JWL", "NSE", "Jupiter Wagons Limited"),
-    # ── K ──
-    "INE217B01036": ("KAJARIACER", "NSE", "Kajaria Ceramics Ltd"),
-    # ── L ──
-    "INE324D01010": ("LGEELECTRO", "NSE", "LG Electronics India"),
-    "INE0J1Y01017": ("LICI", "NSE", "Life Insurance Corp of India"),
-    # ── P ──
-    "INE603J01030": ("PIIND", "NSE", "PI Industries Ltd"),
-    # ── R ──
-    "INE415G01027": ("RVNL", "NSE", "Rail Vikas Nigam"),
-    "INE0DD101019": ("RAILTEL", "NSE", "Railtel Corporation of India Ltd"),
-    "INE613A01020": ("RALLIS", "NSE", "Rallis India Ltd"),
-    "INE002A01018": ("RELIANCE", "NSE", "Reliance Industries Ltd"),
-    "INE320J01015": ("RITES", "NSE", "Rites Ltd"),
-    # ── S ──
-    "INF200KA16D8": ("SETFGOLD", "NSE", "SBI ETF Gold"),
-    "INE062A01020": ("SBIN", "NSE", "State Bank of India"),
-    "INE123W01016": ("SBILIFE", "NSE", "SBI Life Insurance Company Ltd"),
-    "INE398R01022": ("SYNGENE", "NSE", "Syngene International Ltd"),
-    # ── T ──
-    "INE092A01019": ("TATACHEM", "NSE", "Tata Chemicals"),
-    "INE615H01020": ("TITAGARH", "NSE", "Titagarh Rail Systems Ltd"),
-    "INE849A01020": ("TRENT", "NSE", "Trent"),
-    "INE155A01022": ("TATAMOTORS", "NSE", "Tata Motors Ltd"),
-    "INE081A01012": ("TATASTEEL", "NSE", "Tata Steel Ltd"),
-}
+# No hardcoded ISIN map — all lookups go through Zerodha instruments CSV
 
 
 # ═══════════════════════════════════════════════════════════
@@ -103,17 +50,112 @@ def _derive_symbol(name: str) -> str:
     return "".join(parts)[:15]
 
 
+# ── Zerodha Kite Instruments CSV → ISIN lookup ──
+_ZERODHA_ISIN_MAP: Dict[str, Tuple[str, str, str]] = {}
+_ZERODHA_LOADED_AT: float = 0  # timestamp of last successful load
+_ZERODHA_TTL = 86400  # re-download after 24 hours
+
+
+def _load_zerodha_instruments():
+    """Download and parse Zerodha's instruments CSV into an ISIN → symbol map.
+
+    CSV columns: instrument_token, exchange_token, tradingsymbol, name,
+                 last_price, expiry, strike, tick_size, lot_size,
+                 instrument_type, segment, exchange, isin
+
+    We filter for exchange=NSE or exchange=BSE, instrument_type=EQ (equity).
+    Prefer NSE over BSE for the same ISIN.
+    Re-downloads if data is older than 24 hours.
+    """
+    import time as _time
+    global _ZERODHA_LOADED_AT
+
+    now = _time.time()
+    if _ZERODHA_ISIN_MAP and (now - _ZERODHA_LOADED_AT) < _ZERODHA_TTL:
+        return  # still fresh
+
+    _ZERODHA_LOADED_AT = now  # prevent rapid retries on failure
+    _ZERODHA_ISIN_MAP.clear()  # clear stale data before fresh download
+
+    try:
+        import urllib.request
+        import csv
+        import io
+
+        url = "https://api.kite.trade/instruments"
+        print(f"[ContractNote] Downloading Zerodha instruments CSV...")
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode("utf-8")
+
+        reader = csv.DictReader(io.StringIO(raw))
+        bse_entries: Dict[str, Tuple[str, str, str]] = {}
+
+        for row in reader:
+            isin = (row.get("isin") or "").strip()
+            if not isin or not (isin.startswith("INE") or isin.startswith("INF")):
+                continue
+
+            exchange = (row.get("exchange") or "").strip()
+            instrument_type = (row.get("instrument_type") or "").strip()
+
+            # Only equity instruments
+            if instrument_type != "EQ":
+                continue
+            if exchange not in ("NSE", "BSE"):
+                continue
+
+            symbol = (row.get("tradingsymbol") or "").strip()
+            name = (row.get("name") or "").strip()
+            if not symbol:
+                continue
+
+            if exchange == "NSE":
+                # NSE takes priority — overwrite any BSE entry
+                _ZERODHA_ISIN_MAP[isin] = (symbol, "NSE", name)
+            elif exchange == "BSE" and isin not in _ZERODHA_ISIN_MAP:
+                bse_entries[isin] = (symbol, "BSE", name)
+
+        # Add BSE entries that have no NSE counterpart
+        for isin, info in bse_entries.items():
+            if isin not in _ZERODHA_ISIN_MAP:
+                _ZERODHA_ISIN_MAP[isin] = info
+
+        print(f"[ContractNote] Zerodha instruments loaded: {len(_ZERODHA_ISIN_MAP)} ISIN mappings")
+
+    except Exception as e:
+        print(f"[ContractNote] Failed to load Zerodha instruments: {e}")
+
+
+def _lookup_isin_zerodha(isin: str) -> Optional[Tuple[str, str, str]]:
+    """Look up ISIN → (symbol, exchange, name) from Zerodha instruments data."""
+    _load_zerodha_instruments()
+    return _ZERODHA_ISIN_MAP.get(isin)
+
+
 def _resolve_symbol(isin: str, sec_name: str,
                     exchange_map: Dict[str, str]) -> Tuple[str, str, str]:
-    """Resolve symbol, exchange, and company name from ISIN."""
-    isin_info = ISIN_MAP.get(isin)
-    if isin_info:
-        symbol, default_exchange, company_name = isin_info
-    else:
-        symbol = _derive_symbol(sec_name)
-        default_exchange = "NSE"
-        company_name = sec_name.title()
+    """Resolve symbol, exchange, and company name from ISIN.
+
+    Priority: Zerodha instruments CSV (fresh) → _derive_symbol fallback.
+    No hardcoded map — always fetches live data from Zerodha.
+    """
+    # 1. Zerodha Kite instruments CSV (comprehensive, covers all NSE/BSE stocks)
+    zerodha_info = _lookup_isin_zerodha(isin)
+    if zerodha_info:
+        symbol, default_exchange, company_name = zerodha_info
+        exchange = exchange_map.get(isin, default_exchange)
+        print(f"[ContractNote] Zerodha ISIN lookup: {isin} → {symbol} ({exchange})")
+        return symbol, exchange, company_name
+
+    # 2. Fallback: derive from security name
+    symbol = _derive_symbol(sec_name)
+    default_exchange = "NSE"
+    company_name = sec_name.title()
     exchange = exchange_map.get(isin, default_exchange)
+    print(f"[ContractNote] WARNING: Could not resolve ISIN {isin}, derived symbol: {symbol}")
     return symbol, exchange, company_name
 
 
