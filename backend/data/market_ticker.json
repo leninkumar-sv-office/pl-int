@@ -4,9 +4,9 @@
     "label": "Sensex",
     "type": "index",
     "unit": "",
-    "price": 84386.72,
-    "change": 320.97,
-    "change_pct": 0.38,
+    "price": 84389.94,
+    "change": 324.19,
+    "change_pct": 0.39,
     "source": "zerodha"
   },
   {
@@ -14,9 +14,9 @@
     "label": "Nifty 50",
     "type": "index",
     "unit": "",
-    "price": 25959.7,
-    "change": 92.4,
-    "change_pct": 0.36,
+    "price": 25965.85,
+    "change": 98.55,
+    "change_pct": 0.38,
     "source": "zerodha"
   },
   {
@@ -24,9 +24,9 @@
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/10g",
-    "price": 157400.0,
-    "change": -666.0,
-    "change_pct": -0.42,
+    "price": 157387.0,
+    "change": -679.0,
+    "change_pct": -0.43,
     "source": "zerodha"
   },
   {
@@ -34,9 +34,9 @@
     "label": "Silver",
     "type": "commodity",
     "unit": "\u20b9/kg",
-    "price": 257895.0,
-    "change": -4725.0,
-    "change_pct": -1.8,
+    "price": 257500.0,
+    "change": -5120.0,
+    "change_pct": -1.95,
     "source": "zerodha"
   },
   {
@@ -74,9 +74,9 @@
     "label": "USD/INR",
     "type": "forex",
     "unit": "",
-    "price": 90.71,
-    "change": -0.06,
-    "change_pct": -0.07,
+    "price": 90.72,
+    "change": -0.05,
+    "change_pct": -0.06,
     "source": "zerodha"
   },
   {

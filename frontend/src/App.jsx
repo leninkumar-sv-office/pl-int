@@ -194,6 +194,13 @@ export default function App() {
   const handleParseContractNote = async (file) => {
     try {
       const parsed = await parseContractNote(file);
+      if (parsed.summary.total === 0) {
+        toast.error(
+          'No transactions found in the PDF. Check server console for debug logs.',
+          { duration: 8000 }
+        );
+        return;
+      }
       setImportPreview(parsed);  // opens the preview modal
     } catch (err) {
       const msg = err.response?.data?.detail || 'Failed to parse contract note';
