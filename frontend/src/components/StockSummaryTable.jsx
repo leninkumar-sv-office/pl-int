@@ -796,7 +796,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
               </th>}
-              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Status</th>}
+              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ minWidth: '120px' }}>Status</th>}
               {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
               </th>}
