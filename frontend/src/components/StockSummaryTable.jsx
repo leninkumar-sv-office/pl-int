@@ -391,50 +391,16 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'total_invested': aVal = a.total_invested; bVal = b.total_invested; break;
       case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
       case 'unrealized_profit':
+        aVal = a.unrealized_profit || 0; bVal = b.unrealized_profit || 0; break;
       case 'unrealized_loss':
+        aVal = a.unrealized_loss || 0; bVal = b.unrealized_loss || 0; break;
       case 'unrealized_pl':
-      case 'total_dividend': {
-        const getVal = (s) => {
-          switch (sortField) {
-            case 'unrealized_profit': return s.unrealized_profit || 0;
-            case 'unrealized_loss': return s.unrealized_loss || 0;
-            case 'unrealized_pl': return (s.unrealized_profit || 0) + (s.unrealized_loss || 0);
-            case 'total_dividend': return s.total_dividend || 0;
-            default: return 0;
-          }
-        };
-        const calcAnnualized = (s) => {
-          const val = getVal(s);
-          if (s.total_invested <= 0 || s.total_held_qty <= 0) return -9999;
-          const lots = (portfolio || []).filter(item => item.holding.symbol === s.symbol && item.holding.quantity > 0);
-          const earliest = lots.reduce((min, item) => { const d = item.holding.buy_date; return d && d < min ? d : min; }, '9999-12-31');
-          if (earliest === '9999-12-31') return -9999;
-          const days = Math.floor((new Date() - new Date(earliest + 'T00:00:00')) / (1000 * 60 * 60 * 24));
-          if (days <= 0) return -9999;
-          return (Math.pow(1 + val / s.total_invested, 365 / days) - 1) * 100;
-        };
-        aVal = calcAnnualized(a);
-        bVal = calcAnnualized(b);
-        break;
-      }
-      case 'realized_pl': {
-        const calcSoldAnnualized = (s) => {
-          const val = s.realized_pl || 0;
-          const txns = (transactions || []).filter(t => t.symbol === s.symbol);
-          if (txns.length === 0) return -9999;
-          const earliestBuy = txns.reduce((min, t) => { const d = t.buy_date; return d && d < min ? d : min; }, '9999-12-31');
-          const latestSell = txns.reduce((max, t) => { const d = t.sell_date; return d && d > max ? d : max; }, '0000-01-01');
-          if (earliestBuy === '9999-12-31' || latestSell === '0000-01-01') return -9999;
-          const days = Math.floor((new Date(latestSell + 'T00:00:00') - new Date(earliestBuy + 'T00:00:00')) / (1000 * 60 * 60 * 24));
-          if (days <= 0) return -9999;
-          const cost = txns.reduce((sum, t) => sum + (t.buy_price * t.quantity), 0);
-          if (cost <= 0) return -9999;
-          return (Math.pow(1 + val / cost, 365 / days) - 1) * 100;
-        };
-        aVal = calcSoldAnnualized(a);
-        bVal = calcSoldAnnualized(b);
-        break;
-      }
+        aVal = (a.unrealized_profit || 0) + (a.unrealized_loss || 0);
+        bVal = (b.unrealized_profit || 0) + (b.unrealized_loss || 0); break;
+      case 'total_dividend':
+        aVal = a.total_dividend || 0; bVal = b.total_dividend || 0; break;
+      case 'realized_pl':
+        aVal = a.realized_pl || 0; bVal = b.realized_pl || 0; break;
       case 'week_52_low': {
         const aCP = a.live?.current_price || 0, aLow = a.live?.week_52_low || 0;
         const bCP = b.live?.current_price || 0, bLow = b.live?.week_52_low || 0;
