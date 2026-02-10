@@ -287,6 +287,33 @@ const subTd = {
   verticalAlign: 'middle',
 };
 
+// ── Column visibility config ──
+const COL_DEFS = [
+  { id: 'held',           label: 'Held',            grouped: false },
+  { id: 'sold',           label: 'Sold',            grouped: false },
+  { id: 'price',          label: 'Price',           grouped: false },
+  { id: 'buyPrice',       label: 'Buy Price',       grouped: false },
+  { id: 'totalCost',      label: 'Total Cost',      grouped: false },
+  { id: 'currentPrice',   label: 'Current Price',   grouped: false },
+  { id: 'w52Low',         label: '52W Low',         grouped: false },
+  { id: 'w52High',        label: '52W High',        grouped: false },
+  { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
+  { id: 'unrealizedLoss', label: 'Unrealized Loss', grouped: true },
+  { id: 'unrealizedPL',   label: 'Unrealized P/L',  grouped: true },
+  { id: 'realizedPL',     label: 'Realized P&L',    grouped: true },
+  { id: 'dividends',      label: 'Dividends',       grouped: false },
+  { id: 'status',         label: 'Status',          grouped: false },
+];
+const ALL_COL_IDS = COL_DEFS.map(c => c.id);
+const LS_KEY = 'stockSummaryVisibleCols';
+
+function loadVisibleCols() {
+  try {
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
+  } catch (_) {}
+  return new Set(ALL_COL_IDS); // default: all visible
+}
 
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote }) {
@@ -300,6 +327,38 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [importing, setImporting] = useState(false);
   // Bulk selection tracks individual lot (holding) IDs
   const [selectedLots, setSelectedLots] = useState(new Set());
+
+  // ── Column visibility ──
+  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
+  const [colPickerOpen, setColPickerOpen] = useState(false);
+  const colPickerRef = useRef(null);
+  const col = (id) => visibleCols.has(id);  // shorthand
+
+  const toggleCol = (id) => {
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem(LS_KEY, JSON.stringify([...next])); } catch (_) {}
+      return next;
+    });
+  };
+  const showAllCols = () => {
+    const all = new Set(ALL_COL_IDS);
+    setVisibleCols(all);
+    try { localStorage.setItem(LS_KEY, JSON.stringify([...all])); } catch (_) {}
+  };
+  const hideAllCols = () => {
+    setVisibleCols(new Set());
+    try { localStorage.setItem(LS_KEY, JSON.stringify([])); } catch (_) {}
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!colPickerOpen) return;
+    const handler = (e) => { if (colPickerRef.current && !colPickerRef.current.contains(e.target)) setColPickerOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [colPickerOpen]);
 
   useEffect(() => {
     if (searchRef.current) searchRef.current.focus();
@@ -451,7 +510,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  const TOTAL_COLS = 24; // 10 regular + 4×3 sub-columns (PF/Loss/P-L/RPL) + Dividends + Status
+  // Dynamic column count: 2 always-on (expand + stock) + visible regular cols + visible grouped cols × 3
+  const TOTAL_COLS = 2
+    + COL_DEFS.filter(c => !c.grouped && visibleCols.has(c.id)).length
+    + COL_DEFS.filter(c => c.grouped && visibleCols.has(c.id)).length * 3;
+  const hasAnyGroupedCol = COL_DEFS.some(c => c.grouped && visibleCols.has(c.id));
 
   // ── Contract Note PDF Import ─────────────────────────
   const handleFileSelect = async (e) => {
@@ -598,6 +661,74 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             {filtered.length} of {stocks.length} stocks
           </span>
         )}
+        {/* Column picker */}
+        <div ref={colPickerRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setColPickerOpen(p => !p)}
+            style={{
+              padding: '5px 10px',
+              fontSize: '12px',
+              background: colPickerOpen ? 'var(--blue)' : 'var(--bg-input)',
+              color: colPickerOpen ? '#fff' : 'var(--text-dim)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+            title="Show / hide columns"
+          >
+            <span style={{ fontSize: '13px' }}>&#9881;</span> Columns
+          </button>
+          {colPickerOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: '4px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 0',
+              zIndex: 100,
+              minWidth: '180px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}>
+              <div style={{ display: 'flex', gap: '8px', padding: '4px 12px 8px', borderBottom: '1px solid var(--border)' }}>
+                <button onClick={showAllCols} style={{ fontSize: '11px', color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Show All</button>
+                <button onClick={hideAllCols} style={{ fontSize: '11px', color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Hide All</button>
+              </div>
+              {COL_DEFS.map(c => (
+                <label
+                  key={c.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '4px 12px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                    userSelect: 'none',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-input)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleCols.has(c.id)}
+                    onChange={() => toggleCol(c.id)}
+                    style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                  />
+                  {c.label}
+                  {c.grouped && <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>3 cols</span>}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="table-container" style={{ overflowX: 'auto' }}>
@@ -605,65 +736,65 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           <thead>
             {/* Row 1: grouped headers */}
             <tr>
-              <th rowSpan={2} style={{ width: '28px' }}></th>
-              <th rowSpan={2} onClick={() => handleSort('symbol')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ width: '28px' }}></th>
+              <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('symbol')} style={{ cursor: 'pointer' }}>
                 Stock<SortIcon field="symbol" />
               </th>
-              <th rowSpan={2} onClick={() => handleSort('total_held_qty')} style={{ cursor: 'pointer' }}>
+              {col('held') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_held_qty')} style={{ cursor: 'pointer' }}>
                 Held<SortIcon field="total_held_qty" />
-              </th>
-              <th rowSpan={2} onClick={() => handleSort('total_sold_qty')} style={{ cursor: 'pointer' }}>
+              </th>}
+              {col('sold') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_sold_qty')} style={{ cursor: 'pointer' }}>
                 Sold<SortIcon field="total_sold_qty" />
-              </th>
-              <th rowSpan={2}>Price</th>
-              <th rowSpan={2}>Buy Price</th>
-              <th rowSpan={2}>Total Cost</th>
-              <th rowSpan={2}>Current Price</th>
-              <th rowSpan={2} onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
+              </th>}
+              {col('price') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Price</th>}
+              {col('buyPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Buy Price</th>}
+              {col('totalCost') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Total Cost</th>}
+              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Current Price</th>}
+              {col('w52Low') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="week_52_low" />
-              </th>
-              <th rowSpan={2} onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
+              </th>}
+              {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
-              </th>
-              <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              </th>}
+              {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
-              </th>
-              <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              </th>}
+              {col('unrealizedLoss') && <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
-              </th>
-              <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              </th>}
+              {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
-              </th>
-              <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              </th>}
+              {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
-              </th>
-              <th rowSpan={2} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
+              </th>}
+              {col('dividends') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
                 Dividends<SortIcon field="total_dividend" />
-              </th>
-              <th rowSpan={2}>Status</th>
+              </th>}
+              {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Status</th>}
             </tr>
-            {/* Row 2: sortable sub-column headers for the 4 grouped columns */}
-            <tr>
+            {/* Row 2: sortable sub-column headers for visible grouped columns */}
+            {hasAnyGroupedCol && <tr>
               {[
-                { total: 'unrealized_profit', ltcg: 'ltcg_unrealized_profit', stcg: 'stcg_unrealized_profit' },
-                { total: 'unrealized_loss',   ltcg: 'ltcg_unrealized_loss',   stcg: 'stcg_unrealized_loss' },
-                { total: 'unrealized_pl',     ltcg: 'ltcg_unrealized_pl',     stcg: 'stcg_unrealized_pl' },
-                { total: 'realized_pl',       ltcg: 'ltcg_realized_pl',       stcg: 'stcg_realized_pl' },
-              ].map((group, i) => (
+                { id: 'unrealizedPF',   total: 'unrealized_profit', ltcg: 'ltcg_unrealized_profit', stcg: 'stcg_unrealized_profit' },
+                { id: 'unrealizedLoss', total: 'unrealized_loss',   ltcg: 'ltcg_unrealized_loss',   stcg: 'stcg_unrealized_loss' },
+                { id: 'unrealizedPL',   total: 'unrealized_pl',     ltcg: 'ltcg_unrealized_pl',     stcg: 'stcg_unrealized_pl' },
+                { id: 'realizedPL',     total: 'realized_pl',       ltcg: 'ltcg_realized_pl',       stcg: 'stcg_realized_pl' },
+              ].filter(g => col(g.id)).map((group, i) => (
                 <React.Fragment key={i}>
                   {[
                     { label: 'Total', field: group.total },
                     { label: 'LTCG',  field: group.ltcg },
                     { label: 'STCG',  field: group.stcg },
-                  ].map(col => (
-                    <th key={col.field} onClick={() => handleSort(col.field)}
+                  ].map(c => (
+                    <th key={c.field} onClick={() => handleSort(c.field)}
                         style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.85, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      {col.label}<SortIcon field={col.field} />
+                      {c.label}<SortIcon field={c.field} />
                     </th>
                   ))}
                 </React.Fragment>
               ))}
-            </tr>
+            </tr>}
           </thead>
           <tbody>
             {sorted.map((stock) => {
@@ -816,7 +947,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       </div>
                       <div className="stock-name">{stock.name}</div>
                     </td>
-                    <td>
+                    {col('held') && <td>
                       <div style={{ fontWeight: 700, fontSize: '15px' }}>
                         {stock.total_held_qty > 0 ? stock.total_held_qty : '-'}
                       </div>
@@ -825,8 +956,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           {stock.num_held_lots} lots
                         </div>
                       )}
-                    </td>
-                    <td>
+                    </td>}
+                    {col('sold') && <td>
                       {stock.total_sold_qty > 0 ? (
                         <div>
                           <div style={{ fontWeight: 600, color: 'var(--yellow)' }}>
@@ -841,11 +972,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
-                    </td>
-                    <td>{hasHeld ? formatINR(stock.avg_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>
-                    <td>{hasHeld ? formatINR(stock.avg_buy_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>
-                    <td>{hasHeld ? formatINR(stock.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>
-                    <td>
+                    </td>}
+                    {col('price') && <td>{hasHeld ? formatINR(stock.avg_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
+                    {col('buyPrice') && <td>{hasHeld ? formatINR(stock.avg_buy_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
+                    {col('totalCost') && <td>{hasHeld ? formatINR(stock.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
+                    {col('currentPrice') && <td>
                       {live ? (
                         <div>
                           <div style={{
@@ -870,8 +1001,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           {stock.price_error ? 'N/A' : '--'}
                         </span>
                       )}
-                    </td>
-                    <td>
+                    </td>}
+                    {col('w52Low') && <td>
                       {live?.week_52_low ? (() => {
                         const nearLow = currentPrice > 0 && currentPrice <= live.week_52_low * 1.05;
                         const pctFromLow = currentPrice > 0 && live.week_52_low > 0
@@ -895,8 +1026,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       })() : (
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
-                    </td>
-                    <td>
+                    </td>}
+                    {col('w52High') && <td>
                       {live?.week_52_high ? (() => {
                         const nearHigh = currentPrice > 0 && currentPrice >= live.week_52_high * 0.95;
                         const pctFromHigh = currentPrice > 0 && live.week_52_high > 0
@@ -920,9 +1051,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       })() : (
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
-                    </td>
+                    </td>}
                     {/* ── Unrealized PF: Total | LTCG | STCG ── */}
-                    {(() => {
+                    {col('unrealizedPF') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
                       const val = stock.unrealized_profit || 0;
                       const ltcg = stock.ltcg_unrealized_profit || 0;
@@ -958,7 +1089,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     })()}
 
                     {/* ── Unrealized Loss: Total | LTCG | STCG ── */}
-                    {(() => {
+                    {col('unrealizedLoss') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
                       const val = stock.unrealized_loss || 0;
                       const ltcg = stock.ltcg_unrealized_loss || 0;
@@ -994,7 +1125,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     })()}
 
                     {/* ── Unrealized P/L: Total | LTCG | STCG ── */}
-                    {(() => {
+                    {col('unrealizedPL') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
                       const upl = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0);
                       const ltcg = (stock.ltcg_unrealized_profit || 0) + (stock.ltcg_unrealized_loss || 0);
@@ -1030,7 +1161,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     })()}
 
                     {/* ── Realized P&L: Total | LTCG | STCG ── */}
-                    {(() => {
+                    {col('realizedPL') && (() => {
                       const nw = { whiteSpace: 'nowrap' };
                       const val = stock.realized_pl || 0;
                       const ltcg = stock.ltcg_realized_pl || 0;
@@ -1066,7 +1197,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         </>
                       );
                     })()}
-                    <td style={{ whiteSpace: 'nowrap' }}>
+                    {col('dividends') && <td style={{ whiteSpace: 'nowrap' }}>
                       {(stock.total_dividend || 0) > 0 ? (() => {
                         const divPct = _pctOf(stock.total_dividend);
                         const divPa = _calcPa(stock.total_dividend);
@@ -1093,8 +1224,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       })() : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
-                    </td>
-                    <td>
+                    </td>}
+                    {col('status') && <td>
                       {hasHeld && stock.profitable_qty > 0 ? (
                         <div>
                           <div className="sell-tag">
@@ -1126,7 +1257,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           Fully Sold
                         </span>
                       )}
-                    </td>
+                    </td>}
                   </tr>
 
                   {/* ── Expanded detail row ──────────────────── */}
