@@ -13,11 +13,8 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
   if (!data) return null;
 
   const { trade_date, contract_no, transactions, summary } = data;
-
-  // Debug: log isDuplicate status for each transaction
-  console.log('[ImportPreview] Transactions isDuplicate status:',
-    transactions.map(t => `${t.symbol}: isDuplicate=${t.isDuplicate}`));
-  console.log('[ImportPreview] Total dups:', transactions.filter(t => t.isDuplicate).length);
+  const isMultiPdf = !!data._multiPdf;
+  const fileCount = data._fileCount || 1;
 
   // Apply symbol edits to transactions before filtering
   const editedTransactions = transactions.map((t, i) =>
@@ -130,6 +127,11 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
         <td style={{ ...tdStyle, color: isDup ? 'var(--text-muted)' : 'var(--text-dim)', maxWidth: '180px' }}>
           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
           <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{t.isin}</div>
+          {isMultiPdf && t._sourceFile && (
+            <div style={{ fontSize: '8px', color: 'var(--text-muted)', opacity: 0.7, marginTop: '1px' }}>
+              {t._sourceFile.replace('.pdf', '').replace('.PDF', '')}
+            </div>
+          )}
         </td>
         <td style={{ ...tdStyle, textAlign: 'right' }}>{t.quantity}</td>
         <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.wap)}</td>
@@ -168,9 +170,19 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
           <div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)' }}>
               Contract Note Preview
+              {isMultiPdf && (
+                <span style={{
+                  marginLeft: '10px', fontSize: '11px', fontWeight: 600,
+                  color: 'var(--blue)', background: 'rgba(59,130,246,0.12)',
+                  padding: '2px 8px', borderRadius: '8px', verticalAlign: 'middle',
+                }}>
+                  {fileCount} PDFs
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Trade Date: {trade_date} &nbsp;|&nbsp; CN# {contract_no || '\u2014'}
+              {isMultiPdf ? `Trade Dates: ${trade_date}` : `Trade Date: ${trade_date}`}
+              &nbsp;|&nbsp; CN# {contract_no || '\u2014'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

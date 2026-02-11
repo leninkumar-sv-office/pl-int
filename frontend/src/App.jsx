@@ -190,47 +190,130 @@ export default function App() {
     }
   };
 
-  // Step 1: Parse PDF → show preview modal
-  const handleParseContractNote = async (file) => {
+  // Step 1: Parse PDF(s) → show preview modal
+  // Accepts an array of File objects (multi-select) or a single File (legacy)
+  const handleParseContractNote = async (filesOrFile) => {
+    const files = Array.isArray(filesOrFile) ? filesOrFile : [filesOrFile];
     try {
-      const parsed = await parseContractNote(file);
-      if (parsed.summary.total === 0) {
-        toast.error(
-          'No transactions found in the PDF. Check server console for debug logs.',
-          { duration: 8000 }
-        );
+      const allParsed = [];
+      const errors = [];
+
+      // Parse each PDF sequentially (backend handles one at a time)
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          if (files.length > 1) {
+            toast.loading(`Parsing PDF ${i + 1}/${files.length}: ${file.name}`, { id: 'pdf-parse-progress' });
+          }
+          const parsed = await parseContractNote(file);
+          if (parsed.summary.total > 0) {
+            // Tag each transaction with its source file for display
+            parsed.transactions.forEach(tx => {
+              tx._sourceFile = file.name;
+              tx._contractNo = parsed.contract_no || '';
+            });
+            allParsed.push(parsed);
+          } else {
+            errors.push(`${file.name}: No transactions found`);
+          }
+        } catch (err) {
+          const msg = err.response?.data?.detail || 'Parse failed';
+          errors.push(`${file.name}: ${msg}`);
+        }
+      }
+
+      toast.dismiss('pdf-parse-progress');
+
+      if (errors.length > 0) {
+        toast.error(errors.join('\n'), { duration: 8000 });
+      }
+
+      if (allParsed.length === 0) {
+        if (errors.length === 0) {
+          toast.error('No transactions found in any PDF.', { duration: 8000 });
+        }
         return;
       }
-      setImportPreview(parsed);  // opens the preview modal
+
+      // Merge all parsed results into a single preview
+      if (allParsed.length === 1) {
+        setImportPreview(allParsed[0]);  // single PDF — same as before
+      } else {
+        // Combine transactions from all PDFs
+        const mergedTransactions = allParsed.flatMap(p => p.transactions);
+        const mergedTradeDates = [...new Set(allParsed.map(p => p.trade_date))].sort();
+        const mergedContractNos = allParsed.map(p => p.contract_no).filter(Boolean);
+        const merged = {
+          trade_date: mergedTradeDates.join(', '),
+          contract_no: mergedContractNos.join(', '),
+          transactions: mergedTransactions,
+          summary: {
+            buys: mergedTransactions.filter(t => t.action === 'Buy').length,
+            sells: mergedTransactions.filter(t => t.action === 'Sell').length,
+            total: mergedTransactions.length,
+          },
+          _multiPdf: true,
+          _fileCount: allParsed.length,
+        };
+        setImportPreview(merged);
+      }
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Failed to parse contract note';
+      const msg = err.response?.data?.detail || 'Failed to parse contract notes';
       toast.error(msg, { duration: 5000 });
       throw err;
     }
   };
 
   // Step 2: User confirms → actually import (with possibly edited transactions)
+  // For multi-PDF: groups transactions by contract note and sends each batch separately
   const handleConfirmImport = async (editedTransactions) => {
     if (!importPreview) return;
     try {
-      // Send the parsed data with (possibly edited) transactions directly
-      const payload = {
-        trade_date: importPreview.trade_date,
-        contract_no: importPreview.contract_no,
-        transactions: editedTransactions || importPreview.transactions,
-      };
-      const result = await confirmImportContractNote(payload);
-      const { imported, errors } = result;
+      const txs = editedTransactions || importPreview.transactions;
+
+      // Group transactions by contract note (source file)
+      const groups = {};
+      for (const tx of txs) {
+        // Use _contractNo + trade_date as group key
+        const cn = tx._contractNo || importPreview.contract_no || '';
+        const td = tx.trade_date || importPreview.trade_date;
+        const key = `${cn}||${td}`;
+        if (!groups[key]) groups[key] = { contract_no: cn, trade_date: td, transactions: [] };
+        groups[key].transactions.push(tx);
+      }
+
+      let totalBuys = 0, totalSells = 0;
+      const allErrors = [];
+      const batchKeys = Object.keys(groups);
+
+      for (let i = 0; i < batchKeys.length; i++) {
+        const group = groups[batchKeys[i]];
+        if (batchKeys.length > 1) {
+          toast.loading(`Importing batch ${i + 1}/${batchKeys.length}...`, { id: 'import-progress' });
+        }
+        const result = await confirmImportContractNote({
+          trade_date: group.trade_date,
+          contract_no: group.contract_no,
+          transactions: group.transactions,
+        });
+        totalBuys += result.imported?.buys || 0;
+        totalSells += result.imported?.sells || 0;
+        if (result.errors) allErrors.push(...result.errors);
+      }
+
+      toast.dismiss('import-progress');
       toast.success(
-        `Imported ${imported.buys} buys, ${imported.sells} sells from ${result.trade_date}`,
+        `Imported ${totalBuys} buys, ${totalSells} sells` +
+        (batchKeys.length > 1 ? ` from ${batchKeys.length} contract notes` : ` from ${importPreview.trade_date}`),
         { duration: 5000 }
       );
-      if (errors && errors.length > 0) {
-        toast.error(`${errors.length} error(s): ${errors[0]}`, { duration: 5000 });
+      if (allErrors.length > 0) {
+        toast.error(`${allErrors.length} error(s): ${allErrors[0]}`, { duration: 5000 });
       }
       setImportPreview(null);
       loadData();
     } catch (err) {
+      toast.dismiss('import-progress');
       const msg = err.response?.data?.detail || 'Failed to import contract note';
       toast.error(msg, { duration: 5000 });
     }

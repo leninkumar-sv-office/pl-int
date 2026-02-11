@@ -1491,4 +1491,9 @@ if os.path.exists(FRONTEND_DIST):
         file_path = os.path.join(FRONTEND_DIST, full_path)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
-        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+        # No-cache on index.html so browser always fetches fresh version
+        # (hashed JS/CSS assets are still cached normally)
+        return FileResponse(
+            os.path.join(FRONTEND_DIST, "index.html"),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )

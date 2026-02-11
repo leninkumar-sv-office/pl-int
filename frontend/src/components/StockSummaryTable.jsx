@@ -547,19 +547,18 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     + COL_DEFS.filter(c => c.grouped && visibleCols.has(c.id)).length * 3;
   const hasAnyGroupedCol = COL_DEFS.some(c => c.grouped && visibleCols.has(c.id));
 
-  // ── Contract Note PDF Import ─────────────────────────
+  // ── Contract Note PDF Import (supports multiple files) ──
   const handleFileSelect = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset the input so the same file can be re-selected
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    // Reset the input so the same files can be re-selected
     e.target.value = '';
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      return;
-    }
+    const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfFiles.length === 0) return;
     if (!onImportContractNote) return;
     setImporting(true);
     try {
-      await onImportContractNote(file);
+      await onImportContractNote(pdfFiles);
     } catch (err) {
       // Error toast is handled in the parent
     } finally {
@@ -594,6 +593,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             ref={fileInputRef}
             type="file"
             accept=".pdf"
+            multiple
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
@@ -611,9 +611,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               whiteSpace: 'nowrap',
               opacity: importing ? 0.7 : 1,
             }}
-            title="Import transactions from SBICAP Securities contract note PDF"
+            title="Import transactions from SBICAP Securities contract note PDFs (select multiple)"
           >
-            {importing ? 'Importing...' : 'Import PDF'}
+            {importing ? 'Parsing PDFs...' : 'Import PDF'}
           </button>
         </div>
       </div>
