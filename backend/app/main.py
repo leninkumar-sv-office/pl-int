@@ -117,14 +117,26 @@ def get_portfolio():
         return []
 
     # Use cached prices only — live fetches happen in background threads
-    symbols = list(set((h.symbol, h.exchange) for h in holdings))
-    live_data = stock_service.get_cached_prices(symbols)
+    # Request both BSE and NSE for each symbol so fallback works
+    base_symbols = set((h.symbol, h.exchange) for h in holdings)
+    symbols_with_alt = set(base_symbols)
+    for sym, exch in base_symbols:
+        alt = "NSE" if exch == "BSE" else "BSE"
+        symbols_with_alt.add((sym, alt))
+    live_data = stock_service.get_cached_prices(list(symbols_with_alt))
 
     result = []
     for h in holdings:
         try:
             key = f"{h.symbol}.{h.exchange}"
             live = live_data.get(key)
+            # Fall back to alternate exchange (BSE↔NSE) if primary has no price
+            if not live or (live.current_price or 0) <= 0:
+                alt_exchange = "NSE" if h.exchange == "BSE" else "BSE"
+                alt_key = f"{h.symbol}.{alt_exchange}"
+                alt_live = live_data.get(alt_key)
+                if alt_live and (alt_live.current_price or 0) > 0:
+                    live = alt_live
 
             current_price = live.current_price if live else 0
             invested = h.buy_price * h.quantity
@@ -690,8 +702,13 @@ def get_stock_summary():
     dividends_by_symbol = db.get_dividends_by_symbol()
 
     # Use cached prices (instant, no network calls)
-    symbols = list(set((h.symbol, h.exchange) for h in holdings))
-    live_data = stock_service.get_cached_prices(symbols) if symbols else {}
+    # Request both BSE and NSE for each symbol so exchange fallback works
+    base_symbols = set((h.symbol, h.exchange) for h in holdings)
+    symbols_with_alt = set(base_symbols)
+    for sym, exch in base_symbols:
+        alt = "NSE" if exch == "BSE" else "BSE"
+        symbols_with_alt.add((sym, alt))
+    live_data = stock_service.get_cached_prices(list(symbols_with_alt)) if base_symbols else {}
 
     # Group holdings by symbol
     held_by_symbol: dict = {}
@@ -771,9 +788,15 @@ def get_stock_summary():
                     if not stcg_sold_latest_sell or s.sell_date > stcg_sold_latest_sell:
                         stcg_sold_latest_sell = s.sell_date
 
-            # Live data
+            # Live data — try primary exchange, fall back to alternate (BSE↔NSE)
             live_key = f"{sym}.{exchange}"
             live = live_data.get(live_key)
+            if not live or (live.current_price or 0) <= 0:
+                alt_exchange = "NSE" if exchange == "BSE" else "BSE"
+                alt_key = f"{sym}.{alt_exchange}"
+                alt_live = live_data.get(alt_key)
+                if alt_live and (alt_live.current_price or 0) > 0:
+                    live = alt_live
             current_price = live.current_price if live else 0
             current_value = current_price * total_held_qty
             unrealized_pl = current_value - total_invested

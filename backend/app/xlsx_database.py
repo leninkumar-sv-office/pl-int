@@ -435,11 +435,14 @@ class XlsxPortfolio:
                 self._file_map[symbol] = fp
                 self._name_map[symbol] = clean
 
-            # ── Register derived symbol alias ──
+            # ── Register derived symbol alias (for fingerprint lookup ONLY) ──
             # Contract note parser may resolve a stock to a different symbol
             # (via derive_symbol) than what Zerodha/NSE name lookup gives.
-            # Register the file under the derived symbol too so that
+            # Register the file under the derived symbol in _all_files so that
             # duplicate detection works regardless of which symbol is used.
+            # NOTE: We do NOT register in _file_map/_name_map — those drive
+            # get_all_holdings() iteration and would cause duplicate holdings
+            # with the wrong symbol (e.g. "ADANI" instead of "ADANIGREEN").
             # Safety: only register if derived symbol isn't already used by a
             # DIFFERENT stock (prevents cross-stock fingerprint contamination
             # for ambiguous prefixes like TATA, SBI, INDIAN, etc.)
@@ -457,10 +460,7 @@ class XlsxPortfolio:
                         self._all_files[derived] = []
                     if fp not in self._all_files[derived]:
                         self._all_files[derived].append(fp)
-                    if derived not in self._file_map:
-                        self._file_map[derived] = fp
-                        self._name_map[derived] = clean
-                        aliases_added.append(f"{derived}→{symbol}")
+                    aliases_added.append(f"{derived}→{symbol}")
 
         if aliases_added:
             print(f"[XlsxDB] Symbol aliases: {', '.join(aliases_added)}")
