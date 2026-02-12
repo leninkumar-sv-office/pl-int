@@ -850,8 +850,13 @@ class XlsxPortfolio:
             # existing Sell rows consume Buy qty in FIFO order.
             # Column W (Realised data) is NOT used for determining unsold
             # rows because dump files often have stale Realised formulas.
+            #
+            # Read from ALL files for this symbol (main + archive) so that
+            # multi-file stocks (like Avanti Feeds + Archive) are handled.
             all_buys = []
             all_sells_existing = []
+
+            # Primary file — already open as ws (note: Sell row was inserted at insert_at)
             for row_idx in range(insert_at + 1, max_row_before + 2):
                 action = ws.cell(row_idx, 3).value
                 exch_val = ws.cell(row_idx, 2).value
@@ -862,14 +867,41 @@ class XlsxPortfolio:
                     continue
                 dt = _parse_date(ws.cell(row_idx, 1).value)
                 qty_val = _safe_int(ws.cell(row_idx, 4).value)
-                price_val = _safe_float(ws.cell(row_idx, 5).value)
                 if action_str == "Buy" and qty_val > 0:
-                    all_buys.append({"row": row_idx, "qty": qty_val, "date": dt or ""})
+                    all_buys.append({"row": row_idx, "qty": qty_val, "date": dt or "", "primary": True})
                 elif action_str == "Sell" and qty_val > 0:
                     all_sells_existing.append({"date": dt or "", "qty": qty_val})
 
+            # Archive / additional files — read Buy/Sell rows for FIFO total
+            other_files = [f for f in self._all_files.get(symbol, []) if f != filepath]
+            for other_fp in other_files:
+                try:
+                    other_wb = openpyxl.load_workbook(other_fp, data_only=True)
+                    if "Trading History" not in other_wb.sheetnames:
+                        other_wb.close()
+                        continue
+                    other_ws = other_wb["Trading History"]
+                    other_header = self._find_header_row(other_ws)
+                    for row_idx in range(other_header + 1, (other_ws.max_row or other_header) + 1):
+                        action = other_ws.cell(row_idx, 3).value
+                        exch_val = other_ws.cell(row_idx, 2).value
+                        if not action:
+                            continue
+                        action_str = str(action).strip()
+                        if exch_val and str(exch_val).strip() == "DIV":
+                            continue
+                        dt = _parse_date(other_ws.cell(row_idx, 1).value)
+                        qty_val = _safe_int(other_ws.cell(row_idx, 4).value)
+                        if action_str == "Buy" and qty_val > 0:
+                            all_buys.append({"row": row_idx, "qty": qty_val, "date": dt or "", "primary": False})
+                        elif action_str == "Sell" and qty_val > 0:
+                            all_sells_existing.append({"date": dt or "", "qty": qty_val})
+                    other_wb.close()
+                except Exception as e:
+                    print(f"[XlsxDB] Warning: could not read archive {other_fp.name}: {e}")
+
             # FIFO-match existing sells against buys to find remaining qty per row
-            buys_remaining = [{"row": b["row"], "qty": b["qty"], "date": b["date"]} for b in all_buys]
+            buys_remaining = [{"row": b["row"], "qty": b["qty"], "date": b["date"], "primary": b["primary"]} for b in all_buys]
             buys_remaining.sort(key=lambda x: (x["date"], x["row"]))
             sells_sorted = sorted(all_sells_existing, key=lambda x: x["date"])
 
@@ -899,6 +931,7 @@ class XlsxPortfolio:
                     "total_qty": u["qty"],
                     "sell_qty": sell_qty,
                     "is_full": sell_qty == u["qty"],
+                    "primary": u["primary"],  # only write Realised data to primary file rows
                 })
                 remaining_to_sell -= sell_qty
 
@@ -910,7 +943,10 @@ class XlsxPortfolio:
                 )
 
             # ── Step 4: Write Realised data to BUY rows ─────────
+            # Only write to rows in the primary file (archive rows are read-only)
             for info in to_fill:
+                if not info.get("primary", True):
+                    continue  # skip archive file rows
                 r = info["row"]
                 sell_qty = info["sell_qty"]
                 price_e = _safe_float(ws.cell(r, 5).value)   # E: PRICE per share
