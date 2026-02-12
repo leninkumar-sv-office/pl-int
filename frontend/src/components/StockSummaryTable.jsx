@@ -347,7 +347,7 @@ function loadVisibleCols() {
 }
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote }) {
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, bulkSellDoneKey }) {
   const [sortField, setSortField] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
@@ -358,6 +358,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [importing, setImporting] = useState(false);
   // Bulk selection tracks individual lot (holding) IDs
   const [selectedLots, setSelectedLots] = useState(new Set());
+
+  // Clear lot selection after bulk sell completes
+  useEffect(() => {
+    if (bulkSellDoneKey > 0) setSelectedLots(new Set());
+  }, [bulkSellDoneKey]);
 
   // ── Column visibility ──
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);

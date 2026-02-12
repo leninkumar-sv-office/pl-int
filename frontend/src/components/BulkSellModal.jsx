@@ -129,18 +129,21 @@ export default function BulkSellModal({ items, onSell, onClose }) {
 
     // Execute sequentially to avoid race conditions
     let done = 0;
+    let succeeded = 0;
+    let failed = 0;
     for (const op of ops) {
       try {
         await onSell(op);
+        succeeded++;
       } catch {
-        // Continue on error — individual failures handled by parent
+        failed++;
       }
       done++;
       setProgress({ done, total: ops.length });
     }
 
     setSubmitting(false);
-    onClose();
+    onClose({ succeeded, failed, total: ops.length });
   };
 
   const allPricesValid = grouped.every((group) => {

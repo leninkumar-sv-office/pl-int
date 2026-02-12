@@ -845,24 +845,45 @@ class XlsxPortfolio:
             ws.cell(insert_at, 6, value=round(price * quantity, 2))       # F: COST
             ws.cell(insert_at, 7, value="~")                              # G: REMARKS
 
-            # ── Step 2: Find unsold BUY rows (after the insert) ─
-            unsold = []
+            # ── Step 2: Find unsold BUY rows using FIFO matching ──
+            # Must match dashboard logic: ALL Buy rows are candidates,
+            # existing Sell rows consume Buy qty in FIFO order.
+            # Column W (Realised data) is NOT used for determining unsold
+            # rows because dump files often have stale Realised formulas.
+            all_buys = []
+            all_sells_existing = []
             for row_idx in range(insert_at + 1, max_row_before + 2):
                 action = ws.cell(row_idx, 3).value
                 exch_val = ws.cell(row_idx, 2).value
-                if not action or str(action).strip() != "Buy":
+                if not action:
                     continue
+                action_str = str(action).strip()
                 if exch_val and str(exch_val).strip() == "DIV":
                     continue
-                # Skip rows that already have Realised data (W column filled)
-                sp = ws.cell(row_idx, col_w).value
-                if sp is not None and sp != "" and _safe_float(sp) > 0:
-                    continue
-                qty = _safe_int(ws.cell(row_idx, 4).value)
-                if qty <= 0:
-                    continue
                 dt = _parse_date(ws.cell(row_idx, 1).value)
-                unsold.append({"row": row_idx, "qty": qty, "date": dt})
+                qty_val = _safe_int(ws.cell(row_idx, 4).value)
+                price_val = _safe_float(ws.cell(row_idx, 5).value)
+                if action_str == "Buy" and qty_val > 0:
+                    all_buys.append({"row": row_idx, "qty": qty_val, "date": dt or ""})
+                elif action_str == "Sell" and qty_val > 0:
+                    all_sells_existing.append({"date": dt or "", "qty": qty_val})
+
+            # FIFO-match existing sells against buys to find remaining qty per row
+            buys_remaining = [{"row": b["row"], "qty": b["qty"], "date": b["date"]} for b in all_buys]
+            buys_remaining.sort(key=lambda x: (x["date"], x["row"]))
+            sells_sorted = sorted(all_sells_existing, key=lambda x: x["date"])
+
+            for s in sells_sorted:
+                sell_left = s["qty"]
+                for b in buys_remaining:
+                    if sell_left <= 0:
+                        break
+                    take = min(b["qty"], sell_left)
+                    b["qty"] -= take
+                    sell_left -= take
+
+            # Unsold = Buy rows with remaining qty > 0
+            unsold = [b for b in buys_remaining if b["qty"] > 0]
 
             # ── Step 3: FIFO sort (oldest first) and allocate ───
             unsold.sort(key=lambda x: (x["date"] or "", x["row"]))

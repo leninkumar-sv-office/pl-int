@@ -29,6 +29,7 @@ export default function App() {
   const [sellTarget, setSellTarget] = useState(null);
   const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
   const [bulkSellItems, setBulkSellItems] = useState(null); // null = closed, [...] = open
+  const [bulkSellDoneKey, setBulkSellDoneKey] = useState(0); // increments to signal selection clear
   const [marketTicker, setMarketTicker] = useState([]);
   const [refreshInterval, setRefreshInterval] = useState(300); // seconds
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
@@ -174,10 +175,18 @@ export default function App() {
     return result;
   };
 
-  const handleBulkSellClose = () => {
+  const handleBulkSellClose = (result) => {
     setBulkSellItems(null);
+    setBulkSellDoneKey(k => k + 1); // signal StockSummaryTable to clear selection
     loadData();
-    toast.success('Bulk sell completed');
+    if (!result) return; // manual close via Cancel
+    if (result.failed === 0) {
+      toast.success(`Sold ${result.succeeded} lot${result.succeeded !== 1 ? 's' : ''} successfully`);
+    } else if (result.succeeded === 0) {
+      toast.error(`All ${result.failed} sell operation${result.failed !== 1 ? 's' : ''} failed`);
+    } else {
+      toast.success(`${result.succeeded} sold, ${result.failed} failed`);
+    }
   };
 
   const handleAddDividend = async (data) => {
@@ -647,6 +656,7 @@ export default function App() {
           onAddStock={(stockData) => setAddModalData(stockData || {})}
           onDividend={(data) => setDividendTarget(data)}
           onImportContractNote={handleParseContractNote}
+          bulkSellDoneKey={bulkSellDoneKey}
         />
       )}
 

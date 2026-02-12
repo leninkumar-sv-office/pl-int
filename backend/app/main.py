@@ -199,13 +199,18 @@ def sell_stock(req: SellStockRequest):
     remaining = holding.quantity - req.quantity
 
     # Insert a Sell row into the stock's xlsx file
-    db.add_sell_transaction(
-        symbol=holding.symbol,
-        exchange=holding.exchange,
-        quantity=req.quantity,
-        price=req.sell_price,
-        sell_date=sell_date,
-    )
+    try:
+        db.add_sell_transaction(
+            symbol=holding.symbol,
+            exchange=holding.exchange,
+            quantity=req.quantity,
+            price=req.sell_price,
+            sell_date=sell_date,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return {
         "message": f"Sold {req.quantity} shares of {holding.symbol}",

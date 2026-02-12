@@ -114,20 +114,20 @@
     "name": "Union Bank of India Ltd",
     "week_52_high": 180.58,
     "week_52_low": 176.11,
-    "day_change": 1.07,
-    "day_change_pct": 0.6,
-    "volume": 10157636,
-    "previous_close": 179.26
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 180.33
   },
   "APOLLOTYRE.NSE": {
-    "price": 505.95,
+    "price": 509.5,
     "name": "Apollo Tyres Ltd",
-    "week_52_high": 514.7,
-    "week_52_low": 504.3,
-    "day_change": 1.75,
-    "day_change_pct": 0.35,
-    "volume": 1289850,
-    "previous_close": 504.2
+    "week_52_high": 523.2,
+    "week_52_low": 507.15,
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 509.5
   },
   "TATATECH.NSE": {
     "price": 627.95,
@@ -141,13 +141,13 @@
   },
   "MANAPPURAM.NSE": {
     "price": 302.55,
-    "name": "MANAPPURAM",
+    "name": "Manuppuram Finance Ltd",
     "week_52_high": 312.0,
     "week_52_low": 301.1,
-    "day_change": -6.4,
-    "day_change_pct": -2.07,
-    "volume": 6236977,
-    "previous_close": 308.95
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 302.55
   },
   "ASHOKLEY.NSE": {
     "price": 206.35,
@@ -324,20 +324,20 @@
     "name": "Avanti Feeds",
     "week_52_high": 1209.0,
     "week_52_low": 1100.0,
-    "day_change": 62.1,
-    "day_change_pct": 5.49,
-    "volume": 3173083,
-    "previous_close": 1131.4
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 1193.5
   },
   "BHARATWIRE.NSE": {
     "price": 175.87,
     "name": "Bharat Wire Ropes Ltd",
     "week_52_high": 178.99,
     "week_52_low": 173.1,
-    "day_change": -2.24,
-    "day_change_pct": -1.26,
-    "volume": 111588,
-    "previous_close": 178.11
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 175.87
   },
   "IREDA.NSE": {
     "price": 126.67,
@@ -354,10 +354,10 @@
     "name": "Hindustan Copper Ltd",
     "week_52_high": 607.45,
     "week_52_low": 593.8,
-    "day_change": 6.15,
-    "day_change_pct": 1.03,
-    "volume": 10230524,
-    "previous_close": 597.55
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 603.7
   },
   "IRCTC.NSE": {
     "price": 628.35,
@@ -514,10 +514,10 @@
     "name": "PNC Infratech Ltd",
     "week_52_high": 232.69,
     "week_52_low": 221.25,
-    "day_change": -8.27,
-    "day_change_pct": -3.57,
-    "volume": 317212,
-    "previous_close": 231.96
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 223.69
   },
   "TATAPOWER.BSE": {
     "price": 375.3,
@@ -534,10 +534,10 @@
     "name": "Hindustan Copper Ltd",
     "week_52_high": 606.9,
     "week_52_low": 593.55,
-    "day_change": 5.85,
-    "day_change_pct": 0.98,
-    "volume": 876573,
-    "previous_close": 597.45
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 603.3
   },
   "RITES.BSE": {
     "price": 226.05,
@@ -620,14 +620,14 @@
     "previous_close": 342.7
   },
   "AVANTIFEED.BSE": {
-    "price": 1132.05,
+    "price": 1193.1,
     "name": "Avanti Feeds",
-    "week_52_high": 1159.0,
-    "week_52_low": 1082.7,
-    "day_change": 28.2,
-    "day_change_pct": 2.55,
-    "volume": 418139,
-    "previous_close": 1103.85
+    "week_52_high": 1208.0,
+    "week_52_low": 1098.1,
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 1193.1
   },
   "JIOFIN.BSE": {
     "price": 270.25,
@@ -1104,10 +1104,10 @@
     "name": "Priti International Ltd",
     "week_52_high": 53.97,
     "week_52_low": 51.63,
-    "day_change": -0.04,
-    "day_change_pct": -0.08,
-    "volume": 3237,
-    "previous_close": 52.98
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 52.94
   },
   "AWHCL.BSE": {
     "price": 530.8,
@@ -1338,5 +1338,35 @@
     "day_change_pct": 0.0,
     "volume": 0,
     "previous_close": 240.4
+  },
+  "PNC.NSE": {
+    "price": 26.19,
+    "name": "PNC Infratech Ltd",
+    "week_52_high": 26.98,
+    "week_52_low": 25.5,
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 26.19
+  },
+  "GGL.BSE": {
+    "price": 3.55,
+    "name": "Gautam Gems Ltd",
+    "week_52_high": 3.59,
+    "week_52_low": 3.46,
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 3.55
+  },
+  "AURUM.NSE": {
+    "price": 176.66,
+    "name": "Aurum Proptech Ltd",
+    "week_52_high": 180.18,
+    "week_52_low": 175.4,
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 176.66
   }
 }
