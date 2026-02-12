@@ -717,6 +717,24 @@ def parse_contract_note(pdf_path: str) -> dict:
         except Exception as e:
             print(f"[ContractNote] Plain text fallback failed: {e}")
 
+    # ── Deduplicate transactions within same PDF ──
+    # Same stock can appear in both Equity Segment tables and text fallback,
+    # or pdfplumber might extract the same row from overlapping table regions.
+    seen_fps: set = set()
+    unique_transactions: List[dict] = []
+    dups_removed = 0
+    for t in transactions:
+        fp = (t.get("isin", ""), t.get("action", ""), t.get("quantity", 0),
+              round(t.get("wap", 0), 4))
+        if fp in seen_fps:
+            dups_removed += 1
+            continue
+        seen_fps.add(fp)
+        unique_transactions.append(t)
+    if dups_removed > 0:
+        print(f"[ContractNote] Removed {dups_removed} duplicate transaction(s) within same PDF")
+    transactions = unique_transactions
+
     buys = sum(1 for t in transactions if t["action"] == "Buy")
     sells = sum(1 for t in transactions if t["action"] == "Sell")
 

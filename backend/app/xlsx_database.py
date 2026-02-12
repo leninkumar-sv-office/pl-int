@@ -385,6 +385,7 @@ class XlsxPortfolio:
         """
         # Ensure Zerodha/NSE symbol data is loaded (cached to disk, fast)
         _sym_resolver.ensure_loaded()
+        aliases_added = []
 
         for fp in sorted(self.stocks_dir.glob("*.xlsx")):
             if fp.name.startswith("~") or fp.name.startswith("."):
@@ -434,6 +435,35 @@ class XlsxPortfolio:
                 self._file_map[symbol] = fp
                 self._name_map[symbol] = clean
 
+            # ── Register derived symbol alias ──
+            # Contract note parser may resolve a stock to a different symbol
+            # (via derive_symbol) than what Zerodha/NSE name lookup gives.
+            # Register the file under the derived symbol too so that
+            # duplicate detection works regardless of which symbol is used.
+            # Safety: only register if derived symbol isn't already used by a
+            # DIFFERENT stock (prevents cross-stock fingerprint contamination
+            # for ambiguous prefixes like TATA, SBI, INDIAN, etc.)
+            derived = _sym_resolver.derive_symbol(clean)
+            if derived and derived != symbol and derived != "UNKNOWN":
+                existing_derived_files = self._all_files.get(derived, [])
+                # Safe to register if: no files yet, or existing files are
+                # for the SAME stock (same primary symbol, e.g. archives)
+                is_same_stock = (
+                    not existing_derived_files
+                    or all(ef in self._all_files.get(symbol, []) for ef in existing_derived_files)
+                )
+                if is_same_stock:
+                    if derived not in self._all_files:
+                        self._all_files[derived] = []
+                    if fp not in self._all_files[derived]:
+                        self._all_files[derived].append(fp)
+                    if derived not in self._file_map:
+                        self._file_map[derived] = fp
+                        self._name_map[derived] = clean
+                        aliases_added.append(f"{derived}→{symbol}")
+
+        if aliases_added:
+            print(f"[XlsxDB] Symbol aliases: {', '.join(aliases_added)}")
         print(f"[XlsxDB] Indexed {len(self._file_map)} stock files "
               f"({sum(len(v) for v in self._all_files.values())} total including archives)")
 
@@ -1028,7 +1058,12 @@ class XlsxPortfolio:
         symbol = symbol.upper()
         files = self._all_files.get(symbol, [])
         if not files:
-            return set(), set()
+            # Fallback: try glob-based file lookup (matches symbol substring in filename)
+            fallback = self._find_file_for_symbol(symbol)
+            if fallback:
+                files = [fallback]
+            else:
+                return set(), set()
 
         fingerprints = set()
         remarks_set = set()
@@ -1082,11 +1117,6 @@ class XlsxPortfolio:
             except Exception as e:
                 print(f"[XlsxDB] Error reading fingerprints from {fp.name}: {e}")
 
-        print(f"[FP-DEBUG] {symbol}: {len(fingerprints)} fingerprints, {len(remarks_set)} remarks from {len(files)} file(s)")
-        for fp_item in sorted(fingerprints):
-            print(f"  [FP-XLSX] {fp_item}")
-        for rm in sorted(remarks_set):
-            print(f"  [RM-XLSX] {rm}")
         return fingerprints, remarks_set
 
     def _find_header_row(self, ws) -> int:

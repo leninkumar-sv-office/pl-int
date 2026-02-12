@@ -325,12 +325,15 @@ def parse_contract_note_preview(req: ContractNoteUpload):
         fp_wap = (trade_date, action, qty, wap)
         fp_eff = (trade_date, action, qty, eff)
         matched = fp_wap in fingerprints or fp_eff in fingerprints
-        print(f"[FP-DEBUG] PDF tx: symbol={symbol} fp_wap={fp_wap} fp_eff={fp_eff} | match={'YES' if matched else 'NO'} | xlsx has {len(fingerprints)} fps")
         if matched:
             tx["isDuplicate"] = True
             dup_count += 1
         else:
             tx["isDuplicate"] = False
+            # Add to in-memory cache so within-batch duplicates are also flagged
+            # (e.g. parser produced same row twice, or multi-PDF merge has overlaps)
+            fingerprints.add(fp_wap)
+            fingerprints.add(fp_eff)
 
     if dup_count > 0:
         print(f"[Import] Found {dup_count} duplicate transaction(s) in preview")
@@ -533,7 +536,9 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
         }
 
     # ── Server-side duplicate detection (safety net) ──
-    _fp_cache: dict = {}
+    # IMPORTANT: _fp_cache is updated after each insert so that within-batch
+    # duplicates are also caught (e.g. same stock appears twice in the same batch).
+    _fp_cache: dict = {}  # symbol -> (fingerprints_set, remarks_set)
     cn_remark = f"CN#{contract_no}" if contract_no else ""
     skipped_dups = 0
 
@@ -627,6 +632,16 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
                     "name": tx.get("name", ""),
                     "quantity": tx["quantity"],
                 })
+
+            # ── Update in-memory cache so within-batch duplicates are caught ──
+            # Only add fingerprints — NOT the CN# remark.
+            # CN# remark check is for "entire contract note already imported before"
+            # (from xlsx). Within-batch, fingerprint check handles individual tx dedup.
+            if symbol:
+                fingerprints, remarks_set = _fp_cache.get(symbol, (set(), set()))
+                fingerprints.add(fp_wap)
+                fingerprints.add(fp_eff)
+                _fp_cache[symbol] = (fingerprints, remarks_set)
 
         except Exception as e:
             error_msg = f"{tx.get('action', '?')} {tx.get('symbol', '?')}: {str(e)[:100]}"
@@ -879,6 +894,45 @@ def get_stock_summary():
     # Sort: stocks with held shares first, then by unrealized P&L
     result.sort(key=lambda x: (-x.total_held_qty, -abs(x.unrealized_pl)))
     return result
+
+
+# ══════════════════════════════════════════════════════════
+#  DIAGNOSTICS
+# ══════════════════════════════════════════════════════════
+
+@app.get("/api/diagnostics/symbol-map")
+def get_symbol_map():
+    """Diagnostic endpoint: show how each xlsx file is mapped to symbols.
+
+    Lists every xlsx file, the primary resolved symbol, any derived aliases,
+    and whether fingerprint lookup would work for each alias.
+    """
+    from .xlsx_database import SYMBOL_MAP, _REVERSE_MAP
+    from . import symbol_resolver as sr
+
+    entries = []
+    for filename, primary_symbol in sorted(SYMBOL_MAP.items()):
+        derived = sr.derive_symbol(filename)
+        has_primary_files = primary_symbol in db._all_files and len(db._all_files[primary_symbol]) > 0
+        has_derived_files = derived in db._all_files and len(db._all_files[derived]) > 0
+        entry = {
+            "filename": filename,
+            "primary_symbol": primary_symbol,
+            "derived_symbol": derived if derived != primary_symbol else None,
+            "symbols_match": primary_symbol == derived,
+            "primary_indexed": has_primary_files,
+            "derived_indexed": has_derived_files,
+        }
+        if derived != primary_symbol and not has_derived_files:
+            entry["warning"] = f"Derived symbol '{derived}' not indexed — duplicate detection may fail"
+        entries.append(entry)
+
+    mismatches = [e for e in entries if not e["symbols_match"]]
+    return {
+        "total_files": len(entries),
+        "symbol_mismatches": len(mismatches),
+        "entries": entries,
+    }
 
 
 # ══════════════════════════════════════════════════════════
