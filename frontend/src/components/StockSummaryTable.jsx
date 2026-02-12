@@ -1125,21 +1125,23 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     })()}
 
                     {col('status') && <td style={{ whiteSpace: 'nowrap' }}>
-                      {hasHeld && stock.profitable_qty > 0 ? (
+                      {hasHeld && (stock.profitable_qty > 0 || stock.loss_qty > 0) ? (
                         <div>
-                          <div className="sell-tag" style={{ marginBottom: '2px' }}>
-                            ▲ Can Sell {stock.profitable_qty}
-                            {((stock.ltcg_profitable_qty || 0) > 0 || (stock.stcg_profitable_qty || 0) > 0) && (
-                              <span style={{ marginLeft: '4px' }}>
-                                ({[
-                                  (stock.ltcg_profitable_qty || 0) > 0 && `L:${stock.ltcg_profitable_qty}`,
-                                  (stock.stcg_profitable_qty || 0) > 0 && `S:${stock.stcg_profitable_qty}`,
-                                ].filter(Boolean).join(' · ')})
-                              </span>
-                            )}
-                          </div>
+                          {stock.profitable_qty > 0 && (
+                            <div className="sell-tag" style={{ marginBottom: '2px' }}>
+                              ▲ Can Sell {stock.profitable_qty}
+                              {((stock.ltcg_profitable_qty || 0) > 0 || (stock.stcg_profitable_qty || 0) > 0) && (
+                                <span style={{ marginLeft: '4px' }}>
+                                  ({[
+                                    (stock.ltcg_profitable_qty || 0) > 0 && `L:${stock.ltcg_profitable_qty}`,
+                                    (stock.stcg_profitable_qty || 0) > 0 && `S:${stock.stcg_profitable_qty}`,
+                                  ].filter(Boolean).join(' · ')})
+                                </span>
+                              )}
+                            </div>
+                          )}
                           {stock.loss_qty > 0 && (
-                            <div style={{ fontSize: '10px', color: 'var(--red)', marginTop: '3px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '10px', color: 'var(--red)', marginTop: stock.profitable_qty > 0 ? '3px' : '0', display: 'flex', gap: '6px', alignItems: 'center' }}>
                               <span>{stock.loss_qty} in loss</span>
                               {(stock.ltcg_loss_qty || 0) > 0 && (
                                 <span style={{ color: '#22c55e', fontWeight: 600 }}>L:{stock.ltcg_loss_qty}</span>
@@ -1151,20 +1153,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           )}
                         </div>
                       ) : hasHeld ? (
-                        <div>
-                          <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Hold</span>
-                          {stock.loss_qty > 0 && (
-                            <div style={{ fontSize: '10px', color: 'var(--red)', marginTop: '2px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <span>{stock.loss_qty} in loss</span>
-                              {(stock.ltcg_loss_qty || 0) > 0 && (
-                                <span style={{ color: '#22c55e', fontWeight: 600 }}>L:{stock.ltcg_loss_qty}</span>
-                              )}
-                              {(stock.stcg_loss_qty || 0) > 0 && (
-                                <span style={{ color: '#f59e0b', fontWeight: 600 }}>S:{stock.stcg_loss_qty}</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>No Price</span>
                       ) : (
                         <span style={{
                           fontSize: '11px',
