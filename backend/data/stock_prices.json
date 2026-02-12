@@ -141,7 +141,7 @@
   },
   "MANAPPURAM.NSE": {
     "price": 302.55,
-    "name": "Manuppuram Finance Ltd",
+    "name": "MANAPPURAM",
     "week_52_high": 312.0,
     "week_52_low": 301.1,
     "day_change": -6.4,
@@ -320,14 +320,14 @@
     "previous_close": 272.15
   },
   "AVANTIFEED.NSE": {
-    "price": 1131.4,
+    "price": 1193.5,
     "name": "Avanti Feeds",
-    "week_52_high": 1159.8,
-    "week_52_low": 1083.0,
-    "day_change": 27.6,
-    "day_change_pct": 2.5,
-    "volume": 2545981,
-    "previous_close": 1103.8
+    "week_52_high": 1209.0,
+    "week_52_low": 1100.0,
+    "day_change": 62.1,
+    "day_change_pct": 5.49,
+    "volume": 3173083,
+    "previous_close": 1131.4
   },
   "BHARATWIRE.NSE": {
     "price": 175.87,
@@ -390,14 +390,14 @@
     "previous_close": 715.8
   },
   "SETFGOLD.NSE": {
-    "price": 131.88,
+    "price": 132.71,
     "name": "SBI ETF Gold",
-    "week_52_high": 132.33,
-    "week_52_low": 131.26,
-    "day_change": -0.01,
-    "day_change_pct": -0.01,
-    "volume": 2926996,
-    "previous_close": 131.89
+    "week_52_high": 133.99,
+    "week_52_low": 132.01,
+    "day_change": 0.39,
+    "day_change_pct": 0.29,
+    "volume": 7478032,
+    "previous_close": 132.32
   },
   "AUROPHARMA.NSE": {
     "price": 1146.6,
@@ -440,14 +440,14 @@
     "previous_close": 2018.3
   },
   "SBIN.NSE": {
-    "price": 1144.1,
-    "name": "SBI",
-    "week_52_high": 1154.0,
-    "week_52_low": 1138.1,
-    "day_change": -1.9,
-    "day_change_pct": -0.17,
-    "volume": 17280036,
-    "previous_close": 1146.0
+    "price": 1182.9,
+    "name": "State Bank of India",
+    "week_52_high": 1187.5,
+    "week_52_low": 1142.8,
+    "day_change": 38.8,
+    "day_change_pct": 3.39,
+    "volume": 29491859,
+    "previous_close": 1144.1
   },
   "IOC.NSE": {
     "price": 181.31,
@@ -1080,14 +1080,14 @@
     "previous_close": 1542.1
   },
   "TMPV.NSE": {
-    "price": 379.35,
-    "name": "Tata Motors Ltd",
-    "week_52_high": 382.5,
-    "week_52_low": 376.75,
-    "day_change": 1.95,
-    "day_change_pct": 0.52,
-    "volume": 8921719,
-    "previous_close": 377.4
+    "price": 384.7,
+    "name": "Tata Motors Passenger Vehicles Limited",
+    "week_52_high": 387.35,
+    "week_52_low": 382.1,
+    "day_change": 5.35,
+    "day_change_pct": 1.41,
+    "volume": 10933658,
+    "previous_close": 379.35
   },
   "TATACAP.NSE": {
     "price": 357.6,
@@ -1238,5 +1238,85 @@
     "day_change_pct": 1.19,
     "volume": 30896,
     "previous_close": 11606.3
+  },
+  "TATACAP.BSE": {
+    "price": 357.5,
+    "name": "TATA Capital",
+    "week_52_high": 358.85,
+    "week_52_low": 353.65,
+    "day_change": 2.55,
+    "day_change_pct": 0.72,
+    "volume": 155915,
+    "previous_close": 354.95
+  },
+  "JAINREC.BSE": {
+    "price": 392.4,
+    "name": "Jain Resource Recycling Limited",
+    "week_52_high": 410.2,
+    "week_52_low": 379.0,
+    "day_change": -9.9,
+    "day_change_pct": -2.46,
+    "volume": 133643,
+    "previous_close": 402.3
+  },
+  "VEDL.BSE": {
+    "price": 700.55,
+    "name": "Vedanta Limited",
+    "week_52_high": 705.0,
+    "week_52_low": 689.6,
+    "day_change": 10.5,
+    "day_change_pct": 1.52,
+    "volume": 667578,
+    "previous_close": 690.05
+  },
+  "IDEA.NSE": {
+    "price": 11.85,
+    "name": "Vodafone Idea Limited",
+    "week_52_high": 11.9,
+    "week_52_low": 11.42,
+    "day_change": 0.37,
+    "day_change_pct": 3.22,
+    "volume": 859183785,
+    "previous_close": 11.48
+  },
+  "NATIONALUM.BSE": {
+    "price": 367.5,
+    "name": "National Aluminium Company Limited",
+    "week_52_high": 371.7,
+    "week_52_low": 365.85,
+    "day_change": -1.05,
+    "day_change_pct": -0.28,
+    "volume": 666022,
+    "previous_close": 368.55
+  },
+  "JAINREC.NSE": {
+    "price": 392.5,
+    "name": "Jain Resource Recycling Limited",
+    "week_52_high": 410.0,
+    "week_52_low": 378.75,
+    "day_change": -10.4,
+    "day_change_pct": -2.58,
+    "volume": 3019449,
+    "previous_close": 402.9
+  },
+  "VEDL.NSE": {
+    "price": 701.15,
+    "name": "Vedanta Limited",
+    "week_52_high": 705.0,
+    "week_52_low": 689.5,
+    "day_change": 11.0,
+    "day_change_pct": 1.59,
+    "volume": 11146383,
+    "previous_close": 690.15
+  },
+  "NATIONALUM.NSE": {
+    "price": 367.7,
+    "name": "National Aluminium Company Limited",
+    "week_52_high": 371.7,
+    "week_52_low": 365.8,
+    "day_change": -0.95,
+    "day_change_pct": -0.26,
+    "volume": 9020339,
+    "previous_close": 368.65
   }
 }
