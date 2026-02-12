@@ -2,7 +2,11 @@
 SBICAP Securities Contract Note PDF Parser.
 
 Parses contract notes from SBICAP Securities to extract buy/sell transactions.
-Uses Annexure B (Scrip Wise Summary) as the primary data source.
+
+Supports two PDF formats:
+  A. "Equity Segment" format — transaction data between "Equity Segment :" header
+     and "Obligation details :" boundary (tried FIRST)
+  B. "Annexure B" format — Scrip Wise Summary (legacy fallback)
 
 Effective buy price  = Net Total (After Levies) / Bought Qty
 Effective sell price = |Net Total (After Levies)| / Sold Qty
@@ -14,6 +18,8 @@ Extraction strategies (tried in order):
   1. pdfplumber direct table extraction (most reliable for structured PDFs)
   2. Text parsing with layout mode (pdfplumber layout=True or pdftotext -layout)
   3. Text parsing without layout mode (pdfplumber plain extract_text)
+
+Each strategy tries "Equity Segment" section first, then "Annexure B" as fallback.
 """
 
 import os
@@ -35,6 +41,10 @@ from . import symbol_resolver as _sym_resolver
 
 # Flexible pattern: allows optional spaces around hyphens in "-Cash-"
 _SEC_PATTERN = re.compile(r'(.+?)\s*-\s*Cash\s*-\s*((?:INE|INF)\w+)')
+
+# Equity Segment pattern: line starts with ISIN, followed by company name, then numbers
+# e.g. "INE783E01023       HIGH ENERGY            10.00      560.975..."
+_EQ_SEG_PATTERN = re.compile(r'^((?:INE|INF)\w{9,})\s+(.+?)\s{2,}([\d.]+)')
 
 # Number pattern that handles commas (e.g., 24,550.00)
 _NUM_PATTERN = re.compile(r'-?[\d,]+\.[\d]+|-?[\d,]+')
@@ -139,6 +149,59 @@ def _parse_nums_from_row(numbers: list, sec_name: str, isin: str,
         transactions.append(_build_transaction(
             "Sell", symbol, exchange, company_name, isin, sold_qty,
             avg_rate, net_after, brokerage, gst, stt, other_levies, trade_date,
+        ))
+    return True
+
+
+def _parse_equity_segment_row(isin: str, sec_name: str, numbers: List[float],
+                               exchange_map: Dict[str, str],
+                               trade_date: str,
+                               transactions: list) -> bool:
+    """Parse an Equity Segment row into Buy/Sell transactions.
+
+    Equity Segment columns (14 numbers):
+      BUY_QTY | WAP | BROKERAGE/SHARE | WAP_AFTER_BROK | TOTAL_BUY_VALUE |
+      SELL_QTY | WAP | BROKERAGE/SHARE | WAP_AFTER_BROK | TOTAL_SELL_VALUE |
+      NET_QTY | NET_OBLIGATION
+
+    Note: Equity Segment does NOT break down GST/STT/other levies per-scrip.
+    Those are only available as totals in the Obligation Details section.
+    We use WAP as avg_rate and TOTAL_VALUE as net_after (value after brokerage,
+    before exchange levies). The effective_price is TOTAL_VALUE / QTY.
+    """
+    try:
+        buy_qty = int(float(numbers[0]))
+        buy_wap = abs(float(numbers[1]))
+        buy_brokerage_per_share = abs(float(numbers[2]))
+        # numbers[3] = WAP after brokerage (unused — we compute effective_price)
+        buy_total_value = abs(float(numbers[4]))
+
+        sell_qty = int(float(numbers[5]))
+        sell_wap = abs(float(numbers[6]))
+        sell_brokerage_per_share = abs(float(numbers[7]))
+        # numbers[8] = WAP after brokerage for sell (unused)
+        sell_total_value = abs(float(numbers[9]))
+
+        # numbers[10] = net_qty, numbers[11] = net_obligation (unused)
+    except (ValueError, IndexError) as e:
+        print(f"[ContractNote] Equity Segment parse error for {sec_name}: {e} | nums={numbers}")
+        return False
+
+    symbol, exchange, company_name = _resolve_symbol(isin, sec_name, exchange_map)
+
+    if buy_qty > 0:
+        brokerage = buy_brokerage_per_share * buy_qty
+        transactions.append(_build_transaction(
+            "Buy", symbol, exchange, company_name, isin, buy_qty,
+            buy_wap, buy_total_value, brokerage,
+            gst=0.0, stt=0.0, other_levies=0.0, trade_date=trade_date,
+        ))
+    if sell_qty > 0:
+        brokerage = sell_brokerage_per_share * sell_qty
+        transactions.append(_build_transaction(
+            "Sell", symbol, exchange, company_name, isin, sell_qty,
+            sell_wap, sell_total_value, brokerage,
+            gst=0.0, stt=0.0, other_levies=0.0, trade_date=trade_date,
         ))
     return True
 
@@ -259,12 +322,14 @@ def _extract_exchange_map(text: str) -> Dict[str, str]:
 #  STRATEGY 1: PDFPLUMBER TABLE EXTRACTION
 # ═══════════════════════════════════════════════════════════
 
-def _parse_annexure_b_pdfplumber_tables(pdf_path: str, trade_date: str,
-                                         exchange_map: Dict[str, str]) -> List[dict]:
-    """Parse Annexure B using pdfplumber's direct table extraction API.
+def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
+                              exchange_map: Dict[str, str]) -> List[dict]:
+    """Parse transaction tables using pdfplumber's direct table extraction API.
 
     This is the most reliable strategy because it reads the underlying
     PDF table structure rather than relying on text layout alignment.
+
+    Tries "Equity Segment" section first, then falls back to "Annexure B".
     """
     try:
         import pdfplumber
@@ -275,19 +340,39 @@ def _parse_annexure_b_pdfplumber_tables(pdf_path: str, trade_date: str,
 
     try:
         with pdfplumber.open(pdf_path) as pdf:
-            in_annexure_b = False
+            in_section = False
+            section_type = None  # 'equity_segment' or 'annexure_b'
 
             for page in pdf.pages:
                 page_text = (page.extract_text() or "").upper()
 
-                if "ANNEXURE B" in page_text:
-                    in_annexure_b = True
-                if not in_annexure_b:
+                # Detect section start — prefer Equity Segment over Annexure B
+                if not in_section:
+                    if "EQUITY SEGMENT" in page_text:
+                        in_section = True
+                        section_type = "equity_segment"
+                        print("[ContractNote] Table extraction: found 'Equity Segment' section")
+                    elif "ANNEXURE B" in page_text:
+                        in_section = True
+                        section_type = "annexure_b"
+                        print("[ContractNote] Table extraction: found 'Annexure B' section")
+                else:
+                    # If we were in equity_segment and this page has Equity Segment, keep going
+                    if section_type == "equity_segment" and "EQUITY SEGMENT" in page_text:
+                        pass  # still in section
+                    elif section_type == "annexure_b" and "ANNEXURE B" in page_text:
+                        pass  # still in section
+
+                if not in_section:
                     continue
 
-                # Stop if we've clearly passed Annexure B
-                if "DESCRIPTION OF SERVICE" in page_text and "ANNEXURE B" not in page_text:
-                    break
+                # Stop conditions based on section type
+                if section_type == "equity_segment":
+                    if "OBLIGATION DETAILS" in page_text and "EQUITY SEGMENT" not in page_text:
+                        break
+                elif section_type == "annexure_b":
+                    if "DESCRIPTION OF SERVICE" in page_text and "ANNEXURE B" not in page_text:
+                        break
 
                 # Try table extraction with default settings (line-based)
                 tables = page.extract_tables()
@@ -322,41 +407,54 @@ def _parse_annexure_b_pdfplumber_tables(pdf_path: str, trade_date: str,
                         if "CGST" in row_upper or "SGST" in row_upper:
                             continue
 
-                        sec_match = _SEC_PATTERN.search(row_text)
-                        if not sec_match:
+                        # Detect ISIN and security name based on section type
+                        isin = None
+                        sec_name = None
+
+                        if section_type == "equity_segment":
+                            # Equity Segment: ISIN is in the first cell(s)
+                            isin_match = re.search(r'((?:INE|INF)\w{9,})', row_text)
+                            if not isin_match:
+                                continue
+                            isin = isin_match.group(1)
+                            # Security name: text between ISIN and the first number
+                            after_isin = row_text[isin_match.end():].strip()
+                            name_part = re.split(r'\s{2,}|\s+(?=\d)', after_isin, maxsplit=1)
+                            sec_name = name_part[0].strip() if name_part else ""
+                            if not sec_name:
+                                # Try from cells: find cell after ISIN cell
+                                for ci, cell in enumerate(cells):
+                                    if isin in cell and ci + 1 < len(cells):
+                                        sec_name = cells[ci + 1].strip()
+                                        break
+                        else:
+                            # Annexure B: "SecurityName - Cash - ISIN"
+                            sec_match = _SEC_PATTERN.search(row_text)
+                            if not sec_match:
+                                continue
+                            sec_name = sec_match.group(1).strip()
+                            sec_name = re.sub(r'^.*?(?:Equity|EQUITY)\s*', '', sec_name).strip()
+                            isin = sec_match.group(2).strip()
+
+                        if not isin:
                             continue
 
-                        sec_name = sec_match.group(1).strip()
-                        sec_name = re.sub(r'^.*?(?:Equity|EQUITY)\s*', '', sec_name).strip()
-                        isin = sec_match.group(2).strip()
-
-                        # Extract numeric values from cells after the ISIN cell
+                        # Extract all numbers from the row
                         nums = []
-                        past_desc = False
+                        past_isin = False
                         for cell in cells:
                             if isin in cell:
-                                past_desc = True
+                                past_isin = True
+                                # For equity segment, ISIN cell may also have numbers — skip
                                 continue
-                            if past_desc and cell:
+                            if not past_isin and section_type == "annexure_b":
+                                continue
+                            if past_isin or section_type == "equity_segment":
                                 cleaned = cell.replace(",", "").replace(" ", "").strip()
                                 if not cleaned:
                                     continue
-                                # Handle parenthetical negatives: (1234.56) → -1234.56
-                                if cleaned.startswith("(") and cleaned.endswith(")"):
-                                    cleaned = "-" + cleaned[1:-1]
-                                try:
-                                    nums.append(float(cleaned))
-                                except ValueError:
-                                    continue
-
-                        # Fallback: gather all numbers from the entire row
-                        if len(nums) < 10:
-                            nums = []
-                            for cell in cells:
-                                if "-Cash-" in cell or isin in cell:
-                                    continue
-                                cleaned = cell.replace(",", "").replace(" ", "").strip()
-                                if not cleaned:
+                                # Skip text-only cells (security name fragments)
+                                if re.match(r'^[A-Za-z()\s\-&.]+$', cleaned):
                                     continue
                                 if cleaned.startswith("(") and cleaned.endswith(")"):
                                     cleaned = "-" + cleaned[1:-1]
@@ -365,14 +463,39 @@ def _parse_annexure_b_pdfplumber_tables(pdf_path: str, trade_date: str,
                                 except ValueError:
                                     continue
 
-                        if len(nums) < 10:
-                            continue
+                        # Fallback: gather all numbers from row text AFTER the ISIN
+                        if len(nums) < 10 and isin:
+                            isin_pos = row_text.find(isin)
+                            text_after_isin = row_text[isin_pos + len(isin):] if isin_pos >= 0 else row_text
+                            # Further skip past the security name (text before first number group)
+                            name_skip = re.split(r'\s{2,}(?=\d)', text_after_isin, maxsplit=1)
+                            numeric_text = name_skip[1] if len(name_skip) > 1 else text_after_isin
+                            all_num_strs = _NUM_PATTERN.findall(numeric_text)
+                            fallback_nums = []
+                            for n in all_num_strs:
+                                cleaned = n.replace(",", "")
+                                try:
+                                    fallback_nums.append(float(cleaned))
+                                except ValueError:
+                                    continue
+                            if len(fallback_nums) >= 10:
+                                nums = fallback_nums
 
-                        numbers = [str(n) for n in nums]
-                        _parse_nums_from_row(
-                            numbers, sec_name, isin, exchange_map,
-                            trade_date, transactions,
-                        )
+                        # Route to the correct row parser
+                        if section_type == "equity_segment":
+                            if len(nums) >= 10:
+                                _parse_equity_segment_row(
+                                    isin, sec_name or "", nums,
+                                    exchange_map, trade_date, transactions,
+                                )
+                        else:
+                            if len(nums) < 10:
+                                continue
+                            numbers = [str(n) for n in nums]
+                            _parse_nums_from_row(
+                                numbers, sec_name or "", isin, exchange_map,
+                                trade_date, transactions,
+                            )
 
     except Exception as e:
         print(f"[ContractNote] pdfplumber table extraction error: {e}")
@@ -380,7 +503,7 @@ def _parse_annexure_b_pdfplumber_tables(pdf_path: str, trade_date: str,
         traceback.print_exc()
         return []
 
-    print(f"[ContractNote] Strategy 1 (table extraction): {len(transactions)} transactions")
+    print(f"[ContractNote] Strategy 1 (table extraction, section={section_type}): {len(transactions)} transactions")
     return transactions
 
 
@@ -388,11 +511,13 @@ def _parse_annexure_b_pdfplumber_tables(pdf_path: str, trade_date: str,
 #  STRATEGY 2 & 3: TEXT-BASED PARSING
 # ═══════════════════════════════════════════════════════════
 
-def _parse_annexure_b(text: str, trade_date: str,
-                       exchange_map: Dict[str, str]) -> List[dict]:
-    """Parse Annexure B (Scrip Wise Summary) via text-based line matching.
+def _parse_text_section(text: str, trade_date: str,
+                         exchange_map: Dict[str, str]) -> List[dict]:
+    """Parse transaction data via text-based line matching.
 
-    Each data row in Annexure B contains:
+    Tries "Equity Segment" section first, then "Annexure B" as fallback.
+
+    Each data row contains:
       Segment | Security Description | Bought Qty | Sold Qty | Average Rate |
       Gross Total | Brokerage | Net Total(Before Levies) | GST on Brokerage |
       Total STT | Other Statutory Levies | Net Total(After Levies)
@@ -402,30 +527,60 @@ def _parse_annexure_b(text: str, trade_date: str,
     """
     transactions: List[dict] = []
 
-    # Find Annexure B section (case-insensitive)
     upper_text = text.upper()
-    annexure_b_start = upper_text.find("ANNEXURE B")
-    if annexure_b_start < 0:
-        print("[ContractNote] Text parser: 'ANNEXURE B' not found")
+
+    # Try "Equity Segment" first, then "Annexure B" as fallback
+    section_start = -1
+    section_end_marker = None
+    section_type = None
+
+    eq_idx = upper_text.find("EQUITY SEGMENT")
+    if eq_idx >= 0:
+        section_start = eq_idx
+        section_end_marker = "OBLIGATION DETAILS"
+        section_type = "equity_segment"
+        print(f"[ContractNote] Text parser: found 'Equity Segment' at pos {eq_idx}")
+    else:
+        ann_idx = upper_text.find("ANNEXURE B")
+        if ann_idx >= 0:
+            section_start = ann_idx
+            section_end_marker = "DESCRIPTION OF SERVICE"
+            section_type = "annexure_b"
+            print(f"[ContractNote] Text parser: found 'Annexure B' at pos {ann_idx}")
+
+    if section_start < 0:
+        print("[ContractNote] Text parser: neither 'Equity Segment' nor 'Annexure B' found")
         return transactions
 
-    annexure_text = text[annexure_b_start:]
-    raw_lines = annexure_text.split("\n")
-    print(f"[ContractNote] Text parser: found ANNEXURE B, {len(raw_lines)} lines to scan")
+    section_text = text[section_start:]
+    raw_lines = section_text.split("\n")
+    print(f"[ContractNote] Text parser: section={section_type}, {len(raw_lines)} lines to scan")
+
+    # ── Determine which pattern to use for line detection ──
+    # Equity Segment: lines start with ISIN (e.g. "INE783E01023   HIGH ENERGY   10.00 ...")
+    # Annexure B: lines have "Name - Cash - ISIN" format
+    _ISIN_START_RE = re.compile(r'^\s*((?:INE|INF)\w{9,})\s+(.+)')
+
+    def _has_data_line(line):
+        """Check if a line contains a data row (ISIN-bearing) for either format."""
+        if section_type == "equity_segment":
+            return bool(_ISIN_START_RE.match(line))
+        else:
+            return bool(_SEC_PATTERN.search(line))
 
     # ── Merge continuation lines ──
     # Some PDF extractors split table rows across multiple lines.
-    # If a line has a security description but < 10 numbers, and the next
-    # line does NOT have its own security description, join them.
+    # If a line has a data pattern but < 10 numbers, and the next
+    # line does NOT have its own data pattern, join them.
     merged_lines: List[str] = []
     for line in raw_lines:
         stripped = line.strip()
         if not stripped:
             continue
         if (merged_lines
-                and _SEC_PATTERN.search(merged_lines[-1])
+                and _has_data_line(merged_lines[-1])
                 and len(_NUM_PATTERN.findall(merged_lines[-1])) < 10
-                and not _SEC_PATTERN.search(stripped)):
+                and not _has_data_line(stripped)):
             merged_lines[-1] = merged_lines[-1] + "  " + stripped
         else:
             merged_lines.append(line)
@@ -442,41 +597,70 @@ def _parse_annexure_b(text: str, trade_date: str,
             continue
         if "PAGE " in line_upper and " / " in line_upper:
             continue
+        if "EXCHANGE-WISE" in line_upper:
+            continue
+        # End-of-section markers
+        if section_end_marker and section_end_marker in line_upper:
+            break
         if "DESCRIPTION OF SERVICE" in line_upper:
-            break  # End of Annexure B
+            break
 
-        sec_match = _SEC_PATTERN.search(line)
-        if not sec_match:
-            continue
+        if section_type == "equity_segment":
+            # Equity Segment: ISIN at start of line
+            isin_match = _ISIN_START_RE.match(line)
+            if not isin_match:
+                continue
 
-        sec_name = sec_match.group(1).strip()
-        if sec_name.upper().startswith("EQUITY"):
-            sec_name = sec_name[len("Equity"):].strip()
-        isin = sec_match.group(2).strip()
+            isin = isin_match.group(1).strip()
+            rest_after_isin = isin_match.group(2).strip()
 
-        # Extract all numbers after the security description
-        rest = line[sec_match.end():]
-        numbers_raw = _NUM_PATTERN.findall(rest)
-        numbers = [n.replace(',', '') for n in numbers_raw]
+            # Split into name part and numeric part
+            # The name ends where numbers begin (2+ spaces then digits)
+            name_nums = re.split(r'\s{2,}(?=\d)', rest_after_isin, maxsplit=1)
+            sec_name = name_nums[0].strip() if name_nums else ""
+            numeric_part = name_nums[1] if len(name_nums) > 1 else ""
 
-        if len(numbers) < 10:
-            # Also try extracting numbers from the entire line
-            # (for cases where numbers appear before and after the description)
-            all_nums = _NUM_PATTERN.findall(line)
-            all_nums = [n.replace(',', '') for n in all_nums]
-            # Remove any numbers that are part of the ISIN/security name
-            if len(all_nums) >= 10 and len(numbers) < 10:
-                numbers = all_nums[-10:]  # Take the last 10 numbers
+            # Extract numbers ONLY from the numeric part (after the name)
+            # This avoids capturing digits from the ISIN
+            all_nums_raw = _NUM_PATTERN.findall(numeric_part)
+            numbers = [float(n.replace(',', '')) for n in all_nums_raw]
 
-        if len(numbers) < 10:
-            continue
+            if len(numbers) >= 10:
+                _parse_equity_segment_row(
+                    isin, sec_name, numbers,
+                    exchange_map, trade_date, transactions,
+                )
 
-        _parse_nums_from_row(
-            numbers, sec_name, isin, exchange_map,
-            trade_date, transactions,
-        )
+        else:
+            # Annexure B: "SecurityName - Cash - ISIN"
+            sec_match = _SEC_PATTERN.search(line)
+            if not sec_match:
+                continue
 
-    print(f"[ContractNote] Text parser: {len(transactions)} transactions")
+            sec_name = sec_match.group(1).strip()
+            if sec_name.upper().startswith("EQUITY"):
+                sec_name = sec_name[len("Equity"):].strip()
+            isin = sec_match.group(2).strip()
+
+            rest = line[sec_match.end():]
+            numbers_raw = _NUM_PATTERN.findall(rest)
+            numbers = [n.replace(',', '') for n in numbers_raw]
+
+            if len(numbers) < 10:
+                all_nums = _NUM_PATTERN.findall(line)
+                all_nums = [n.replace(',', '') for n in all_nums]
+                if len(all_nums) >= 10 and len(numbers) < 10:
+                    numbers = all_nums[-10:]
+
+            if len(numbers) < 10:
+                continue
+
+            _parse_nums_from_row(
+                numbers, sec_name, isin, exchange_map,
+                trade_date, transactions,
+            )
+
+    print(f"[ContractNote] Text parser ({section_type}): {len(transactions)} transactions")
     return transactions
 
 
@@ -516,20 +700,20 @@ def parse_contract_note(pdf_path: str) -> dict:
 
     # ── Strategy 1: pdfplumber direct table extraction ──
     print("[ContractNote] Trying Strategy 1: pdfplumber table extraction...")
-    transactions = _parse_annexure_b_pdfplumber_tables(
+    transactions = _parse_pdfplumber_tables(
         pdf_path, trade_date, exchange_map)
 
     # ── Strategy 2: text-based parsing with layout mode ──
     if not transactions:
         print("[ContractNote] Trying Strategy 2: layout-mode text parsing...")
-        transactions = _parse_annexure_b(text, trade_date, exchange_map)
+        transactions = _parse_text_section(text, trade_date, exchange_map)
 
     # ── Strategy 3: text-based parsing without layout mode ──
     if not transactions:
         print("[ContractNote] Trying Strategy 3: plain-text parsing (no layout)...")
         try:
             plain_text = extract_text_from_pdf(pdf_path, layout=False)
-            transactions = _parse_annexure_b(plain_text, trade_date, exchange_map)
+            transactions = _parse_text_section(plain_text, trade_date, exchange_map)
         except Exception as e:
             print(f"[ContractNote] Plain text fallback failed: {e}")
 
@@ -549,29 +733,33 @@ def parse_contract_note(pdf_path: str) -> dict:
 
     # If all strategies failed, include debug info for troubleshooting
     if not transactions:
-        idx = text.upper().find("ANNEXURE B")
+        upper = text.upper()
+        idx = upper.find("EQUITY SEGMENT")
+        if idx < 0:
+            idx = upper.find("ANNEXURE B")
         if idx >= 0:
             snippet = text[idx:idx + 1500]
         else:
-            snippet = "ANNEXURE B not found in extracted text. First 1500 chars:\n" + text[:1500]
+            snippet = "Neither 'Equity Segment' nor 'Annexure B' found in extracted text. First 1500 chars:\n" + text[:1500]
 
         result["_debug_text"] = snippet
 
-        # Also dump full text to a temp file for manual inspection
-        debug_path = "/tmp/contract_note_debug.txt"
-        try:
-            with open(debug_path, "w") as f:
-                f.write("=== LAYOUT MODE TEXT ===\n")
-                f.write(text)
-                f.write("\n\n=== PLAIN MODE TEXT ===\n")
-                try:
-                    plain = extract_text_from_pdf(pdf_path, layout=False)
-                    f.write(plain)
-                except Exception:
-                    f.write("(plain text extraction failed)")
-            print(f"[ContractNote] Debug text saved to: {debug_path}")
-        except Exception:
-            pass
+        # Dump full text to temp files for manual inspection
+        for debug_path in ["/tmp/contract_note_debug.txt",
+                           os.path.join(os.path.dirname(__file__), "..", "..", "contract_note_debug.txt")]:
+            try:
+                with open(debug_path, "w") as f:
+                    f.write("=== LAYOUT MODE TEXT ===\n")
+                    f.write(text)
+                    f.write("\n\n=== PLAIN MODE TEXT ===\n")
+                    try:
+                        plain = extract_text_from_pdf(pdf_path, layout=False)
+                        f.write(plain)
+                    except Exception:
+                        f.write("(plain text extraction failed)")
+                print(f"[ContractNote] Debug text saved to: {debug_path}")
+            except Exception:
+                pass
 
     return result
 

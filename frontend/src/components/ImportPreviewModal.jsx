@@ -75,6 +75,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
         background: rowBg,
         opacity: isDup ? 0.55 : 1,
       }}>
+        <td style={{ ...tdStyle, fontSize: '11px', whiteSpace: 'nowrap' }}>{t.trade_date || trade_date}</td>
         <td style={tdStyle}>
           <input
             type="text"
@@ -241,6 +242,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th style={thStyle}>Trade Date</th>
                     <th style={{ ...thStyle, minWidth: '160px' }}>Symbol</th>
                     <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
@@ -253,7 +255,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <tbody>
                   {buys.map((t, i) => renderRow(t, i, 'Buy'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={2}>Total Buys (excl. duplicates)</td>
+                    <td style={tdStyle} colSpan={3}>Total Buys (excl. duplicates)</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{importableBuys.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>
@@ -295,6 +297,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th style={thStyle}>Trade Date</th>
                     <th style={{ ...thStyle, minWidth: '160px' }}>Symbol</th>
                     <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
@@ -307,7 +310,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <tbody>
                   {sells.map((t, i) => renderRow(t, i, 'Sell'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={2}>Total Sells (excl. duplicates)</td>
+                    <td style={tdStyle} colSpan={3}>Total Sells (excl. duplicates)</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{importableSells.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>
