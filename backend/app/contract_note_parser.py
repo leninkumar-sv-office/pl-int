@@ -4,9 +4,10 @@ SBICAP Securities Contract Note PDF Parser.
 Parses contract notes from SBICAP Securities to extract buy/sell transactions.
 
 Supports two PDF formats:
-  A. "Equity Segment" format — transaction data between "Equity Segment :" header
-     and "Obligation details :" boundary (tried FIRST)
-  B. "Annexure B" format — Scrip Wise Summary (legacy fallback)
+  A. "Annexure B" format — Scrip Wise Summary with per-scrip charge breakdown
+     (GST, STT, other levies) and Net Total After Levies (tried FIRST)
+  B. "Equity Segment" format — transaction data between "Equity Segment :" header
+     and "Obligation details :" boundary (fallback when Annexure B is absent)
 
 Effective buy price  = Net Total (After Levies) / Bought Qty
 Effective sell price = |Net Total (After Levies)| / Sold Qty
@@ -329,7 +330,10 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
     This is the most reliable strategy because it reads the underlying
     PDF table structure rather than relying on text layout alignment.
 
-    Tries "Equity Segment" section first, then falls back to "Annexure B".
+    Prefers "Annexure B" over "Equity Segment" because Annexure B includes
+    per-scrip charge breakdowns (GST, STT, other levies) and the accurate
+    Net Total(After Levies).  Equity Segment only has brokerage — the
+    remaining charges appear only as totals in "Obligation Details".
     """
     try:
         import pdfplumber
@@ -340,24 +344,45 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
 
     try:
         with pdfplumber.open(pdf_path) as pdf:
+            # Pre-scan: determine which sections exist so we can prefer Annexure B
+            has_annexure_b = False
+            has_equity_segment = False
+            for page in pdf.pages:
+                page_text = (page.extract_text() or "").upper()
+                if "ANNEXURE B" in page_text:
+                    has_annexure_b = True
+                if "EQUITY SEGMENT" in page_text:
+                    has_equity_segment = True
+
+            # Pick preferred section: Annexure B > Equity Segment
+            if has_annexure_b:
+                preferred = "annexure_b"
+                print("[ContractNote] Table extraction: preferring 'Annexure B' (has per-scrip levies)")
+            elif has_equity_segment:
+                preferred = "equity_segment"
+                print("[ContractNote] Table extraction: using 'Equity Segment' (no Annexure B found)")
+            else:
+                print("[ContractNote] Table extraction: neither section found")
+                return []
+
             in_section = False
-            section_type = None  # 'equity_segment' or 'annexure_b'
+            section_type = None
 
             for page in pdf.pages:
                 page_text = (page.extract_text() or "").upper()
 
-                # Detect section start — prefer Equity Segment over Annexure B
+                # Detect section start — only enter the preferred section
                 if not in_section:
-                    if "EQUITY SEGMENT" in page_text:
-                        in_section = True
-                        section_type = "equity_segment"
-                        print("[ContractNote] Table extraction: found 'Equity Segment' section")
-                    elif "ANNEXURE B" in page_text:
+                    if preferred == "annexure_b" and "ANNEXURE B" in page_text:
                         in_section = True
                         section_type = "annexure_b"
-                        print("[ContractNote] Table extraction: found 'Annexure B' section")
+                        print("[ContractNote] Table extraction: entered 'Annexure B' section")
+                    elif preferred == "equity_segment" and "EQUITY SEGMENT" in page_text:
+                        in_section = True
+                        section_type = "equity_segment"
+                        print("[ContractNote] Table extraction: entered 'Equity Segment' section")
                 else:
-                    # If we were in equity_segment and this page has Equity Segment, keep going
+                    # Continue in current section if its marker is on this page
                     if section_type == "equity_segment" and "EQUITY SEGMENT" in page_text:
                         pass  # still in section
                     elif section_type == "annexure_b" and "ANNEXURE B" in page_text:
@@ -529,24 +554,25 @@ def _parse_text_section(text: str, trade_date: str,
 
     upper_text = text.upper()
 
-    # Try "Equity Segment" first, then "Annexure B" as fallback
+    # Prefer "Annexure B" (has per-scrip GST, STT, levies and Net Total After Levies)
+    # over "Equity Segment" (only has brokerage, missing obligation details charges).
     section_start = -1
     section_end_marker = None
     section_type = None
 
-    eq_idx = upper_text.find("EQUITY SEGMENT")
-    if eq_idx >= 0:
-        section_start = eq_idx
-        section_end_marker = "OBLIGATION DETAILS"
-        section_type = "equity_segment"
-        print(f"[ContractNote] Text parser: found 'Equity Segment' at pos {eq_idx}")
+    ann_idx = upper_text.find("ANNEXURE B")
+    if ann_idx >= 0:
+        section_start = ann_idx
+        section_end_marker = "DESCRIPTION OF SERVICE"
+        section_type = "annexure_b"
+        print(f"[ContractNote] Text parser: preferring 'Annexure B' at pos {ann_idx} (has per-scrip levies)")
     else:
-        ann_idx = upper_text.find("ANNEXURE B")
-        if ann_idx >= 0:
-            section_start = ann_idx
-            section_end_marker = "DESCRIPTION OF SERVICE"
-            section_type = "annexure_b"
-            print(f"[ContractNote] Text parser: found 'Annexure B' at pos {ann_idx}")
+        eq_idx = upper_text.find("EQUITY SEGMENT")
+        if eq_idx >= 0:
+            section_start = eq_idx
+            section_end_marker = "OBLIGATION DETAILS"
+            section_type = "equity_segment"
+            print(f"[ContractNote] Text parser: using 'Equity Segment' at pos {eq_idx} (no Annexure B)")
 
     if section_start < 0:
         print("[ContractNote] Text parser: neither 'Equity Segment' nor 'Annexure B' found")
