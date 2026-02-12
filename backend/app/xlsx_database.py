@@ -385,7 +385,6 @@ class XlsxPortfolio:
         """
         # Ensure Zerodha/NSE symbol data is loaded (cached to disk, fast)
         _sym_resolver.ensure_loaded()
-        aliases_added = []
 
         for fp in sorted(self.stocks_dir.glob("*.xlsx")):
             if fp.name.startswith("~") or fp.name.startswith("."):
@@ -435,35 +434,11 @@ class XlsxPortfolio:
                 self._file_map[symbol] = fp
                 self._name_map[symbol] = clean
 
-            # ── Register derived symbol alias (for fingerprint lookup ONLY) ──
-            # Contract note parser may resolve a stock to a different symbol
-            # (via derive_symbol) than what Zerodha/NSE name lookup gives.
-            # Register the file under the derived symbol in _all_files so that
-            # duplicate detection works regardless of which symbol is used.
-            # NOTE: We do NOT register in _file_map/_name_map — those drive
-            # get_all_holdings() iteration and would cause duplicate holdings
-            # with the wrong symbol (e.g. "ADANI" instead of "ADANIGREEN").
-            # Safety: only register if derived symbol isn't already used by a
-            # DIFFERENT stock (prevents cross-stock fingerprint contamination
-            # for ambiguous prefixes like TATA, SBI, INDIAN, etc.)
-            derived = _sym_resolver.derive_symbol(clean)
-            if derived and derived != symbol and derived != "UNKNOWN":
-                existing_derived_files = self._all_files.get(derived, [])
-                # Safe to register if: no files yet, or existing files are
-                # for the SAME stock (same primary symbol, e.g. archives)
-                is_same_stock = (
-                    not existing_derived_files
-                    or all(ef in self._all_files.get(symbol, []) for ef in existing_derived_files)
-                )
-                if is_same_stock:
-                    if derived not in self._all_files:
-                        self._all_files[derived] = []
-                    if fp not in self._all_files[derived]:
-                        self._all_files[derived].append(fp)
-                    aliases_added.append(f"{derived}→{symbol}")
-
-        if aliases_added:
-            print(f"[XlsxDB] Symbol aliases: {', '.join(aliases_added)}")
+            # NOTE: Derived symbol aliases (derive_symbol → first word of name)
+            # were removed because they create wrong cross-stock mappings
+            # (e.g. ITC→ITCHOTELS, TATA→TATACAP). Duplicate detection during
+            # import relies on get_existing_transaction_fingerprints() which
+            # has a glob-based fallback via _find_file_for_symbol().
         print(f"[XlsxDB] Indexed {len(self._file_map)} stock files "
               f"({sum(len(v) for v in self._all_files.values())} total including archives)")
 
