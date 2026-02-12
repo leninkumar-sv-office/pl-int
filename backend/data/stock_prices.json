@@ -91,7 +91,7 @@
   },
   "TATAPOWER.NSE": {
     "price": 375.65,
-    "name": "TATA Power",
+    "name": "Tata Power Company Limited",
     "week_52_high": 377.4,
     "week_52_low": 366.65,
     "day_change": 0.0,
@@ -521,7 +521,7 @@
   },
   "TATAPOWER.BSE": {
     "price": 375.3,
-    "name": "TATA Power",
+    "name": "Tata Power Company Limited",
     "week_52_high": 377.5,
     "week_52_low": 366.75,
     "day_change": 0.0,
@@ -981,7 +981,7 @@
   },
   "ADANIGREEN.NSE": {
     "price": 994.75,
-    "name": "ADANI GREEN ENERGY",
+    "name": "Adani Green Energy Limited",
     "week_52_high": 998.15,
     "week_52_low": 975.05,
     "day_change": 0.0,
@@ -991,7 +991,7 @@
   },
   "BHARATCOAL.NSE": {
     "price": 36.69,
-    "name": "BHARAT COKING COAL",
+    "name": "Bharat Coking Coal Limited",
     "week_52_high": 37.1,
     "week_52_low": 36.51,
     "day_change": 0.0,
@@ -1001,7 +1001,7 @@
   },
   "BHARTIARTL.NSE": {
     "price": 2012.1,
-    "name": "BHARTI AIRTEL",
+    "name": "Bharti Airtel Limited",
     "week_52_high": 2021.0,
     "week_52_low": 1996.7,
     "day_change": 0.0,
@@ -1011,7 +1011,7 @@
   },
   "CENTRALBK.NSE": {
     "price": 37.81,
-    "name": "CENTRAL BANK OF INDIA",
+    "name": "Central Bank of India",
     "week_52_high": 38.12,
     "week_52_low": 37.41,
     "day_change": 0.0,
@@ -1021,7 +1021,7 @@
   },
   "DIXON.NSE": {
     "price": 11741.0,
-    "name": "DIXON TECHNO (INDIA)",
+    "name": "Dixon Technologies (India) Limited",
     "week_52_high": 11766.0,
     "week_52_low": 11490.0,
     "day_change": 0.0,
@@ -1031,7 +1031,7 @@
   },
   "ADANIPOWER.NSE": {
     "price": 150.91,
-    "name": "Adani Power Ltd",
+    "name": "Adani Power Limited",
     "week_52_high": 151.33,
     "week_52_low": 147.8,
     "day_change": 0.0,
@@ -1041,7 +1041,7 @@
   },
   "LICI.NSE": {
     "price": 875.3,
-    "name": "Life Insurance Corp of India",
+    "name": "Life Insurance Corporation Of India",
     "week_52_high": 886.95,
     "week_52_low": 865.05,
     "day_change": 0.0,
@@ -1061,7 +1061,7 @@
   },
   "TITAGARH.NSE": {
     "price": 795.3,
-    "name": "Titagarh Rail Systems Ltd",
+    "name": "TITAGARH RAIL SYSTEMS LIMITED",
     "week_52_high": 798.0,
     "week_52_low": 785.5,
     "day_change": 0.0,
@@ -1211,7 +1211,7 @@
   },
   "ADANIGREEN.BSE": {
     "price": 994.6,
-    "name": "ADANI GREEN ENERGY",
+    "name": "Adani Green Energy Limited",
     "week_52_high": 998.0,
     "week_52_low": 972.75,
     "day_change": 0.0,
@@ -1221,7 +1221,7 @@
   },
   "BHARTIARTL.BSE": {
     "price": 2012.95,
-    "name": "BHARTI AIRTEL",
+    "name": "Bharti Airtel Limited",
     "week_52_high": 2020.75,
     "week_52_low": 1996.3,
     "day_change": 0.0,
@@ -1231,7 +1231,7 @@
   },
   "DIXON.BSE": {
     "price": 11735.9,
-    "name": "DIXON TECHNO (INDIA)",
+    "name": "Dixon Technologies (India) Limited",
     "week_52_high": 11760.0,
     "week_52_low": 11489.4,
     "day_change": 0.0,
@@ -1246,7 +1246,7 @@
     "week_52_low": 353.65,
     "day_change": 0.0,
     "day_change_pct": 0.0,
-    "volume": 0,
+    "volume": 990458,
     "previous_close": 357.5
   },
   "JAINREC.BSE": {
@@ -1368,5 +1368,15 @@
     "day_change_pct": 0.0,
     "volume": 0,
     "previous_close": 176.66
+  },
+  "SETFGOLD.BSE": {
+    "price": 132.7,
+    "name": "SBI ETF Gold",
+    "week_52_high": 132.94,
+    "week_52_low": 129.01,
+    "day_change": 0.0,
+    "day_change_pct": 0.0,
+    "volume": 0,
+    "previous_close": 132.7
   }
 }
