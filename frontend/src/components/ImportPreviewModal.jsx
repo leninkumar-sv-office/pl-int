@@ -76,6 +76,21 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
         opacity: isDup ? 0.55 : 1,
       }}>
         <td style={{ ...tdStyle, fontSize: '11px', whiteSpace: 'nowrap' }}>{t.trade_date || trade_date}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>
+          <span style={{
+            display: 'inline-block',
+            fontSize: '9px',
+            fontWeight: 700,
+            letterSpacing: '0.5px',
+            padding: '2px 7px',
+            borderRadius: '3px',
+            color: isBuy ? '#22c55e' : '#ef4444',
+            background: isBuy ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+            border: `1px solid ${isBuy ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+          }}>
+            {isBuy ? 'BUY' : 'SELL'}
+          </span>
+        </td>
         <td style={tdStyle}>
           <input
             type="text"
@@ -243,6 +258,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <th style={thStyle}>Trade Date</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Type</th>
                     <th style={{ ...thStyle, minWidth: '160px' }}>Symbol</th>
                     <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
@@ -255,7 +271,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <tbody>
                   {buys.map((t, i) => renderRow(t, i, 'Buy'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={3}>Total Buys (excl. duplicates)</td>
+                    <td style={tdStyle} colSpan={4}>Total Buys (excl. duplicates)</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{importableBuys.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>
@@ -298,6 +314,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <th style={thStyle}>Trade Date</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Type</th>
                     <th style={{ ...thStyle, minWidth: '160px' }}>Symbol</th>
                     <th style={thStyle}>Name / ISIN</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Qty</th>
@@ -310,7 +327,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 <tbody>
                   {sells.map((t, i) => renderRow(t, i, 'Sell'))}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={3}>Total Sells (excl. duplicates)</td>
+                    <td style={tdStyle} colSpan={4}>Total Sells (excl. duplicates)</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{importableSells.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>

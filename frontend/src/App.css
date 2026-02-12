@@ -487,6 +487,7 @@ tr.highlight-profit:hover {
   margin-right: 12px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 1024px) {

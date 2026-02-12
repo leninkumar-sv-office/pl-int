@@ -35,6 +35,7 @@ export default function App() {
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [importPreview, setImportPreview] = useState(null); // parsed contract note preview
+  const [importResult, setImportResult] = useState(null);   // persistent banner after import
 
   // Read cached data from backend (fast, no external calls)
   // Uses allSettled so one failing endpoint doesn't block the rest
@@ -282,8 +283,10 @@ export default function App() {
         groups[key].transactions.push(tx);
       }
 
-      let totalBuys = 0, totalSells = 0;
+      let totalBuys = 0, totalSells = 0, totalDupsSkipped = 0;
       const allErrors = [];
+      const allBuyDetails = [];
+      const allSellDetails = [];
       const batchKeys = Object.keys(groups);
 
       for (let i = 0; i < batchKeys.length; i++) {
@@ -298,18 +301,37 @@ export default function App() {
         });
         totalBuys += result.imported?.buys || 0;
         totalSells += result.imported?.sells || 0;
+        totalDupsSkipped += result.skipped_duplicates || 0;
+        if (result.imported?.buy_details) {
+          result.imported.buy_details.forEach(d => {
+            d.trade_date = group.trade_date;
+          });
+          allBuyDetails.push(...result.imported.buy_details);
+        }
+        if (result.imported?.sell_details) {
+          result.imported.sell_details.forEach(d => {
+            d.trade_date = group.trade_date;
+          });
+          allSellDetails.push(...result.imported.sell_details);
+        }
         if (result.errors) allErrors.push(...result.errors);
       }
 
       toast.dismiss('import-progress');
-      toast.success(
-        `Imported ${totalBuys} buys, ${totalSells} sells` +
-        (batchKeys.length > 1 ? ` from ${batchKeys.length} contract notes` : ` from ${importPreview.trade_date}`),
-        { duration: 5000 }
-      );
-      if (allErrors.length > 0) {
-        toast.error(`${allErrors.length} error(s): ${allErrors[0]}`, { duration: 5000 });
-      }
+
+      // Build persistent result banner data with full details
+      const resultData = {
+        totalBuys,
+        totalSells,
+        totalDupsSkipped,
+        buyDetails: allBuyDetails,
+        sellDetails: allSellDetails,
+        errors: allErrors,
+        tradeDate: importPreview.trade_date,
+        batchCount: batchKeys.length,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setImportResult(resultData);
       setImportPreview(null);
       loadData();
     } catch (err) {
@@ -359,6 +381,187 @@ export default function App() {
           error: { iconTheme: { primary: '#ff4757', secondary: '#1a1d27' } },
         }}
       />
+
+      {/* Persistent Import Result Banner */}
+      {importResult && (() => {
+        const hasErrors = importResult.errors.length > 0;
+        const hasNone = importResult.totalBuys === 0 && importResult.totalSells === 0;
+        const borderColor = hasErrors ? 'rgba(255,71,87,0.3)' : 'rgba(0,210,106,0.3)';
+        const bgGrad = hasErrors
+          ? 'linear-gradient(90deg, rgba(255,71,87,0.12) 0%, rgba(255,71,87,0.04) 100%)'
+          : 'linear-gradient(90deg, rgba(0,210,106,0.12) 0%, rgba(0,210,106,0.04) 100%)';
+        const _fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const detailTh = { padding: '4px 10px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'left', borderBottom: '1px solid var(--border)' };
+        const detailTd = { padding: '5px 10px', fontSize: '12px', borderBottom: '1px solid rgba(255,255,255,0.04)' };
+        return (
+          <div style={{
+            background: bgGrad,
+            border: `1px solid ${borderColor}`,
+            borderRadius: '8px',
+            margin: '8px 16px',
+            animation: 'fadeIn 0.3s ease-in',
+            overflow: 'hidden',
+          }}>
+            {/* Header row */}
+            <div style={{
+              padding: '12px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '18px', lineHeight: 1 }}>
+                  {hasErrors ? '⚠' : '✓'}
+                </span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text)' }}>
+                    Import Complete
+                    <span style={{ fontWeight: 400, fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                      at {importResult.timestamp}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginTop: '2px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    {importResult.totalBuys > 0 && (
+                      <span style={{ color: 'var(--green)', fontWeight: 600 }}>
+                        {importResult.totalBuys} buy{importResult.totalBuys !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {importResult.totalBuys > 0 && importResult.totalSells > 0 && <span>,</span>}
+                    {importResult.totalSells > 0 && (
+                      <span style={{ color: '#f59e0b', fontWeight: 600 }}>
+                        {importResult.totalSells} sell{importResult.totalSells !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {hasNone && <span style={{ color: 'var(--text-muted)' }}>No transactions imported</span>}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {importResult.batchCount > 1
+                        ? `from ${importResult.batchCount} contract notes`
+                        : `from ${importResult.tradeDate}`}
+                    </span>
+                    {importResult.totalDupsSkipped > 0 && (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                        ({importResult.totalDupsSkipped} duplicate{importResult.totalDupsSkipped !== 1 ? 's' : ''} skipped)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setImportResult(null)}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  color: 'var(--text-dim)',
+                  padding: '4px 12px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+                title="Dismiss this notification"
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+
+            {/* Detail tables */}
+            {(!hasNone) && (
+              <div style={{ padding: '0 20px 14px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                {/* Buys table */}
+                {importResult.buyDetails.length > 0 && (
+                  <div style={{ flex: '1 1 300px', minWidth: '280px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--green)', marginBottom: '6px' }}>
+                      Buys ({importResult.buyDetails.length})
+                    </div>
+                    <div style={{ border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                            <th style={detailTh}>Stock</th>
+                            <th style={{ ...detailTh, textAlign: 'right' }}>Qty</th>
+                            <th style={{ ...detailTh, textAlign: 'right' }}>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResult.buyDetails.map((d, i) => (
+                            <tr key={`b-${i}`}>
+                              <td style={detailTd}>
+                                <span style={{ fontWeight: 600, color: 'var(--text)' }}>{d.symbol}</span>
+                                {d.name && d.name !== d.symbol && (
+                                  <span style={{ color: 'var(--text-muted)', marginLeft: '6px', fontSize: '11px' }}>{d.name}</span>
+                                )}
+                              </td>
+                              <td style={{ ...detailTd, textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>
+                                +{d.quantity}
+                              </td>
+                              <td style={{ ...detailTd, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>
+                                {d.trade_date || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {/* Sells table */}
+                {importResult.sellDetails.length > 0 && (
+                  <div style={{ flex: '1 1 300px', minWidth: '280px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
+                      Sells ({importResult.sellDetails.length})
+                    </div>
+                    <div style={{ border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                            <th style={detailTh}>Stock</th>
+                            <th style={{ ...detailTh, textAlign: 'right' }}>Qty</th>
+                            <th style={{ ...detailTh, textAlign: 'right' }}>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResult.sellDetails.map((d, i) => (
+                            <tr key={`s-${i}`}>
+                              <td style={detailTd}>
+                                <span style={{ fontWeight: 600, color: 'var(--text)' }}>{d.symbol}</span>
+                                {d.name && d.name !== d.symbol && (
+                                  <span style={{ color: 'var(--text-muted)', marginLeft: '6px', fontSize: '11px' }}>{d.name}</span>
+                                )}
+                              </td>
+                              <td style={{ ...detailTd, textAlign: 'right', fontWeight: 600, color: '#f59e0b' }}>
+                                -{d.quantity}
+                              </td>
+                              <td style={{ ...detailTd, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>
+                                {d.trade_date || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Errors section */}
+            {hasErrors && (
+              <div style={{ padding: '0 20px 14px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--red)', marginBottom: '4px' }}>
+                  Errors ({importResult.errors.length})
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--red)', opacity: 0.85 }}>
+                  {importResult.errors.map((e, i) => (
+                    <div key={i} style={{ marginBottom: '2px' }}>• {e}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Market Ticker */}
       <MarketTicker tickers={marketTicker} loading={loading} />
