@@ -264,6 +264,8 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
             overflow: 'auto',
+            width: 'fit-content',
+            maxWidth: '100%',
           }}>
             <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
               <thead>
