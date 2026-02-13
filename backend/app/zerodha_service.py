@@ -50,9 +50,10 @@ _auth_failed = False  # Set True on 403 — stops retrying until token is refres
 _conn_failed = False  # Set True on connection errors — retries once per refresh cycle
 _conn_fail_time = 0.0  # When connection last failed (retry after 60s)
 
-# Instrument cache: {exchange:tradingsymbol → instrument_token}
-_instrument_cache: Dict[str, int] = {}
-_instruments_loaded = False
+# Instrument cache: {"SYMBOL.EXCHANGE" → instrument_token}
+_instrument_token_cache: Dict[str, int] = {}
+_instrument_tokens_loaded = False
+_instrument_tokens_lock = threading.Lock()
 
 # Instrument name cache: {"SYMBOL.EXCHANGE" → "Company Name"}
 _instrument_names: Dict[str, str] = {}
@@ -325,8 +326,11 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "day_change_pct": round(day_change_pct, 2),
                     "lower_circuit": float(info.get("lower_circuit_limit", 0) or 0),
                     "upper_circuit": float(info.get("upper_circuit_limit", 0) or 0),
-                    "week_52_high": float(info.get("ohlc", {}).get("high", 0) or 0),
-                    "week_52_low": float(info.get("ohlc", {}).get("low", 0) or 0),
+                    # NOTE: Kite /quote does NOT provide 52-week data.
+                    # ohlc.high/low is TODAY's daily high/low — NOT 52-week.
+                    # 52-week is fetched separately via fetch_52_week_range().
+                    "week_52_high": 0,
+                    "week_52_low": 0,
                     "name": "",  # Kite doesn't return company name in quotes
                 }
                 for mk in mapped_keys:
@@ -378,6 +382,123 @@ def fetch_ohlc(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 for mk in mapped_keys:
                     results[mk] = ohlc_data
 
+    return results
+
+
+# ═══════════════════════════════════════════════════════════
+#  52-WEEK HIGH/LOW  (via Historical Data API)
+# ═══════════════════════════════════════════════════════════
+
+# Cache: {"SYMBOL.EXCHANGE" → {week_52_high, week_52_low, fetched_at}}
+_52w_cache: Dict[str, dict] = {}
+_52w_cache_lock = threading.Lock()
+_52W_CACHE_TTL = 6 * 3600  # Refresh 52-week data every 6 hours
+
+
+def _get_instrument_token(symbol: str, exchange: str) -> Optional[int]:
+    """Look up Kite instrument_token for a symbol. Loads instruments if needed."""
+    if not _instrument_tokens_loaded:
+        _load_instruments()
+    key = f"{symbol.upper()}.{exchange.upper()}"
+    return _instrument_token_cache.get(key)
+
+
+def _fetch_historical_52w(instrument_token: int) -> Optional[Tuple[float, float]]:
+    """Fetch 1 year of daily candles and compute 52-week high/low.
+    Returns (week_52_high, week_52_low) or None on failure.
+
+    Kite Historical Data API:
+      GET /instruments/historical/{token}/day?from=YYYY-MM-DD&to=YYYY-MM-DD
+      Response: {"data":{"candles":[[ts,open,high,low,close,volume],...]}}
+    """
+    from datetime import datetime, timedelta
+    to_date = datetime.now().strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+
+    path = f"/instruments/historical/{instrument_token}/day"
+    data = _api_get(path, {"from": from_date, "to": to_date})
+    if not data or "data" not in data:
+        return None
+    candles = data["data"].get("candles", [])
+    if not candles:
+        return None
+
+    # Candle format: [timestamp, open, high, low, close, volume]
+    highs = [c[2] for c in candles if len(c) >= 4]
+    lows = [c[3] for c in candles if len(c) >= 4]
+    if not highs or not lows:
+        return None
+
+    return (max(highs), min(lows))
+
+
+def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
+    """Fetch 52-week high/low for multiple stocks using Kite Historical Data API.
+
+    Returns {symbol.exchange: {week_52_high: float, week_52_low: float}}.
+    Uses a 6-hour cache TTL to avoid excessive API calls.
+    Rate-limited to ~3 requests/second (Kite historical API limit).
+    """
+    if not is_session_valid():
+        return {}
+
+    results: Dict[str, dict] = {}
+    need_fetch: List[Tuple[str, str, int]] = []  # (sym, exch, token)
+
+    now = time.time()
+
+    # Check cache first
+    for sym, exch in symbols:
+        key = f"{sym}.{exch}"
+        with _52w_cache_lock:
+            cached = _52w_cache.get(key)
+        if cached and (now - cached.get("fetched_at", 0)) < _52W_CACHE_TTL:
+            results[key] = {
+                "week_52_high": cached["week_52_high"],
+                "week_52_low": cached["week_52_low"],
+            }
+            continue
+
+        # Need to fetch — look up instrument token
+        token = _get_instrument_token(sym, exch)
+        if token:
+            need_fetch.append((sym, exch, token))
+
+    if not need_fetch:
+        return results
+
+    print(f"[Zerodha] Fetching 52-week range for {len(need_fetch)} stocks via Historical API...")
+    fetched = 0
+    failed = 0
+
+    for sym, exch, token in need_fetch:
+        key = f"{sym}.{exch}"
+        try:
+            result = _fetch_historical_52w(token)
+            if result:
+                w52h, w52l = result
+                entry = {
+                    "week_52_high": round(w52h, 2),
+                    "week_52_low": round(w52l, 2),
+                    "fetched_at": now,
+                }
+                with _52w_cache_lock:
+                    _52w_cache[key] = entry
+                results[key] = {
+                    "week_52_high": entry["week_52_high"],
+                    "week_52_low": entry["week_52_low"],
+                }
+                fetched += 1
+            else:
+                failed += 1
+        except Exception as e:
+            print(f"[Zerodha] 52w fetch error for {key}: {e}")
+            failed += 1
+
+        # Rate limit: ~3 requests/second
+        time.sleep(0.35)
+
+    print(f"[Zerodha] 52-week range: {fetched} fetched, {failed} failed")
     return results
 
 
@@ -505,12 +626,12 @@ def fetch_market_tickers() -> Dict[str, dict]:
 # ═══════════════════════════════════════════════════════════
 
 def _load_instruments():
-    """Download instrument CSVs from Kite (NSE + BSE equity) and cache names.
+    """Download instrument CSVs from Kite (NSE + BSE equity) and cache names + tokens.
     The /instruments/{exchange} endpoint returns a CSV with columns:
     instrument_token,exchange_token,tradingsymbol,name,last_price,expiry,
     strike,tick_size,lot_size,instrument_type,segment,exchange
     """
-    global _instrument_names_loaded
+    global _instrument_names_loaded, _instrument_tokens_loaded
     import csv
     import io
 
@@ -522,6 +643,7 @@ def _load_instruments():
             return
 
     names: Dict[str, str] = {}
+    tokens: Dict[str, int] = {}
     for exchange in ("NSE", "BSE"):
         try:
             resp = requests.get(
@@ -541,17 +663,27 @@ def _load_instruments():
                     continue
                 sym = row.get("tradingsymbol", "").strip()
                 name = row.get("name", "").strip()
+                token_str = row.get("instrument_token", "").strip()
                 if sym and name:
-                    names[f"{sym}.{exchange}"] = name
+                    key = f"{sym}.{exchange}"
+                    names[key] = name
+                    if token_str:
+                        try:
+                            tokens[key] = int(token_str)
+                        except ValueError:
+                            pass
                     count += 1
-            print(f"[Zerodha] Loaded {count} {exchange} instrument names")
+            print(f"[Zerodha] Loaded {count} {exchange} instrument names + tokens")
         except Exception as e:
             print(f"[Zerodha] Instruments {exchange} error: {e}")
 
     with _instrument_names_lock:
         _instrument_names.update(names)
         _instrument_names_loaded = True
-    print(f"[Zerodha] Total instrument names cached: {len(_instrument_names)}")
+    with _instrument_tokens_lock:
+        _instrument_token_cache.update(tokens)
+        _instrument_tokens_loaded = True
+    print(f"[Zerodha] Total cached: {len(_instrument_names)} names, {len(_instrument_token_cache)} tokens")
 
 
 def load_instruments_async():

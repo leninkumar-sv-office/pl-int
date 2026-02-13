@@ -391,6 +391,60 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
     if to_save:
         _save_prices_file(to_save)
 
+    # ── 52-WEEK RANGE (Kite Historical API) ──────────────────
+    # Zerodha quotes don't include 52-week data — fetch separately.
+    # Merge into already-built StockLiveData objects + to_save dict.
+    zerodha_symbols = [(sym, exch) for sym, exch in need
+                       if f"{sym}.{exch}" in results
+                       and not results[f"{sym}.{exch}"].is_manual]
+    if zerodha_symbols:
+        try:
+            w52_data = zerodha_service.fetch_52_week_range(zerodha_symbols)
+            if w52_data:
+                # Load existing saved data for fallback
+                saved_prices = _load_prices_file()
+                for sym, exch in zerodha_symbols:
+                    key = f"{sym}.{exch}"
+                    w52 = w52_data.get(key)
+                    if w52 and w52.get("week_52_high", 0) > 0:
+                        h = w52["week_52_high"]
+                        l = w52["week_52_low"]
+                    else:
+                        # Fallback: use saved JSON or xlsx for 52-week
+                        saved = saved_prices.get(key, {})
+                        h = float(saved.get("week_52_high", 0) or 0)
+                        l = float(saved.get("week_52_low", 0) or 0)
+                        if h <= 0:
+                            idx = _xlsx_single(sym)
+                            h = idx.get("w52h", 0)
+                            l = idx.get("w52l", 0)
+                    if h > 0 and key in results:
+                        results[key].week_52_high = h
+                        results[key].week_52_low = l
+                        if key in to_save:
+                            to_save[key]["week_52_high"] = h
+                            to_save[key]["week_52_low"] = l
+                # Re-save with updated 52-week data
+                if to_save:
+                    _save_prices_file(to_save)
+        except Exception as e:
+            print(f"[StockService] 52-week fetch error: {e}")
+            # Fallback: try to preserve existing 52-week from JSON/xlsx
+            saved_prices = _load_prices_file()
+            for sym, exch in zerodha_symbols:
+                key = f"{sym}.{exch}"
+                if key in results and results[key].week_52_high <= 0:
+                    saved = saved_prices.get(key, {})
+                    h = float(saved.get("week_52_high", 0) or 0)
+                    l = float(saved.get("week_52_low", 0) or 0)
+                    if h <= 0:
+                        idx = _xlsx_single(sym)
+                        h = idx.get("w52h", 0)
+                        l = idx.get("w52l", 0)
+                    if h > 0:
+                        results[key].week_52_high = h
+                        results[key].week_52_low = l
+
     if not still_need:
         zerodha_got = len(need) - len(still_need)
         if zerodha_got > 0:
