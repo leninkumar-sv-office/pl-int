@@ -386,28 +386,30 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
           <div style={{
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
-            overflow: 'hidden',
+            overflow: 'auto',
+            width: 'fit-content',
+            maxWidth: '100%',
           }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <th style={subTh}>Buy Date</th>
-                  <th style={subTh}>Sell Date</th>
-                  <th style={subTh}>Qty</th>
-                  <th style={subTh}>Buy Price</th>
-                  <th style={subTh}>Sell Price</th>
-                  <th style={subTh}>Realized P&L</th>
+                  <th style={heldTh}>Buy Date</th>
+                  <th style={heldTh}>Sell Date</th>
+                  <th style={heldTh}>Qty</th>
+                  <th style={heldTh}>Buy Price</th>
+                  <th style={heldTh}>Sell Price</th>
+                  <th style={heldTh}>Realized P&L</th>
                 </tr>
               </thead>
               <tbody>
                 {soldTrades.map((t, idx) => (
                   <tr key={t.id || idx} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={subTd}>{formatDate(t.buy_date)}</td>
-                    <td style={subTd}>{formatDate(t.sell_date)}</td>
-                    <td style={{ ...subTd, fontWeight: 600 }}>{t.quantity}</td>
-                    <td style={subTd}>{formatINR(t.buy_price)}</td>
-                    <td style={subTd}>{formatINR(t.sell_price)}</td>
-                    <td style={{ ...subTd, fontWeight: 600, color: t.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                    <td style={heldTd}>{formatDate(t.buy_date)}</td>
+                    <td style={heldTd}>{formatDate(t.sell_date)}</td>
+                    <td style={{ ...heldTd, fontWeight: 600 }}>{t.quantity}</td>
+                    <td style={heldTd}>{formatINR(t.buy_price)}</td>
+                    <td style={heldTd}>{formatINR(t.sell_price)}</td>
+                    <td style={{ ...heldTd, fontWeight: 600, color: t.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                       {t.realized_pl >= 0 ? '+' : ''}{formatINR(t.realized_pl)}
                     </td>
                   </tr>
