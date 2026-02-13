@@ -38,6 +38,27 @@ function WeekRangeBar({ low, high, current, buyPrice }) {
   );
 }
 
+/* ── Held Lots column visibility config ─────────────────── */
+const HELD_COL_DEFS = [
+  { id: 'buyDate',   label: 'Buy Date' },
+  { id: 'qty',       label: 'Qty' },
+  { id: 'price',     label: 'Price' },
+  { id: 'buyPrice',  label: 'Buy Price' },
+  { id: 'totalCost', label: 'Total Cost' },
+  { id: 'current',   label: 'Current' },
+  { id: 'pl',        label: 'P&L' },
+];
+const HELD_DEFAULT_HIDDEN = ['price'];
+const HELD_COL_LS_KEY = 'heldLotsHiddenCols';
+
+function loadHeldHiddenCols() {
+  try {
+    const saved = localStorage.getItem(HELD_COL_LS_KEY);
+    if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
+  } catch (_) {}
+  return new Set(HELD_DEFAULT_HIDDEN);
+}
+
 /* ── Expanded detail panel inside a stock row ───────────── */
 function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend, selectedLots, onToggleLot, onToggleAllLots }) {
   const heldLots = (portfolio || []).filter(
@@ -51,6 +72,33 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
 
   const allLotsSelected = heldLots.length > 0 && heldLots.every(item => selectedLots.has(item.holding.id));
   const someLotsSelected = heldLots.some(item => selectedLots.has(item.holding.id));
+
+  // Held lots column visibility
+  const [hiddenHeldCols, setHiddenHeldCols] = useState(loadHeldHiddenCols);
+  const [showColPicker, setShowColPicker] = useState(false);
+  const colPickerRef = useRef(null);
+  const hCol = (id) => !hiddenHeldCols.has(id);
+
+  const toggleHeldCol = (id) => {
+    setHiddenHeldCols(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem(HELD_COL_LS_KEY, JSON.stringify([...next])); } catch (_) {}
+      return next;
+    });
+  };
+
+  // Close column picker on outside click
+  useEffect(() => {
+    if (!showColPicker) return;
+    const handler = (e) => { if (colPickerRef.current && !colPickerRef.current.contains(e.target)) setShowColPicker(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showColPicker]);
+
+  // Sold transactions totals
+  const totalSoldQty = soldTrades.reduce((sum, t) => sum + (t.quantity || 0), 0);
+  const totalSoldPL = soldTrades.reduce((sum, t) => sum + (t.realized_pl || 0), 0);
 
   return (
     <div style={{
@@ -150,16 +198,77 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                 <span style={{ color: 'var(--text-muted)' }}>STCG (&le;1yr)</span>
               </span>
             </span>
+            {/* Column picker */}
+            <div style={{ position: 'relative' }} ref={colPickerRef}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowColPicker(v => !v); }}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Show/hide columns"
+              >
+                <span style={{ fontSize: '13px' }}>&#9776;</span> Columns
+              </button>
+              {showColPicker && (
+                <div style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: '4px',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '8px 0',
+                  zIndex: 100,
+                  minWidth: '140px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}>
+                  {HELD_COL_DEFS.map(c => (
+                    <label
+                      key={c.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={hCol(c.id)}
+                        onChange={() => toggleHeldCol(c.id)}
+                        style={{ accentColor: 'var(--blue)' }}
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div style={{
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
-            overflow: 'hidden',
+            overflow: 'auto',
           }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <th style={{ ...subTh, width: '36px', textAlign: 'center', padding: '10px 6px' }}>
+                  <th style={{ ...heldTh, width: '30px', textAlign: 'center', padding: '8px 4px' }}>
                     <input
                       type="checkbox"
                       checked={allLotsSelected}
@@ -169,14 +278,14 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                       title="Select all lots for bulk sell"
                     />
                   </th>
-                  <th style={subTh}>Buy Date</th>
-                  <th style={subTh}>Qty</th>
-                  <th style={subTh}>Price</th>
-                  <th style={subTh}>Buy Price</th>
-                  <th style={subTh}>Total Cost</th>
-                  <th style={subTh}>Current</th>
-                  <th style={subTh}>P&L</th>
-                  <th style={subTh}>Action</th>
+                  {hCol('buyDate')   && <th style={heldTh}>Buy Date</th>}
+                  {hCol('qty')       && <th style={heldTh}>Qty</th>}
+                  {hCol('price')     && <th style={heldTh}>Price</th>}
+                  {hCol('buyPrice')  && <th style={heldTh}>Buy Price</th>}
+                  {hCol('totalCost') && <th style={heldTh}>Total Cost</th>}
+                  {hCol('current')   && <th style={heldTh}>Current</th>}
+                  {hCol('pl')        && <th style={heldTh}>P&L</th>}
+                  <th style={heldTh}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,7 +309,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                         borderLeft: `3px solid ${isLTCG ? ltcgBorder : stcgBorder}`,
                       }}
                     >
-                      <td style={{ textAlign: 'center', padding: '10px 6px', width: '36px' }}>
+                      <td style={{ textAlign: 'center', padding: '8px 4px', width: '30px' }}>
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -208,35 +317,41 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                           style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
                         />
                       </td>
-                      <td style={subTd}>
-                        <div>{formatDate(h.buy_date)}</div>
-                        <span style={{
-                          fontSize: '9px',
-                          fontWeight: 700,
-                          padding: '1px 5px',
-                          borderRadius: '3px',
-                          color: isLTCG ? '#22c55e' : '#f59e0b',
-                          background: isLTCG ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.15)',
-                          letterSpacing: '0.5px',
-                        }}>
-                          {isLTCG ? 'LTCG' : 'STCG'}
-                        </span>
-                      </td>
-                      <td style={{ ...subTd, fontWeight: 600 }}>{h.quantity}</td>
-                      <td style={subTd}>{formatINR(h.price || h.buy_price)}</td>
-                      <td style={subTd}>{formatINR(h.buy_price)}</td>
-                      <td style={subTd}>{formatINR(h.buy_cost || (h.buy_price * h.quantity))}</td>
-                      <td style={{ ...subTd, color: inProfit ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-                        {cp > 0 ? formatINR(cp) : '--'}
-                      </td>
-                      <td style={{ ...subTd, fontWeight: 600, color: lotPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                        {cp > 0 ? `${lotPL >= 0 ? '+' : ''}${formatINR(lotPL)}` : '--'}
-                      </td>
-                      <td style={subTd}>
+                      {hCol('buyDate') && (
+                        <td style={heldTd}>
+                          <div>{formatDate(h.buy_date)}</div>
+                          <span style={{
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            color: isLTCG ? '#22c55e' : '#f59e0b',
+                            background: isLTCG ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.15)',
+                            letterSpacing: '0.5px',
+                          }}>
+                            {isLTCG ? 'LTCG' : 'STCG'}
+                          </span>
+                        </td>
+                      )}
+                      {hCol('qty')       && <td style={{ ...heldTd, fontWeight: 600 }}>{h.quantity}</td>}
+                      {hCol('price')     && <td style={heldTd}>{formatINR(h.price || h.buy_price)}</td>}
+                      {hCol('buyPrice')  && <td style={heldTd}>{formatINR(h.buy_price)}</td>}
+                      {hCol('totalCost') && <td style={heldTd}>{formatINR(h.buy_cost || (h.buy_price * h.quantity))}</td>}
+                      {hCol('current')   && (
+                        <td style={{ ...heldTd, color: inProfit ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                          {cp > 0 ? formatINR(cp) : '--'}
+                        </td>
+                      )}
+                      {hCol('pl')        && (
+                        <td style={{ ...heldTd, fontWeight: 600, color: lotPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {cp > 0 ? `${lotPL >= 0 ? '+' : ''}${formatINR(lotPL)}` : '--'}
+                        </td>
+                      )}
+                      <td style={heldTd}>
                         <button
                           className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
                           onClick={(e) => { e.stopPropagation(); onSell(item); }}
-                          style={{ minWidth: '56px' }}
+                          style={{ minWidth: '48px', padding: '4px 10px' }}
                         >
                           Sell
                         </button>
@@ -253,8 +368,18 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
       {/* ── Sold Transactions sub-table ─────────────────── */}
       {soldTrades.length > 0 && (
         <div>
-          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)' }}>
-            Sold Transactions ({soldTrades.length})
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span>Sold Transactions ({soldTrades.length})</span>
+            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-dim)' }}>
+              {totalSoldQty} share{totalSoldQty !== 1 ? 's' : ''}
+            </span>
+            <span style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: totalSoldPL >= 0 ? 'var(--green)' : 'var(--red)',
+            }}>
+              Net P&L: {totalSoldPL >= 0 ? '+' : ''}{formatINR(totalSoldPL)}
+            </span>
           </div>
           <div style={{
             border: '1px solid var(--border)',
@@ -313,6 +438,23 @@ const subTh = {
 
 const subTd = {
   padding: '10px 14px',
+  fontSize: '13px',
+  verticalAlign: 'middle',
+};
+
+// Compact styles for Held Lots sub-table (tighter padding, fits content)
+const heldTh = {
+  padding: '7px 10px',
+  textAlign: 'left',
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  color: 'var(--text-dim)',
+  fontWeight: 600,
+  borderBottom: '1px solid var(--border)',
+};
+const heldTd = {
+  padding: '7px 10px',
   fontSize: '13px',
   verticalAlign: 'middle',
 };
@@ -573,11 +715,14 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
   // Count selected lots info for the action bar
   const selectedCount = selectedLots.size;
-  const selectedQty = selectedCount > 0
-    ? (portfolio || [])
-        .filter(item => selectedLots.has(item.holding.id) && item.holding.quantity > 0)
-        .reduce((sum, item) => sum + item.holding.quantity, 0)
-    : 0;
+  const selectedItems = selectedCount > 0
+    ? (portfolio || []).filter(item => selectedLots.has(item.holding.id) && item.holding.quantity > 0)
+    : [];
+  const selectedQty = selectedItems.reduce((sum, item) => sum + item.holding.quantity, 0);
+  const selectedPL = selectedItems.reduce((sum, item) => {
+    const cp = item.live?.current_price || 0;
+    return sum + (cp > 0 ? (cp - item.holding.buy_price) * item.holding.quantity : 0);
+  }, 0);
 
   return (
     <div className="section">
@@ -1368,7 +1513,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             onClick={handleBulkSell}
             style={{ fontWeight: 600, padding: '8px 24px' }}
           >
-            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} shares)
+            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} share{selectedQty !== 1 ? 's' : ''}{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)}` : ''})
           </button>
         </div>
       )}
