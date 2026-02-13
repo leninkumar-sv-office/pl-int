@@ -481,14 +481,14 @@ const COL_DEFS = [
   { id: 'dividends',      label: 'Dividends',       grouped: false },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
-const LS_KEY = 'stockSummaryVisibleCols';
+const LS_KEY = 'stockSummaryVisibleCols_v2';
 
 function loadVisibleCols() {
   try {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
   } catch (_) {}
-  const DEFAULT_HIDDEN = ['sold', 'price', 'unrealizedPL'];
+  const DEFAULT_HIDDEN = ['sold', 'price', 'unrealizedPL', 'realizedPL', 'dividends'];
   return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
 
