@@ -20,6 +20,7 @@ from .models import (
     PortfolioSummary, HoldingWithLive, StockSummaryItem,
 )
 from .xlsx_database import xlsx_db as db
+from .mf_xlsx_database import mf_db
 from . import stock_service
 from . import zerodha_service
 from . import contract_note_parser
@@ -1556,6 +1557,22 @@ def update_market_ticker(tickers: List[dict]):
         _ticker_cache_time = time.time()
     print(f"[MarketTicker] Manual update: {len(pushed)} tickers")
     return {"updated": len(pushed)}
+
+
+# ══════════════════════════════════════════════════════════
+#  MUTUAL FUNDS
+# ══════════════════════════════════════════════════════════
+
+@app.get("/api/mutual-funds/summary")
+def get_mf_summary():
+    """Get per-fund aggregated summary with held/sold lots."""
+    return mf_db.get_fund_summary()
+
+
+@app.get("/api/mutual-funds/dashboard")
+def get_mf_dashboard():
+    """Get aggregated MF portfolio summary for the dashboard."""
+    return mf_db.get_dashboard_summary()
 
 
 # ══════════════════════════════════════════════════════════

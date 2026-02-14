@@ -138,6 +138,18 @@ export async function setRefreshInterval(interval) {
   return data;
 }
 
+// ── Mutual Funds ────────────────────────────────────
+
+export async function getMFSummary() {
+  const { data } = await api.get('/mutual-funds/summary');
+  return data;
+}
+
+export async function getMFDashboard() {
+  const { data } = await api.get('/mutual-funds/dashboard');
+  return data;
+}
+
 // ── Zerodha ────────────────────────────────────────
 
 export async function getZerodhaStatus() {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -12,6 +12,7 @@ import Charts from './components/Charts';
 import MarketTicker from './components/MarketTicker';
 import DividendModal from './components/DividendModal';
 import ImportPreviewModal from './components/ImportPreviewModal';
+import MutualFundTable from './components/MutualFundTable';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -37,6 +38,8 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState('');
   const [importPreview, setImportPreview] = useState(null); // parsed contract note preview
   const [importResult, setImportResult] = useState(null);   // persistent banner after import
+  const [mfSummary, setMfSummary] = useState([]);           // mutual fund per-fund summaries
+  const [mfDashboard, setMfDashboard] = useState(null);     // mutual fund dashboard totals
 
   // Read cached data from backend (fast, no external calls)
   // Uses allSettled so one failing endpoint doesn't block the rest
@@ -81,7 +84,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-    // Load market ticker + Zerodha status separately (non-blocking)
+    // Load market ticker + Zerodha status + MF data separately (non-blocking)
     try {
       const tickerData = await getMarketTicker();
       setMarketTicker(tickerData);
@@ -93,6 +96,17 @@ export default function App() {
       setZerodhaStatus(zs);
     } catch (err) {
       console.error('Failed to load Zerodha status:', err);
+    }
+    // Mutual fund data (non-blocking)
+    try {
+      const [mfSumResult, mfDashResult] = await Promise.allSettled([
+        getMFSummary(),
+        getMFDashboard(),
+      ]);
+      if (mfSumResult.status === 'fulfilled') setMfSummary(mfSumResult.value);
+      if (mfDashResult.status === 'fulfilled') setMfDashboard(mfDashResult.value);
+    } catch (err) {
+      console.error('Failed to load MF data:', err);
     }
   }, []);
 
@@ -642,6 +656,9 @@ export default function App() {
         <button className={`tab ${activeTab === 'transactions' ? 'active' : ''}`} onClick={() => setActiveTab('transactions')}>
           Transactions
         </button>
+        <button className={`tab ${activeTab === 'mutualfunds' ? 'active' : ''}`} onClick={() => setActiveTab('mutualfunds')}>
+          Mutual Funds
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -675,6 +692,14 @@ export default function App() {
 
       {activeTab === 'transactions' && (
         <TransactionHistory transactions={transactions} />
+      )}
+
+      {activeTab === 'mutualfunds' && (
+        <MutualFundTable
+          funds={mfSummary}
+          loading={loading}
+          mfDashboard={mfDashboard}
+        />
       )}
 
       {/* Modals */}

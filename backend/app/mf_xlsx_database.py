@@ -1,0 +1,575 @@
+"""
+XLSX-per-fund database layer for Mutual Funds.
+
+Each mutual fund is stored as an individual .xlsx file under dumps/Mutual Funds/.
+Holdings and redeemed positions are derived on-the-fly via FIFO matching
+of Buy/Sell rows in each file's "Trading History" sheet.
+
+Key differences from stock xlsx:
+  - Column D is "Units" (float) instead of "QTY" (int)
+  - Column E is "NAV" instead of "PRICE"
+  - No STT or additional charges (columns H-I empty)
+  - Fund code format: MUTF_IN:xxx (Google Finance code)
+  - Lock In Period and Exit Load fields in Index sheet
+"""
+
+import hashlib
+import threading
+from datetime import datetime, date
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import openpyxl
+
+from .models import MFHolding, MFSoldPosition
+
+
+# ═══════════════════════════════════════════════════════════
+#  HELPERS
+# ═══════════════════════════════════════════════════════════
+
+def _gen_mf_id(fund_code: str, buy_date: str, nav: float, row_idx: int) -> str:
+    """Deterministic holding ID from fund data + row position."""
+    key = f"MF|{fund_code}|{buy_date}|{nav:.4f}|{row_idx}"
+    return hashlib.md5(key.encode()).hexdigest()[:8]
+
+
+def _parse_date(val) -> Optional[str]:
+    """Convert xlsx cell value to YYYY-MM-DD string."""
+    _FMT = "%Y-%m-%d"
+    if isinstance(val, datetime):
+        return val.strftime(_FMT)
+    if isinstance(val, date):
+        return val.strftime(_FMT)
+    if isinstance(val, str):
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d-%b-%Y", "%d-%B-%Y"):
+            try:
+                return datetime.strptime(val.strip(), fmt).strftime(_FMT)
+            except ValueError:
+                continue
+    return None
+
+
+def _safe_float(val, default=0.0) -> float:
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+# ═══════════════════════════════════════════════════════════
+#  FIFO MATCHING (adapted for fractional units)
+# ═══════════════════════════════════════════════════════════
+
+def fifo_match_mf(buys: list, sells: list):
+    """FIFO-match sells against buys with fractional units.
+
+    Returns (remaining_lots, sold_positions).
+    """
+    buys_sorted = sorted(buys, key=lambda x: x["date"])
+    sells_sorted = sorted(sells, key=lambda x: x["date"])
+
+    buy_lots = [{**b, "remaining": b["units"]} for b in buys_sorted]
+    sold_positions = []
+
+    for sell in sells_sorted:
+        sell_units = sell["units"]
+        for lot in buy_lots:
+            if sell_units <= 0.0001:
+                break
+            if lot["remaining"] <= 0.0001:
+                continue
+            matched = min(lot["remaining"], sell_units)
+            realized_pl = (sell["nav"] - lot["nav"]) * matched
+            sold_positions.append({
+                "buy_nav": lot["nav"],
+                "buy_date": lot["date"],
+                "sell_nav": sell["nav"],
+                "sell_date": sell["date"],
+                "units": round(matched, 6),
+                "realized_pl": round(realized_pl, 2),
+                "row_idx": lot.get("row_idx", 0),
+            })
+            lot["remaining"] = round(lot["remaining"] - matched, 6)
+            sell_units = round(sell_units - matched, 6)
+
+    remaining = [l for l in buy_lots if l["remaining"] > 0.0001]
+    return remaining, sold_positions
+
+
+# ═══════════════════════════════════════════════════════════
+#  XLSX PARSING
+# ═══════════════════════════════════════════════════════════
+
+def _extract_mf_index_data(wb) -> dict:
+    """Read metadata from the Index sheet of a mutual fund xlsx."""
+    data = {
+        "fund_code": None,
+        "current_nav": 0.0,
+        "week_52_high": 0.0,
+        "week_52_low": 0.0,
+        "lock_in_period": "",
+        "exit_load": "",
+    }
+    if "Index" not in wb.sheetnames:
+        return data
+    ws = wb["Index"]
+    max_row = ws.max_row or 0
+    if max_row == 0:
+        return data
+
+    for row in ws.iter_rows(min_row=1, max_row=min(15, max_row), values_only=False):
+        vals = [c.value for c in row]
+        if len(vals) >= 3:
+            label = vals[1]
+            value = vals[2]
+            if label == "Code" and value:
+                data["fund_code"] = str(value)
+            elif label == "Current Price" and isinstance(value, (int, float)):
+                data["current_nav"] = float(value)
+            elif label == "52 Week High" and isinstance(value, (int, float)):
+                data["week_52_high"] = float(value)
+            elif label == "52 Week Low" and isinstance(value, (int, float)):
+                data["week_52_low"] = float(value)
+
+        # Lock In Period and Exit Load are in column I (index 8)
+        if len(vals) >= 9:
+            label_i = vals[8]
+            if label_i and "Lock In" in str(label_i):
+                # Value is in the next row or same row col J
+                pass  # usually just a label
+            elif label_i and "Exit Load" in str(label_i):
+                pass
+
+    return data
+
+
+def _parse_mf_trading_history(wb) -> Tuple[list, list]:
+    """Parse Buy and Sell rows from MF Trading History sheet.
+
+    Returns (buy_lots, sell_rows).
+    """
+    buys, sells = [], []
+    if "Trading History" not in wb.sheetnames:
+        return buys, sells
+    ws = wb["Trading History"]
+    max_row = ws.max_row or 0
+    if max_row < 5:
+        return buys, sells
+
+    # Find header row
+    header_row = None
+    for r in range(1, min(11, max_row + 1)):
+        vals = [ws.cell(r, c).value for c in range(1, 5)]
+        if "DATE" in vals and "ACTION" in vals:
+            header_row = r
+            break
+    if header_row is None:
+        return buys, sells
+
+    for row_idx in range(header_row + 1, max_row + 1):
+        date_val = ws.cell(row_idx, 1).value      # A: DATE
+        exch = ws.cell(row_idx, 2).value           # B: EXCH
+        action = ws.cell(row_idx, 3).value         # C: ACTION
+        units_val = ws.cell(row_idx, 4).value      # D: Units (float)
+        nav_val = ws.cell(row_idx, 5).value        # E: NAV
+        cost_val = ws.cell(row_idx, 6).value       # F: COST
+        remarks_val = ws.cell(row_idx, 7).value    # G: REMARKS
+
+        if not action or not date_val:
+            continue
+
+        action = str(action).strip()
+        if action not in ("Buy", "Sell"):
+            continue
+
+        tx_date = _parse_date(date_val)
+        if not tx_date:
+            continue
+
+        units = _safe_float(units_val)
+        nav = _safe_float(nav_val)
+        cost = _safe_float(cost_val)
+
+        # For Sell rows, NAV might be a formula =F/D; use data_only=True handles this
+        if nav <= 0 and cost > 0 and units > 0:
+            nav = cost / units
+
+        if units <= 0:
+            continue
+
+        remarks = str(remarks_val or "").strip()
+
+        if action == "Buy":
+            buy_price = cost / units if cost > 0 and units > 0 else nav
+            buys.append({
+                "date": tx_date,
+                "units": round(units, 6),
+                "nav": round(nav, 4),
+                "buy_price": round(buy_price, 4),
+                "cost": round(cost, 2),
+                "row_idx": row_idx,
+                "remarks": remarks,
+            })
+        elif action == "Sell":
+            sells.append({
+                "date": tx_date,
+                "units": round(units, 6),
+                "nav": round(nav, 4),
+                "cost": round(cost, 2),
+                "row_idx": row_idx,
+                "remarks": remarks,
+            })
+
+    return buys, sells
+
+
+# ═══════════════════════════════════════════════════════════
+#  MAIN CLASS
+# ═══════════════════════════════════════════════════════════
+
+class MFXlsxPortfolio:
+    """File-per-fund xlsx database with FIFO-derived holdings."""
+
+    def __init__(self, mf_dir: str | Path):
+        self.mf_dir = Path(mf_dir)
+        if not self.mf_dir.exists():
+            print(f"[MF-XlsxDB] Mutual Funds directory not found: {self.mf_dir}")
+            self.mf_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+
+        # fund_code → {holdings, sold, index_data}
+        self._cache: Dict[str, Tuple[float, list, list, dict]] = {}
+        # fund_code → filepath
+        self._file_map: Dict[str, Path] = {}
+        # fund_code → fund name (from filename)
+        self._name_map: Dict[str, str] = {}
+
+        self._build_file_map()
+
+    def _build_file_map(self):
+        """Scan xlsx files and build fund_code ↔ filepath map."""
+        count = 0
+        for fp in sorted(self.mf_dir.glob("*.xlsx")):
+            if fp.name.startswith("~") or fp.name.startswith("."):
+                continue
+
+            try:
+                wb = openpyxl.load_workbook(fp, data_only=True)
+                idx = _extract_mf_index_data(wb)
+                wb.close()
+            except Exception as e:
+                print(f"[MF-XlsxDB] Failed to read {fp.name}: {e}")
+                continue
+
+            fund_code = idx.get("fund_code")
+            if not fund_code:
+                # Use filename as fallback code
+                fund_code = fp.stem
+                print(f"[MF-XlsxDB] No fund code for {fp.name}, using filename")
+
+            fund_name = fp.stem
+            self._file_map[fund_code] = fp
+            self._name_map[fund_code] = fund_name
+            count += 1
+
+        print(f"[MF-XlsxDB] Indexed {count} mutual fund files")
+
+    def reindex(self):
+        """Re-scan the MF directory for new/modified files."""
+        with self._lock:
+            old_codes = set(self._file_map.keys())
+            self._file_map.clear()
+            self._name_map.clear()
+            self._cache.clear()
+            self._build_file_map()
+            new_codes = set(self._file_map.keys())
+            added = new_codes - old_codes
+            removed = old_codes - new_codes
+            if added or removed:
+                parts = []
+                if added:
+                    parts.append(f"+{len(added)}")
+                if removed:
+                    parts.append(f"-{len(removed)}")
+                print(f"[MF-XlsxDB] Reindex: {len(new_codes)} funds ({', '.join(parts)} changed)")
+
+    # ── Cache Layer ───────────────────────────────────────
+
+    def _get_fund_data(self, fund_code: str) -> Tuple[List[MFHolding], List[MFSoldPosition], dict]:
+        """Get holdings/sold for a fund with mtime caching."""
+        fp = self._file_map.get(fund_code)
+        if not fp:
+            return [], [], {}
+
+        try:
+            mtime = fp.stat().st_mtime
+        except OSError:
+            return [], [], {}
+
+        if fund_code in self._cache:
+            cached_mtime, cached_h, cached_s, cached_idx = self._cache[fund_code]
+            if cached_mtime == mtime:
+                return cached_h, cached_s, cached_idx
+
+        holdings, sold, idx_data = self._parse_and_match_fund(fund_code, fp)
+        self._cache[fund_code] = (mtime, holdings, sold, idx_data)
+        return holdings, sold, idx_data
+
+    def _parse_and_match_fund(self, fund_code: str, filepath: Path):
+        """Parse a fund's xlsx file and FIFO-match sells."""
+        name = self._name_map.get(fund_code, fund_code)
+
+        try:
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+        except Exception as e:
+            print(f"[MF-XlsxDB] Failed to open {filepath.name}: {e}")
+            return [], [], {}
+
+        idx_data = _extract_mf_index_data(wb)
+        buy_lots, sell_rows = _parse_mf_trading_history(wb)
+        wb.close()
+
+        if not buy_lots and not sell_rows:
+            return [], [], idx_data
+
+        # FIFO match sells against buys
+        if sell_rows and buy_lots:
+            remaining, fifo_sold = fifo_match_mf(
+                [{"date": b["date"], "units": b["units"], "nav": b["buy_price"],
+                  "row_idx": b["row_idx"]} for b in buy_lots],
+                [{"date": s["date"], "units": s["units"], "nav": s["nav"],
+                  "row_idx": s["row_idx"]} for s in sell_rows],
+            )
+
+            # Build held lots from remaining
+            holdings = []
+            for r in remaining:
+                if r["remaining"] <= 0.0001:
+                    continue
+                # Find original buy lot to get cost
+                orig = next((b for b in buy_lots
+                             if b["row_idx"] == r["row_idx"]), None)
+                cost = round(r["nav"] * r["remaining"], 2) if not orig else round(
+                    orig["cost"] * r["remaining"] / orig["units"], 2)
+                h_id = _gen_mf_id(fund_code, r["date"], r["nav"], r["row_idx"])
+                holdings.append(MFHolding(
+                    id=h_id,
+                    fund_code=fund_code,
+                    name=name,
+                    units=round(r["remaining"], 6),
+                    nav=round(r["nav"], 4),
+                    buy_price=round(r["nav"], 4),
+                    buy_cost=round(cost, 2),
+                    buy_date=r["date"],
+                ))
+
+            # Build sold positions
+            sold = []
+            for fs in fifo_sold:
+                s_id = _gen_mf_id(fund_code + "_S", fs["sell_date"],
+                                   fs["sell_nav"], fs["row_idx"])
+                sold.append(MFSoldPosition(
+                    id=s_id,
+                    fund_code=fund_code,
+                    name=name,
+                    units=fs["units"],
+                    buy_nav=fs["buy_nav"],
+                    buy_date=fs["buy_date"],
+                    sell_nav=fs["sell_nav"],
+                    sell_date=fs["sell_date"],
+                    realized_pl=fs["realized_pl"],
+                ))
+        else:
+            # No sells — all buys are held
+            holdings = []
+            for b in buy_lots:
+                h_id = _gen_mf_id(fund_code, b["date"], b["buy_price"], b["row_idx"])
+                holdings.append(MFHolding(
+                    id=h_id,
+                    fund_code=fund_code,
+                    name=name,
+                    units=b["units"],
+                    nav=round(b["nav"], 4),
+                    buy_price=round(b["buy_price"], 4),
+                    buy_cost=round(b["cost"], 2),
+                    buy_date=b["date"],
+                    remarks=b.get("remarks", ""),
+                ))
+            sold = []
+
+        return holdings, sold, idx_data
+
+    # ── Public READ API ───────────────────────────────────
+
+    def get_all_holdings(self) -> List[MFHolding]:
+        """Get all current MF holdings across every fund file."""
+        all_holdings: List[MFHolding] = []
+        for fund_code in list(self._file_map.keys()):
+            try:
+                holdings, _, _ = self._get_fund_data(fund_code)
+                all_holdings.extend(holdings)
+            except Exception as e:
+                print(f"[MF-XlsxDB] Error reading {fund_code}: {e}")
+        return all_holdings
+
+    def get_all_sold(self) -> List[MFSoldPosition]:
+        """Get all redeemed positions across every fund."""
+        all_sold: List[MFSoldPosition] = []
+        for fund_code in list(self._file_map.keys()):
+            try:
+                _, sold, _ = self._get_fund_data(fund_code)
+                all_sold.extend(sold)
+            except Exception as e:
+                print(f"[MF-XlsxDB] Error reading sold for {fund_code}: {e}")
+        return all_sold
+
+    def get_fund_summary(self) -> List[dict]:
+        """Get per-fund aggregated summary with current NAV."""
+        from datetime import datetime as dt
+
+        summaries = []
+        today = dt.now()
+
+        for fund_code in list(self._file_map.keys()):
+            try:
+                holdings, sold, idx_data = self._get_fund_data(fund_code)
+            except Exception as e:
+                print(f"[MF-XlsxDB] Error for {fund_code}: {e}")
+                continue
+
+            name = self._name_map.get(fund_code, fund_code)
+            current_nav = idx_data.get("current_nav", 0.0)
+            w52_high = idx_data.get("week_52_high", 0.0)
+            w52_low = idx_data.get("week_52_low", 0.0)
+
+            total_held_units = sum(h.units for h in holdings)
+            total_invested = sum(h.buy_cost for h in holdings)
+            current_value = round(current_nav * total_held_units, 2) if current_nav > 0 else 0
+            unrealized_pl = round(current_value - total_invested, 2)
+            unrealized_pl_pct = round((unrealized_pl / total_invested) * 100, 2) if total_invested > 0 else 0
+
+            avg_nav = round(total_invested / total_held_units, 4) if total_held_units > 0 else 0
+
+            total_sold_units = sum(s.units for s in sold)
+            realized_pl = round(sum(s.realized_pl for s in sold), 2)
+
+            # LTCG/STCG for held lots
+            ltcg_upl = 0.0
+            stcg_upl = 0.0
+            for h in holdings:
+                if current_nav <= 0:
+                    break
+                lot_pl = (current_nav - h.buy_price) * h.units
+                try:
+                    buy_dt = dt.strptime(h.buy_date, "%Y-%m-%d")
+                    days = (today - buy_dt).days
+                except (ValueError, TypeError):
+                    days = 0
+                if days > 365:
+                    ltcg_upl += lot_pl
+                else:
+                    stcg_upl += lot_pl
+
+            # LTCG/STCG for sold lots
+            ltcg_rpl = 0.0
+            stcg_rpl = 0.0
+            for s in sold:
+                try:
+                    buy_dt = dt.strptime(s.buy_date, "%Y-%m-%d")
+                    sell_dt = dt.strptime(s.sell_date, "%Y-%m-%d")
+                    days = (sell_dt - buy_dt).days
+                except (ValueError, TypeError):
+                    days = 0
+                if days > 365:
+                    ltcg_rpl += s.realized_pl
+                else:
+                    stcg_rpl += s.realized_pl
+
+            summaries.append({
+                "fund_code": fund_code,
+                "name": name,
+                "total_held_units": round(total_held_units, 6),
+                "total_sold_units": round(total_sold_units, 6),
+                "avg_nav": avg_nav,
+                "total_invested": round(total_invested, 2),
+                "current_nav": current_nav,
+                "current_value": current_value,
+                "unrealized_pl": unrealized_pl,
+                "unrealized_pl_pct": unrealized_pl_pct,
+                "realized_pl": realized_pl,
+                "ltcg_unrealized_pl": round(ltcg_upl, 2),
+                "stcg_unrealized_pl": round(stcg_upl, 2),
+                "ltcg_realized_pl": round(ltcg_rpl, 2),
+                "stcg_realized_pl": round(stcg_rpl, 2),
+                "num_held_lots": len(holdings),
+                "num_sold_lots": len(sold),
+                "week_52_high": w52_high,
+                "week_52_low": w52_low,
+                "is_above_avg_nav": current_nav > avg_nav if current_nav > 0 and avg_nav > 0 else False,
+                # Include held lots and sold lots for detail view
+                "held_lots": [
+                    {
+                        "id": h.id,
+                        "buy_date": h.buy_date,
+                        "units": h.units,
+                        "nav": h.nav,
+                        "buy_price": h.buy_price,
+                        "buy_cost": h.buy_cost,
+                        "current_value": round(current_nav * h.units, 2) if current_nav > 0 else 0,
+                        "pl": round((current_nav - h.buy_price) * h.units, 2) if current_nav > 0 else 0,
+                        "pl_pct": round(((current_nav / h.buy_price) - 1) * 100, 2) if h.buy_price > 0 and current_nav > 0 else 0,
+                        "is_ltcg": (today - dt.strptime(h.buy_date, "%Y-%m-%d")).days > 365
+                                   if h.buy_date else False,
+                    }
+                    for h in holdings
+                ],
+                "sold_lots": [
+                    {
+                        "id": s.id,
+                        "buy_date": s.buy_date,
+                        "sell_date": s.sell_date,
+                        "units": s.units,
+                        "buy_nav": s.buy_nav,
+                        "sell_nav": s.sell_nav,
+                        "realized_pl": s.realized_pl,
+                    }
+                    for s in sold
+                ],
+            })
+
+        return summaries
+
+    def get_dashboard_summary(self) -> dict:
+        """Get aggregated MF portfolio summary for the dashboard."""
+        fund_summaries = self.get_fund_summary()
+
+        total_invested = sum(f["total_invested"] for f in fund_summaries)
+        current_value = sum(f["current_value"] for f in fund_summaries)
+        unrealized_pl = round(current_value - total_invested, 2)
+        realized_pl = sum(f["realized_pl"] for f in fund_summaries)
+
+        funds_in_profit = sum(1 for f in fund_summaries if f["unrealized_pl"] > 0)
+        funds_in_loss = sum(1 for f in fund_summaries if f["unrealized_pl"] < 0)
+
+        return {
+            "total_invested": round(total_invested, 2),
+            "current_value": round(current_value, 2),
+            "unrealized_pl": unrealized_pl,
+            "unrealized_pl_pct": round((unrealized_pl / total_invested) * 100, 2) if total_invested > 0 else 0,
+            "realized_pl": round(realized_pl, 2),
+            "total_funds": len(fund_summaries),
+            "funds_in_profit": funds_in_profit,
+            "funds_in_loss": funds_in_loss,
+        }
+
+
+# ═══════════════════════════════════════════════════════════
+#  MODULE-LEVEL SINGLETON
+# ═══════════════════════════════════════════════════════════
+
+_MF_DIR = Path(__file__).parent.parent.parent / "dumps" / "Mutual Funds"
+
+mf_db = MFXlsxPortfolio(_MF_DIR)

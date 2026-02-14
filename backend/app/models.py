@@ -161,3 +161,58 @@ class StockSummaryItem(BaseModel):
     live: Optional[StockLiveData] = None
     is_above_avg_buy: bool = False
     price_error: str = ""  # Non-empty when price is unavailable
+
+
+# ═══════════════════════════════════════════════════════════
+#  MUTUAL FUND MODELS
+# ═══════════════════════════════════════════════════════════
+
+class MFHolding(BaseModel):
+    """A single held lot of a mutual fund (fractional units)."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    fund_code: str         # MUTF_IN:xxx from Index sheet
+    name: str              # Fund name (from filename)
+    units: float           # fractional units held
+    nav: float             # NAV at purchase (column E)
+    buy_price: float       # per-unit cost = COST / Units (column F / D)
+    buy_cost: float = 0.0  # total cost (column F)
+    buy_date: str
+    remarks: str = ""
+
+
+class MFSoldPosition(BaseModel):
+    """A FIFO-matched sold lot of a mutual fund."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    fund_code: str
+    name: str
+    units: float
+    buy_nav: float         # NAV at purchase
+    buy_date: str
+    sell_nav: float        # NAV at redemption
+    sell_date: str
+    realized_pl: float
+
+
+class MFSummaryItem(BaseModel):
+    """Per-fund aggregated summary showing held + redeemed totals."""
+    fund_code: str
+    name: str
+    total_held_units: float = 0.0
+    total_sold_units: float = 0.0
+    avg_nav: float = 0.0           # weighted avg purchase NAV
+    total_invested: float = 0.0    # sum of COST for held lots
+    current_nav: float = 0.0       # latest NAV
+    current_value: float = 0.0     # current_nav * total_held_units
+    unrealized_pl: float = 0.0
+    unrealized_pl_pct: float = 0.0
+    realized_pl: float = 0.0
+    # LTCG/STCG (MF equity: >12m = long-term; debt: >36m = long-term)
+    ltcg_unrealized_pl: float = 0.0
+    stcg_unrealized_pl: float = 0.0
+    ltcg_realized_pl: float = 0.0
+    stcg_realized_pl: float = 0.0
+    num_held_lots: int = 0
+    num_sold_lots: int = 0
+    week_52_high: float = 0.0
+    week_52_low: float = 0.0
+    is_above_avg_nav: bool = False
