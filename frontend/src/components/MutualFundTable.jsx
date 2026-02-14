@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -92,6 +92,36 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const [showColPicker, setShowColPicker] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [heldOnly, setHeldOnly] = useState(true);
+
+  // ── Lot-level selection for bulk redeem ──
+  const [selectedLots, setSelectedLots] = useState(new Set());
+
+  // Clear lot selection when collapsing / switching fund
+  const prevExpanded = useRef(null);
+  useEffect(() => {
+    if (prevExpanded.current !== expandedFund) {
+      setSelectedLots(new Set());
+      prevExpanded.current = expandedFund;
+    }
+  }, [expandedFund]);
+
+  const toggleLot = (lotId) => {
+    setSelectedLots(prev => {
+      const next = new Set(prev);
+      if (next.has(lotId)) next.delete(lotId); else next.add(lotId);
+      return next;
+    });
+  };
+
+  const toggleAllLots = (lotIds) => {
+    setSelectedLots(prev => {
+      const allSelected = lotIds.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) lotIds.forEach(id => next.delete(id));
+      else lotIds.forEach(id => next.add(id));
+      return next;
+    });
+  };
 
   // Helper: look up SIP config for a fund
   const getSIPForFund = (fund_code) => (sipConfigs || []).find(s => s.fund_code === fund_code);
@@ -380,6 +410,23 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                                   <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
                                     <thead>
                                       <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                        <th style={{ ...subTh, width: '30px', textAlign: 'center', padding: '5px 4px' }}>
+                                          {(() => {
+                                            const allLotIds = f.held_lots.map(l => l.id);
+                                            const allSelected = allLotIds.length > 0 && allLotIds.every(id => selectedLots.has(id));
+                                            const someSelected = allLotIds.some(id => selectedLots.has(id));
+                                            return (
+                                              <input
+                                                type="checkbox"
+                                                checked={allSelected}
+                                                ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                                onChange={() => toggleAllLots(allLotIds)}
+                                                style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                                                title="Select all lots for bulk redeem"
+                                              />
+                                            );
+                                          })()}
+                                        </th>
                                         <th style={subTh}>Buy Date</th>
                                         <th style={{ ...subTh, textAlign: 'right' }}>Units</th>
                                         <th style={{ ...subTh, textAlign: 'right' }}>NAV</th>
@@ -391,8 +438,17 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                                     <tbody>
                                       {f.held_lots.map((lot, i) => {
                                         const lotPlColor = lot.pl >= 0 ? 'var(--green)' : 'var(--red)';
+                                        const isChecked = selectedLots.has(lot.id);
                                         return (
-                                          <tr key={lot.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                          <tr key={lot.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isChecked ? 'rgba(59,130,246,0.08)' : undefined }}>
+                                            <td style={{ textAlign: 'center', padding: '5px 4px', width: '30px' }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={() => toggleLot(lot.id)}
+                                                style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                                              />
+                                            </td>
                                             <td style={{ ...subTd, borderLeft: `3px solid ${lot.is_ltcg ? 'var(--green)' : '#f59e0b'}` }}>
                                               <span style={{ fontSize: '12px' }}>{formatDate(lot.buy_date)}</span>
                                               <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 4 }}>
@@ -534,6 +590,62 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           </table>
         </div>
       )}
+
+      {/* ── Floating bulk action bar (lot-level) ──────── */}
+      {selectedLots.size > 0 && (() => {
+        // Find the expanded fund to get lot details
+        const expandedFundData = filtered.find(f => f.fund_code === expandedFund);
+        if (!expandedFundData || !expandedFundData.held_lots) return null;
+        const selItems = expandedFundData.held_lots.filter(l => selectedLots.has(l.id));
+        if (selItems.length === 0) return null;
+        const selUnits = selItems.reduce((s, l) => s + l.units, 0);
+        const selPL = selItems.reduce((s, l) => s + (l.pl || 0), 0);
+        return (
+          <div style={{
+            position: 'sticky',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: 'var(--bg-card)',
+            borderTop: '2px solid var(--blue)',
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            zIndex: 10,
+            borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+            boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontWeight: 600, fontSize: '14px' }}>
+                {selItems.length} lot{selItems.length > 1 ? 's' : ''} selected
+                <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '8px' }}>
+                  ({formatUnits(selUnits)} units)
+                </span>
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setSelectedLots(new Set())}
+                style={{ fontSize: '12px' }}
+              >
+                Clear
+              </button>
+            </div>
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                if (onRedeemMF) {
+                  onRedeemMF({ ...expandedFundData, preSelectedUnits: selUnits });
+                }
+              }}
+              style={{ fontWeight: 600, padding: '8px 24px' }}
+            >
+              Redeem {selItems.length} Lot{selItems.length > 1 ? 's' : ''} ({formatUnits(selUnits)} units{selPL !== 0 ? `, ${selPL >= 0 ? '+' : ''}${formatINR(selPL)}` : ''})
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }

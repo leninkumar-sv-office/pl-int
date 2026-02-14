@@ -11,7 +11,7 @@ export default function RedeemMFModal({ fund, onRedeem, onClose }) {
   const avgNav = fund.avg_nav || 0;
   const fundName = (fund.name || '').replace(/ - Direct Plan.*| - Direct Growth.*| Direct Growth.*/i, '');
 
-  const [units, setUnits] = useState(totalHeldUnits);
+  const [units, setUnits] = useState(fund.preSelectedUnits || totalHeldUnits);
   const [redeemNav, setRedeemNav] = useState(currentNav || '');
   const [sellDate, setSellDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
