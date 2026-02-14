@@ -4,16 +4,18 @@ SBICAP Securities Contract Note PDF Parser.
 Parses contract notes from SBICAP Securities to extract buy/sell transactions.
 
 Supports two PDF formats:
-  A. "Annexure B" format — Scrip Wise Summary with per-scrip charge breakdown
-     (GST, STT, other levies) and Net Total After Levies (tried FIRST)
-  B. "Equity Segment" format — transaction data between "Equity Segment :" header
-     and "Obligation details :" boundary (fallback when Annexure B is absent)
+  A. "Equity Segment" format — transaction data between "Equity Segment :" header
+     and "Obligation details :" boundary (tried FIRST, most reliable — single page)
+  B. "Annexure B" format — Scrip Wise Summary with per-scrip charge breakdown
+     (fallback when Equity Segment is absent)
 
-Effective buy price  = Net Total (After Levies) / Bought Qty
-Effective sell price = |Net Total (After Levies)| / Sold Qty
+After parsing Equity Segment transactions (which only include brokerage per-scrip),
+the parser reads the "Obligation Details" section to get total STT, GST, exchange
+charges, SEBI fees, and stamp duty.  These are prorated across all scrips
+proportionally by trade value, then added to each transaction's effective price.
 
-This ensures the per-share price includes all charges: brokerage, GST, STT,
-exchange charges, SEBI fees, stamp duty, and other statutory levies.
+Effective buy price  = (Trade Value + Brokerage + Prorated Charges) / Bought Qty
+Effective sell price = (Trade Value - Brokerage - Prorated Charges) / Sold Qty
 
 Extraction strategies (tried in order):
   1. pdfplumber direct table extraction (most reliable for structured PDFs)
@@ -330,10 +332,9 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
     This is the most reliable strategy because it reads the underlying
     PDF table structure rather than relying on text layout alignment.
 
-    Prefers "Annexure B" over "Equity Segment" because Annexure B includes
-    per-scrip charge breakdowns (GST, STT, other levies) and the accurate
-    Net Total(After Levies).  Equity Segment only has brokerage — the
-    remaining charges appear only as totals in "Obligation Details".
+    Prefers "Equity Segment" over "Annexure B" because Equity Segment is
+    always on a single page (reliable), while Annexure B can span pages.
+    Obligation Details charges (STT, GST, etc.) are prorated afterwards.
     """
     try:
         import pdfplumber
@@ -354,13 +355,13 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
                 if "EQUITY SEGMENT" in page_text:
                     has_equity_segment = True
 
-            # Pick preferred section: Annexure B > Equity Segment
-            if has_annexure_b:
-                preferred = "annexure_b"
-                print("[ContractNote] Table extraction: preferring 'Annexure B' (has per-scrip levies)")
-            elif has_equity_segment:
+            # Pick preferred section: Equity Segment > Annexure B
+            if has_equity_segment:
                 preferred = "equity_segment"
-                print("[ContractNote] Table extraction: using 'Equity Segment' (no Annexure B found)")
+                print("[ContractNote] Table extraction: preferring 'Equity Segment' (single page, reliable)")
+            elif has_annexure_b:
+                preferred = "annexure_b"
+                print("[ContractNote] Table extraction: using 'Annexure B' (no Equity Segment found)")
             else:
                 print("[ContractNote] Table extraction: neither section found")
                 return []
@@ -452,6 +453,10 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
                                     if isin in cell and ci + 1 < len(cells):
                                         sec_name = cells[ci + 1].strip()
                                         break
+                            # Clean: replace newlines with spaces (cells can have multi-line text)
+                            sec_name = re.sub(r'\s*\n\s*', ' ', sec_name).strip()
+                            # Strip trailing parenthesized qualifiers like "(INDIA)"
+                            sec_name = re.sub(r'\s*\(.*?\)\s*$', '', sec_name).strip()
                         else:
                             # Annexure B: "SecurityName - Cash - ISIN"
                             sec_match = _SEC_PATTERN.search(row_text)
@@ -554,25 +559,25 @@ def _parse_text_section(text: str, trade_date: str,
 
     upper_text = text.upper()
 
-    # Prefer "Annexure B" (has per-scrip GST, STT, levies and Net Total After Levies)
-    # over "Equity Segment" (only has brokerage, missing obligation details charges).
+    # Prefer "Equity Segment" (single page, all transactions) over "Annexure B"
+    # (can span pages, unreliable).  Obligation Details charges are prorated after.
     section_start = -1
     section_end_marker = None
     section_type = None
 
-    ann_idx = upper_text.find("ANNEXURE B")
-    if ann_idx >= 0:
-        section_start = ann_idx
-        section_end_marker = "DESCRIPTION OF SERVICE"
-        section_type = "annexure_b"
-        print(f"[ContractNote] Text parser: preferring 'Annexure B' at pos {ann_idx} (has per-scrip levies)")
+    eq_idx = upper_text.find("EQUITY SEGMENT")
+    if eq_idx >= 0:
+        section_start = eq_idx
+        section_end_marker = "OBLIGATION DETAILS"
+        section_type = "equity_segment"
+        print(f"[ContractNote] Text parser: preferring 'Equity Segment' at pos {eq_idx}")
     else:
-        eq_idx = upper_text.find("EQUITY SEGMENT")
-        if eq_idx >= 0:
-            section_start = eq_idx
-            section_end_marker = "OBLIGATION DETAILS"
-            section_type = "equity_segment"
-            print(f"[ContractNote] Text parser: using 'Equity Segment' at pos {eq_idx} (no Annexure B)")
+        ann_idx = upper_text.find("ANNEXURE B")
+        if ann_idx >= 0:
+            section_start = ann_idx
+            section_end_marker = "DESCRIPTION OF SERVICE"
+            section_type = "annexure_b"
+            print(f"[ContractNote] Text parser: using 'Annexure B' at pos {ann_idx} (no Equity Segment)")
 
     if section_start < 0:
         print("[ContractNote] Text parser: neither 'Equity Segment' nor 'Annexure B' found")
@@ -691,6 +696,151 @@ def _parse_text_section(text: str, trade_date: str,
 
 
 # ═══════════════════════════════════════════════════════════
+#  OBLIGATION DETAILS PARSING + CHARGE PRORATION
+# ═══════════════════════════════════════════════════════════
+
+def _parse_obligation_details(text: str) -> dict:
+    """Parse Obligation Details section for total charges across all scrips.
+
+    Returns dict with keys: stt, gst, exchange_charges, sebi_fees, stamp_duty.
+    The 'Total' column (last number on each line) is used.
+    """
+    upper = text.upper()
+    obl_idx = upper.find("OBLIGATION DETAILS")
+    if obl_idx < 0:
+        return {}
+
+    obl_text = text[obl_idx:]
+    lines = obl_text.split("\n")
+
+    charges = {
+        "stt": 0.0,
+        "gst": 0.0,        # CGST + SGST + IGST + UTT combined
+        "exchange_charges": 0.0,
+        "sebi_fees": 0.0,
+        "stamp_duty": 0.0,
+    }
+
+    def _last_num(line: str) -> float:
+        """Extract the last number from a line (the 'Total' column)."""
+        nums = _NUM_PATTERN.findall(line)
+        if nums:
+            try:
+                return abs(float(nums[-1].replace(",", "")))
+            except ValueError:
+                pass
+        return 0.0
+
+    # State: CGST/SGST/IGST/UTT have label on one line, Amount on next
+    awaiting_amount_for = None
+
+    for line in lines:
+        lu = line.upper().strip()
+        if not lu:
+            continue
+        # Stop at page footer or next major section
+        if lu.startswith("PAGE ") and "/" in lu:
+            break
+        if "NET AMOUNT PAYABLE" in lu:
+            break
+
+        # Handle two-line GST entries: label line → Amount line
+        if awaiting_amount_for and "AMOUNT" in lu:
+            charges["gst"] += _last_num(line)
+            awaiting_amount_for = None
+            continue
+
+        if "SECURITY TRANSACTION TAX" in lu:
+            charges["stt"] = _last_num(line)
+        elif "CGST" in lu and "AMOUNT" not in lu and "RATE" not in lu:
+            awaiting_amount_for = "cgst"
+        elif "SGST" in lu and "AMOUNT" not in lu and "RATE" not in lu:
+            awaiting_amount_for = "sgst"
+        elif "IGST" in lu and "AMOUNT" not in lu and "RATE" not in lu:
+            awaiting_amount_for = "igst"
+        elif "UTT" in lu and "AMOUNT" not in lu and "RATE" not in lu:
+            awaiting_amount_for = "utt"
+        elif ("EXCHANGE" in lu and "TRANSACTION" in lu and "CHARGE" in lu):
+            charges["exchange_charges"] = _last_num(line)
+            awaiting_amount_for = None
+        elif "SEBI" in lu and "TURNOVER" in lu:
+            charges["sebi_fees"] = _last_num(line)
+            awaiting_amount_for = None
+        elif "STAMP DUTY" in lu:
+            charges["stamp_duty"] = _last_num(line)
+            awaiting_amount_for = None
+        elif "RATE" in lu:
+            # Skip "Rate" lines (e.g. CGST Rate 9.00)
+            awaiting_amount_for = awaiting_amount_for  # keep state
+        else:
+            # Non-matching line resets state
+            if awaiting_amount_for and "RATE" not in lu:
+                awaiting_amount_for = None
+
+    total = sum(charges.values())
+    if total > 0:
+        print(f"[ContractNote] Obligation Details: STT={charges['stt']}, "
+              f"GST={charges['gst']}, ExchChg={charges['exchange_charges']}, "
+              f"SEBI={charges['sebi_fees']}, StampDuty={charges['stamp_duty']}")
+    return charges
+
+
+def _prorate_obligation_charges(transactions: List[dict], charges: dict):
+    """Distribute Obligation Details charges across Equity Segment transactions.
+
+    Prorates STT, GST, and other levies proportionally by each transaction's
+    absolute trade value (net_total_after_levies).  Updates effective_price
+    and charge fields in-place.
+    """
+    if not transactions or not charges:
+        return
+
+    total_stt = charges.get("stt", 0)
+    total_gst = charges.get("gst", 0)
+    total_other = (charges.get("exchange_charges", 0)
+                   + charges.get("sebi_fees", 0)
+                   + charges.get("stamp_duty", 0))
+
+    total_charges = total_stt + total_gst + total_other
+    if total_charges <= 0:
+        return
+
+    # Calculate each transaction's share based on absolute trade value
+    total_abs_value = sum(abs(t.get("net_total_after_levies", 0))
+                         for t in transactions)
+    if total_abs_value <= 0:
+        return
+
+    print(f"[ContractNote] Prorating {total_charges:.2f} in charges "
+          f"across {len(transactions)} transactions (total value={total_abs_value:.2f})")
+
+    for t in transactions:
+        abs_value = abs(t.get("net_total_after_levies", 0))
+        share = abs_value / total_abs_value
+
+        t_stt = round(total_stt * share, 4)
+        t_gst = round(total_gst * share, 4)
+        t_other = round(total_other * share, 4)
+
+        t["stt"] = t_stt
+        t["gst"] = t_gst
+        t["other_levies"] = t_other
+        t["add_charges"] = round(t.get("brokerage", 0) + t_gst + t_other, 4)
+
+        # Update net_total and effective_price to include all charges
+        old_net = t["net_total_after_levies"]
+        if t["action"] == "Buy":
+            # Charges increase buy cost
+            new_net = old_net + t_stt + t_gst + t_other
+        else:
+            # Charges decrease sell proceeds
+            new_net = old_net - t_stt - t_gst - t_other
+
+        t["net_total_after_levies"] = round(new_net, 2)
+        t["effective_price"] = round(abs(new_net) / t["quantity"], 4)
+
+
+# ═══════════════════════════════════════════════════════════
 #  MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════
 
@@ -760,6 +910,21 @@ def parse_contract_note(pdf_path: str) -> dict:
     if dups_removed > 0:
         print(f"[ContractNote] Removed {dups_removed} duplicate transaction(s) within same PDF")
     transactions = unique_transactions
+
+    # ── Prorate Obligation Details charges for Equity Segment transactions ──
+    # Equity Segment rows only include brokerage per-scrip (no STT/GST/levies).
+    # The Obligation Details section has the totals.  Prorate them here.
+    has_zero_charges = any(
+        t.get("stt", 0) == 0 and t.get("gst", 0) == 0
+        for t in transactions
+    )
+    if transactions and has_zero_charges:
+        obligation = _parse_obligation_details(text)
+        if obligation and sum(obligation.values()) > 0:
+            _prorate_obligation_charges(transactions, obligation)
+            print(f"[ContractNote] Prorated obligation charges into {len(transactions)} transactions")
+        else:
+            print("[ContractNote] No obligation details found or zero charges — skipping proration")
 
     buys = sum(1 for t in transactions if t["action"] == "Buy")
     sells = sum(1 for t in transactions if t["action"] == "Sell")

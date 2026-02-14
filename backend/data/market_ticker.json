@@ -7,7 +7,7 @@
     "price": 82626.76,
     "change": -1048.16,
     "change_pct": -1.25,
-    "source": "zerodha"
+    "source": "cached"
   },
   {
     "key": "NIFTY50",
@@ -17,27 +17,27 @@
     "price": 25471.1,
     "change": -336.1,
     "change_pct": -1.3,
-    "source": "zerodha"
+    "source": "cached"
   },
   {
     "key": "GOLD",
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/10g",
-    "price": 155100.0,
-    "change": 2264.0,
-    "change_pct": 1.48,
-    "source": "zerodha"
+    "price": 156200.0,
+    "change": 3364.0,
+    "change_pct": 2.2,
+    "source": "cached"
   },
   {
     "key": "SILVER",
     "label": "Silver",
     "type": "commodity",
     "unit": "\u20b9/kg",
-    "price": 244771.0,
-    "change": 8336.0,
-    "change_pct": 3.53,
-    "source": "zerodha"
+    "price": 244999.0,
+    "change": 639.0,
+    "change_pct": 0.26,
+    "source": "cached"
   },
   {
     "key": "SGX",
@@ -77,16 +77,16 @@
     "price": 90.69,
     "change": 0.06,
     "change_pct": 0.07,
-    "source": "zerodha"
+    "source": "cached"
   },
   {
     "key": "CRUDEOIL",
     "label": "Crude Oil",
     "type": "commodity",
     "unit": "\u20b9/bbl",
-    "price": 5680.0,
-    "change": -6.0,
-    "change_pct": -0.11,
-    "source": "zerodha"
+    "price": 5724.0,
+    "change": 38.0,
+    "change_pct": 0.67,
+    "source": "cached"
   }
 ]
