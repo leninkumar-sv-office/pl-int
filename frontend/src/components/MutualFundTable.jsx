@@ -21,7 +21,6 @@ const formatUnits = (u) => {
   return Number(u).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 };
 
-/* Duration text */
 function durationText(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -36,9 +35,8 @@ function durationText(dateStr) {
   return `${days}d`;
 }
 
-/* ── Column definitions ────────────────────────────── */
+/* ── Main table column definitions ────────────────────── */
 const COL_DEFS = [
-  { id: 'name',         label: 'Fund Name' },
   { id: 'units',        label: 'Units' },
   { id: 'avgNav',       label: 'Avg NAV' },
   { id: 'invested',     label: 'Invested' },
@@ -46,18 +44,54 @@ const COL_DEFS = [
   { id: 'currentValue', label: 'Current Value' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
   { id: 'realizedPL',   label: 'Realized P&L' },
-  { id: '52w',          label: '52W Range' },
 ];
-const DEFAULT_HIDDEN = ['realizedPL', '52w'];
-const LS_KEY = 'mfVisibleCols_v1';
+const ALL_COL_IDS = COL_DEFS.map(c => c.id);
+const LS_KEY = 'mfVisibleCols_v2';
 
-function loadHiddenCols() {
+function loadVisibleCols() {
   try {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
   } catch (_) {}
-  return new Set(DEFAULT_HIDDEN);
+  const DEFAULT_HIDDEN = ['realizedPL'];
+  return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
+
+/* ── Held lots sub-table column definitions ───────────── */
+const HELD_COL_DEFS = [
+  { id: 'buyDate',  label: 'Buy Date' },
+  { id: 'units',    label: 'Units' },
+  { id: 'nav',      label: 'NAV' },
+  { id: 'cost',     label: 'Cost' },
+  { id: 'current',  label: 'Current' },
+  { id: 'pl',       label: 'P&L' },
+];
+const HELD_COL_LS_KEY = 'mfHeldLotsHiddenCols';
+
+function loadHeldHiddenCols() {
+  try {
+    const saved = localStorage.getItem(HELD_COL_LS_KEY);
+    if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
+  } catch (_) {}
+  return new Set();
+}
+
+/* ── Held lots sub-table styles (matching stock) ──────── */
+const heldTh = {
+  padding: '7px 10px',
+  textAlign: 'left',
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  color: 'var(--text-dim)',
+  fontWeight: 600,
+  borderBottom: '1px solid var(--border)',
+};
+const heldTd = {
+  padding: '7px 10px',
+  fontSize: '13px',
+  verticalAlign: 'middle',
+};
 
 /* ── 52W Range Bar ──────────────────────────────────── */
 function NavRangeBar({ low, high, current, avg }) {
@@ -68,14 +102,13 @@ function NavRangeBar({ low, high, current, avg }) {
   const currentPos = Math.max(0, Math.min(100, ((current - low) / range) * 100));
   const avgPos = Math.max(0, Math.min(100, ((avg - low) / range) * 100));
   return (
-    <div style={{ minWidth: 120 }}>
-      <div style={{ position: 'relative', height: 6, background: 'var(--bg-hover)', borderRadius: 3 }}>
-        <div style={{ position: 'absolute', left: `${avgPos}%`, top: -2, width: 2, height: 10, background: '#f59e0b', borderRadius: 1 }}
-             title={`Avg NAV: ${formatINR(avg)}`} />
-        <div style={{ position: 'absolute', left: `${currentPos}%`, top: -3, width: 8, height: 12, background: 'var(--green)', borderRadius: '50%', transform: 'translateX(-4px)' }}
-             title={`Current: ${formatINR(current)}`} />
+    <div className="range-bar-container">
+      <div className="range-bar">
+        <div className="range-bar-fill" style={{ width: '100%' }} />
+        <div className="range-marker buy" style={{ left: `${avgPos}%` }} title={`Avg NAV: ${formatINR(avg)}`} />
+        <div className="range-marker current" style={{ left: `${currentPos}%` }} title={`Current: ${formatINR(current)}`} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+      <div className="range-labels">
         <span>{formatINR(low)}</span>
         <span>{formatINR(high)}</span>
       </div>
@@ -83,14 +116,410 @@ function NavRangeBar({ low, high, current, avg }) {
   );
 }
 
+/* ── Expanded Fund Detail (matches StockDetail) ─────── */
+function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, selectedLots, onToggleLot, onToggleAllLots }) {
+  const f = fund;
+  const heldLots = (f.held_lots || []).slice().sort((a, b) => (b.buy_date || '').localeCompare(a.buy_date || ''));
+  const soldLots = (f.sold_lots || []).slice().sort((a, b) => (b.sell_date || '').localeCompare(a.sell_date || ''));
+  const currentNav = f.current_nav || 0;
 
+  const allLotsSelected = heldLots.length > 0 && heldLots.every(l => selectedLots.has(l.id));
+  const someLotsSelected = heldLots.some(l => selectedLots.has(l.id));
+
+  // Held lots column visibility
+  const [hiddenHeldCols, setHiddenHeldCols] = useState(loadHeldHiddenCols);
+  const [showColPicker, setShowColPicker] = useState(false);
+  const colPickerRef = useRef(null);
+  const hCol = (id) => !hiddenHeldCols.has(id);
+
+  const toggleHeldCol = (id) => {
+    setHiddenHeldCols(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem(HELD_COL_LS_KEY, JSON.stringify([...next])); } catch (_) {}
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!showColPicker) return;
+    const handler = (e) => { if (colPickerRef.current && !colPickerRef.current.contains(e.target)) setShowColPicker(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showColPicker]);
+
+  const totalSoldUnits = soldLots.reduce((sum, s) => sum + (s.units || 0), 0);
+  const totalSoldPL = soldLots.reduce((sum, s) => sum + (s.realized_pl || 0), 0);
+  const fundShortName = f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '');
+
+  return (
+    <div style={{
+      background: 'var(--bg)',
+      borderTop: '1px solid var(--border)',
+      padding: '20px 24px',
+    }}>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
+        {heldLots.length > 0 && (
+          <span style={{ fontSize: '13px', color: 'var(--text-dim)', marginRight: '4px' }}>
+            Quick actions:
+          </span>
+        )}
+        {onBuyMF && (
+          <button
+            className="btn btn-primary"
+            onClick={(e) => { e.stopPropagation(); onBuyMF({ fund_code: f.fund_code, name: f.name, fund_name: f.name }); }}
+            style={{ fontWeight: 600 }}
+          >
+            + Buy {fundShortName.substring(0, 25)}
+          </button>
+        )}
+        {onConfigSIP && (
+          <button
+            className="btn btn-ghost"
+            onClick={(e) => { e.stopPropagation(); onConfigSIP(f); }}
+            style={{ fontWeight: 600 }}
+          >
+            {getSIPForFund(f.fund_code) ? 'Edit SIP' : 'Setup SIP'}
+          </button>
+        )}
+      </div>
+
+      {/* Stats bar */}
+      {currentNav > 0 && (
+        <div style={{
+          display: 'flex',
+          gap: '32px',
+          marginBottom: '20px',
+          padding: '14px 16px',
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--border)',
+          flexWrap: 'wrap',
+        }}>
+          {(f.week_52_low > 0 || f.week_52_high > 0) && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>52-Week Range</div>
+              <NavRangeBar low={f.week_52_low} high={f.week_52_high} current={currentNav} avg={f.avg_nav} />
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Invested</div>
+            <div style={{ fontWeight: 600 }}>{formatINR(f.total_invested)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Current Value</div>
+            <div style={{ fontWeight: 600 }}>{formatINR(f.current_value)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Unrealized P&L</div>
+            <div style={{ fontWeight: 600, color: f.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {f.unrealized_pl >= 0 ? '+' : ''}{formatINR(f.unrealized_pl)}
+            </div>
+          </div>
+          {f.realized_pl !== 0 && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Realized P&L</div>
+              <div style={{ fontWeight: 600, color: f.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {f.realized_pl >= 0 ? '+' : ''}{formatINR(f.realized_pl)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Held Lots sub-table ──────────────────────── */}
+      {heldLots.length > 0 && (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span>Held Lots ({heldLots.length})</span>
+            <span style={{ display: 'flex', gap: '8px', fontSize: '10px', fontWeight: 500 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#22c55e', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-muted)' }}>LTCG (&gt;1yr)</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#f59e0b', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-muted)' }}>STCG (&le;1yr)</span>
+              </span>
+            </span>
+            {/* Column picker */}
+            <div style={{ position: 'relative' }} ref={colPickerRef}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowColPicker(v => !v); }}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Show/hide columns"
+              >
+                <span style={{ fontSize: '13px' }}>&#9776;</span> Columns
+              </button>
+              {showColPicker && (
+                <div style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: '4px',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '8px 0',
+                  zIndex: 100,
+                  minWidth: '140px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}>
+                  {HELD_COL_DEFS.map(c => (
+                    <label
+                      key={c.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={hCol(c.id)}
+                        onChange={() => toggleHeldCol(c.id)}
+                        style={{ accentColor: 'var(--blue)' }}
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            overflow: 'auto',
+            width: 'fit-content',
+            maxWidth: '100%',
+          }}>
+            <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <th style={{ ...heldTh, width: '30px', textAlign: 'center', padding: '8px 4px' }}>
+                    <input
+                      type="checkbox"
+                      checked={allLotsSelected}
+                      ref={(el) => { if (el) el.indeterminate = someLotsSelected && !allLotsSelected; }}
+                      onChange={() => onToggleAllLots(heldLots.map(l => l.id))}
+                      style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                      title="Select all lots for bulk redeem"
+                    />
+                  </th>
+                  {hCol('buyDate') && <th style={heldTh}>Buy Date</th>}
+                  {hCol('units')   && <th style={heldTh}>Units</th>}
+                  {hCol('nav')     && <th style={heldTh}>NAV</th>}
+                  {hCol('cost')    && <th style={heldTh}>Cost</th>}
+                  {hCol('current') && <th style={heldTh}>Current</th>}
+                  {hCol('pl')      && <th style={heldTh}>P&L</th>}
+                  <th style={heldTh}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {heldLots.map((lot, i) => {
+                  const isChecked = selectedLots.has(lot.id);
+                  const inProfit = lot.pl >= 0;
+                  const isLTCG = lot.is_ltcg;
+                  const ltcgColor = 'rgba(34,197,94,0.12)';
+                  const stcgColor = 'rgba(251,191,36,0.10)';
+                  const ltcgBorder = '#22c55e';
+                  const stcgBorder = '#f59e0b';
+                  return (
+                    <tr
+                      key={lot.id || i}
+                      style={{
+                        borderBottom: '1px solid var(--border)',
+                        background: isChecked ? 'rgba(59,130,246,0.08)' : (isLTCG ? ltcgColor : stcgColor),
+                        borderLeft: `3px solid ${isLTCG ? ltcgBorder : stcgBorder}`,
+                      }}
+                    >
+                      <td style={{ textAlign: 'center', padding: '8px 4px', width: '30px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => onToggleLot(lot.id)}
+                          style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                        />
+                      </td>
+                      {hCol('buyDate') && (
+                        <td style={heldTd}>
+                          <div>{formatDate(lot.buy_date)}</div>
+                          <span style={{
+                            fontSize: '9px',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            color: isLTCG ? '#22c55e' : '#f59e0b',
+                            background: isLTCG ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.15)',
+                            letterSpacing: '0.5px',
+                          }}>
+                            {isLTCG ? 'LTCG' : 'STCG'}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 4 }}>
+                            {durationText(lot.buy_date)}
+                          </span>
+                        </td>
+                      )}
+                      {hCol('units')   && <td style={{ ...heldTd, fontWeight: 600 }}>{formatUnits(lot.units)}</td>}
+                      {hCol('nav')     && <td style={heldTd}>{formatINR(lot.buy_price)}</td>}
+                      {hCol('cost')    && <td style={heldTd}>{formatINR(lot.buy_cost)}</td>}
+                      {hCol('current') && (
+                        <td style={{ ...heldTd, color: inProfit ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                          {currentNav > 0 ? formatINR(lot.current_value) : '--'}
+                        </td>
+                      )}
+                      {hCol('pl') && (
+                        <td style={{ ...heldTd, fontWeight: 600, color: inProfit ? 'var(--green)' : 'var(--red)' }}>
+                          {currentNav > 0 ? `${inProfit ? '+' : ''}${formatINR(lot.pl)}` : '--'}
+                          {currentNav > 0 && (
+                            <div style={{ fontSize: '10px', opacity: 0.85 }}>
+                              {lot.pl_pct >= 0 ? '+' : ''}{lot.pl_pct?.toFixed(1)}%
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      <td style={heldTd}>
+                        <button
+                          className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
+                          onClick={(e) => { e.stopPropagation(); onRedeemMF({ ...f, preSelectedUnits: lot.units }); }}
+                          style={{ minWidth: '56px', padding: '4px 10px' }}
+                        >
+                          Redeem
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Redeemed (Sold) Lots sub-table ────────────── */}
+      {soldLots.length > 0 && (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span>Redemptions ({soldLots.length})</span>
+            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-dim)' }}>
+              {formatUnits(totalSoldUnits)} units
+            </span>
+            <span style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: totalSoldPL >= 0 ? 'var(--green)' : 'var(--red)',
+            }}>
+              Net P&L: {totalSoldPL >= 0 ? '+' : ''}{formatINR(totalSoldPL)}
+            </span>
+          </div>
+          <div style={{
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            overflow: 'auto',
+            width: 'fit-content',
+            maxWidth: '100%',
+          }}>
+            <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <th style={heldTh}>Buy Date</th>
+                  <th style={heldTh}>Sell Date</th>
+                  <th style={heldTh}>Units</th>
+                  <th style={heldTh}>Buy NAV</th>
+                  <th style={heldTh}>Sell NAV</th>
+                  <th style={heldTh}>Realized P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {soldLots.map((s, i) => (
+                  <tr key={s.id || i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={heldTd}>{formatDate(s.buy_date)}</td>
+                    <td style={heldTd}>{formatDate(s.sell_date)}</td>
+                    <td style={{ ...heldTd, fontWeight: 600 }}>{formatUnits(s.units)}</td>
+                    <td style={heldTd}>{formatINR(s.buy_nav)}</td>
+                    <td style={heldTd}>{formatINR(s.sell_nav)}</td>
+                    <td style={{ ...heldTd, fontWeight: 600, color: s.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {s.realized_pl >= 0 ? '+' : ''}{formatINR(s.realized_pl)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* LTCG/STCG summary */}
+      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ padding: '8px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
+          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.4px' }}>LTCG (Unrealized)</div>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: f.ltcg_unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+            {f.ltcg_unrealized_pl >= 0 ? '+' : ''}{formatINR(f.ltcg_unrealized_pl)}
+          </div>
+        </div>
+        <div style={{ padding: '8px 12px', background: 'rgba(245,158,11,0.06)', borderRadius: 6, border: '1px solid rgba(245,158,11,0.15)' }}>
+          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#f59e0b', fontWeight: 600, letterSpacing: '0.4px' }}>STCG (Unrealized)</div>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: f.stcg_unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+            {f.stcg_unrealized_pl >= 0 ? '+' : ''}{formatINR(f.stcg_unrealized_pl)}
+          </div>
+        </div>
+        {(f.ltcg_realized_pl !== 0 || f.stcg_realized_pl !== 0) && (
+          <>
+            <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.06)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.15)' }}>
+              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#6366f1', fontWeight: 600, letterSpacing: '0.4px' }}>LTCG (Realized)</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: f.ltcg_realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {f.ltcg_realized_pl >= 0 ? '+' : ''}{formatINR(f.ltcg_realized_pl)}
+              </div>
+            </div>
+            <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.06)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.15)' }}>
+              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#6366f1', fontWeight: 600, letterSpacing: '0.4px' }}>STCG (Realized)</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: f.stcg_realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {f.stcg_realized_pl >= 0 ? '+' : ''}{formatINR(f.stcg_realized_pl)}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {heldLots.length === 0 && soldLots.length === 0 && (
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+          No lot or transaction details available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/* ── Main Table ───────────────────────────────────────── */
 export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs }) {
   const [expandedFund, setExpandedFund] = useState(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
-  const [hiddenCols, setHiddenCols] = useState(loadHiddenCols);
-  const [showColPicker, setShowColPicker] = useState(false);
+  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
+  const [colPickerOpen, setColPickerOpen] = useState(false);
+  const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const searchRef = useRef(null);
   const [heldOnly, setHeldOnly] = useState(true);
 
   // ── Lot-level selection for bulk redeem ──
@@ -123,32 +552,53 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
     });
   };
 
-  // Helper: look up SIP config for a fund
+  const clearSelection = () => setSelectedLots(new Set());
+
   const getSIPForFund = (fund_code) => (sipConfigs || []).find(s => s.fund_code === fund_code);
 
-  const isCol = (id) => !hiddenCols.has(id);
+  const col = (id) => visibleCols.has(id);
 
   const toggleCol = (id) => {
-    setHiddenCols(prev => {
+    setVisibleCols(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      localStorage.setItem(LS_KEY, JSON.stringify([...next]));
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem(LS_KEY, JSON.stringify([...next])); } catch (_) {}
       return next;
     });
   };
+  const showAllCols = () => {
+    const all = new Set(ALL_COL_IDS);
+    setVisibleCols(all);
+    try { localStorage.setItem(LS_KEY, JSON.stringify([...all])); } catch (_) {}
+  };
+  const hideAllCols = () => {
+    setVisibleCols(new Set());
+    try { localStorage.setItem(LS_KEY, JSON.stringify([])); } catch (_) {}
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!colPickerOpen) return;
+    const handler = (e) => { if (colPickerRef.current && !colPickerRef.current.contains(e.target)) setColPickerOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [colPickerOpen]);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
   };
-  const arrow = (key) => sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕';
+
+  const SortIcon = ({ field }) => {
+    if (sortKey !== field) return <span style={{ opacity: 0.3, fontSize: '10px' }}> &updownarrow;</span>;
+    return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '\u2191' : '\u2193'}</span>;
+  };
 
   // Filter + sort
+  const q = searchTerm.trim().toLowerCase();
   let filtered = (funds || []).filter(f => {
     if (heldOnly && f.total_held_units <= 0) return false;
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
+    if (q) {
       return f.name.toLowerCase().includes(q) || f.fund_code.toLowerCase().includes(q);
     }
     return true;
@@ -171,481 +621,424 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
     return sortDir === 'asc' ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
   });
 
-  // Totals
-  const totalInvested = filtered.reduce((s, f) => s + f.total_invested, 0);
-  const totalValue = filtered.reduce((s, f) => s + f.current_value, 0);
-  const totalUPL = filtered.reduce((s, f) => s + f.unrealized_pl, 0);
-  const totalRPL = filtered.reduce((s, f) => s + f.realized_pl, 0);
+  // Stats
+  const fundsWithHeld = (funds || []).filter(f => f.total_held_units > 0);
+  const totalHeldFunds = fundsWithHeld.length;
+  const inProfit = fundsWithHeld.filter(f => f.unrealized_pl >= 0).length;
+  const inLoss = fundsWithHeld.filter(f => f.unrealized_pl < 0).length;
 
-  const thStyle = { padding: '8px 12px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, borderBottom: '2px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' };
-  const tdStyle = { padding: '10px 12px', fontSize: '13px', borderBottom: '1px solid var(--border)', verticalAlign: 'middle' };
+  // Dynamic column count: 2 always-on (expand + name) + visible cols
+  const TOTAL_COLS = 2 + COL_DEFS.filter(c => visibleCols.has(c.id)).length;
 
-  /* Sub-table styles (compact) */
-  const subTh = { padding: '5px 8px', textAlign: 'left', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--text-dim)', fontWeight: 600, borderBottom: '1px solid var(--border)' };
-  const subTd = { padding: '5px 8px', fontSize: '12px', verticalAlign: 'middle' };
+  // Count selected lots info for the action bar
+  const selectedCount = selectedLots.size;
+  const expandedFundData = selectedCount > 0 ? filtered.find(f => f.fund_code === expandedFund) : null;
+  const selectedItems = expandedFundData?.held_lots?.filter(l => selectedLots.has(l.id)) || [];
+  const selectedUnits = selectedItems.reduce((sum, l) => sum + l.units, 0);
+  const selectedPL = selectedItems.reduce((sum, l) => sum + (l.pl || 0), 0);
+
+  if (loading && (funds || []).length === 0) {
+    return (
+      <div className="loading">
+        <div className="spinner" />
+        Loading mutual fund data...
+      </div>
+    );
+  }
 
   return (
-    <div className="card" style={{ marginBottom: '16px' }}>
-      {/* ── MF Dashboard Summary ─────────────────────── */}
-      {mfDashboard && (
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
-          <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invested</div>
-            <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(mfDashboard.total_invested)}</div>
-          </div>
-          <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Value</div>
-            <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(mfDashboard.current_value)}</div>
-          </div>
-          <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized P&L</div>
-            <div style={{ fontSize: '16px', fontWeight: 600, color: mfDashboard.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {mfDashboard.unrealized_pl >= 0 ? '+' : ''}{formatINR(mfDashboard.unrealized_pl)}
-              <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4 }}>
-                ({mfDashboard.unrealized_pl_pct >= 0 ? '+' : ''}{mfDashboard.unrealized_pl_pct?.toFixed(2)}%)
-              </span>
-            </div>
-          </div>
-          <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Realized P&L</div>
-            <div style={{ fontSize: '16px', fontWeight: 600, color: mfDashboard.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {mfDashboard.realized_pl >= 0 ? '+' : ''}{formatINR(mfDashboard.realized_pl)}
-            </div>
-          </div>
-          <div style={{ flex: '1 1 80px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Funds</div>
-            <div style={{ fontSize: '16px', fontWeight: 600 }}>
-              {mfDashboard.total_funds}
-              <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4, color: 'var(--text-muted)' }}>
-                ({mfDashboard.funds_in_profit}↑ {mfDashboard.funds_in_loss}↓)
-              </span>
-            </div>
-          </div>
+    <div className="section">
+      <div className="section-header">
+        <div className="section-title">Mutual Fund Summary</div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span className="section-badge">
+            {totalHeldFunds} funds held
+          </span>
+          <span className="section-badge" style={{ background: 'var(--green-bg)', color: 'var(--green)' }}>
+            {inProfit} in profit
+          </span>
+          <span className="section-badge" style={{ background: 'var(--red-bg)', color: 'var(--red)' }}>
+            {inLoss} in loss
+          </span>
         </div>
-      )}
+      </div>
 
-      {/* ── Toolbar ──────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          Mutual Funds ({filtered.length})
-        </h3>
+      {/* ── MF Summary Bar (matches Stock Summary Bar) ── */}
+      {mfDashboard && (() => {
+        const uplPct = mfDashboard.total_invested > 0 ? (mfDashboard.unrealized_pl / mfDashboard.total_invested) * 100 : 0;
+        return (
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invested</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(mfDashboard.total_invested)}</div>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Value</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(mfDashboard.current_value)}</div>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized P&L</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: mfDashboard.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {mfDashboard.unrealized_pl >= 0 ? '+' : ''}{formatINR(mfDashboard.unrealized_pl)}
+                <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4 }}>
+                  ({uplPct >= 0 ? '+' : ''}{uplPct.toFixed(2)}%)
+                </span>
+              </div>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Realized P&L</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: mfDashboard.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {mfDashboard.realized_pl >= 0 ? '+' : ''}{formatINR(mfDashboard.realized_pl)}
+              </div>
+            </div>
+            <div style={{ flex: '1 1 80px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Funds</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>
+                {totalHeldFunds}
+                <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4, color: 'var(--text-muted)' }}>
+                  ({inProfit}&uarr; {inLoss}&darr;)
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
+      {/* ── Search bar (matches stock search) ──────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+        <div style={{ position: 'relative', flex: '1' }}>
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Search funds by name or code..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 30px 8px 34px',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text)',
+              fontSize: '13px',
+              outline: 'none',
+            }}
+          />
+          <span style={{
+            position: 'absolute',
+            left: '10px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--text-muted)',
+            fontSize: '14px',
+            pointerEvents: 'none',
+          }}>
+            &#x1F50D;
+          </span>
+          {searchTerm && (
+            <span
+              onClick={() => { setSearchTerm(''); if (searchRef.current) searchRef.current.focus(); }}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-muted)',
+                fontSize: '16px',
+                cursor: 'pointer',
+                lineHeight: 1,
+                userSelect: 'none',
+              }}
+              title="Clear search"
+            >
+              &#x2715;
+            </span>
+          )}
+        </div>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          fontSize: '13px',
+          color: 'var(--text-dim)',
+          whiteSpace: 'nowrap',
+          userSelect: 'none',
+        }}>
+          <input
+            type="checkbox"
+            checked={heldOnly}
+            onChange={(e) => setHeldOnly(e.target.checked)}
+            style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+          />
+          Held only
+        </label>
+        {(q || heldOnly) && (
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {filtered.length} of {(funds || []).length} funds
+          </span>
+        )}
         {/* Column picker */}
-        <div style={{ position: 'relative' }}>
+        <div ref={colPickerRef} style={{ position: 'relative' }}>
           <button
-            onClick={() => setShowColPicker(p => !p)}
-            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, padding: '3px 8px', fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer' }}
+            onClick={() => setColPickerOpen(p => !p)}
+            style={{
+              padding: '5px 10px',
+              fontSize: '12px',
+              background: colPickerOpen ? 'var(--blue)' : 'var(--bg-input)',
+              color: colPickerOpen ? '#fff' : 'var(--text-dim)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+            title="Show / hide columns"
           >
-            Columns ▾
+            <span style={{ fontSize: '13px' }}>&#9881;</span> Columns
           </button>
-          {showColPicker && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 999, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, padding: 8, minWidth: 160, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-              {COL_DEFS.filter(c => c.id !== 'name').map(c => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 4px', fontSize: '12px', cursor: 'pointer', color: 'var(--text-dim)' }}>
-                  <input type="checkbox" checked={isCol(c.id)} onChange={() => toggleCol(c.id)} style={{ accentColor: 'var(--green)' }} />
+          {colPickerOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: '4px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 0',
+              zIndex: 100,
+              minWidth: '180px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}>
+              <div style={{ display: 'flex', gap: '8px', padding: '4px 12px 8px', borderBottom: '1px solid var(--border)' }}>
+                <button onClick={showAllCols} style={{ fontSize: '11px', color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Show All</button>
+                <button onClick={hideAllCols} style={{ fontSize: '11px', color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Hide All</button>
+              </div>
+              {COL_DEFS.map(c => (
+                <label
+                  key={c.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '4px 12px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                    userSelect: 'none',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-input)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleCols.has(c.id)}
+                    onChange={() => toggleCol(c.id)}
+                    style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                  />
                   {c.label}
                 </label>
               ))}
             </div>
           )}
         </div>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="Search funds..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px', fontSize: '12px', color: 'var(--text)', width: 180 }}
-        />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '12px', color: 'var(--text-dim)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={heldOnly} onChange={() => setHeldOnly(p => !p)} style={{ accentColor: 'var(--green)' }} />
-          Held only
-        </label>
       </div>
 
       {/* ── Main Table ───────────────────────────────── */}
-      {loading ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading mutual fund data...</div>
-      ) : filtered.length === 0 ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No mutual funds found.</div>
-      ) : (
-        <div style={{ overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
-                {isCol('name') && <th style={thStyle} onClick={() => handleSort('name')}>Fund{arrow('name')}</th>}
-                {isCol('units') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('units')}>Units{arrow('units')}</th>}
-                {isCol('avgNav') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('avgNav')}>Avg NAV{arrow('avgNav')}</th>}
-                {isCol('invested') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('invested')}>Invested{arrow('invested')}</th>}
-                {isCol('currentNav') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('currentNav')}>Current NAV{arrow('currentNav')}</th>}
-                {isCol('currentValue') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('currentValue')}>Current Value{arrow('currentValue')}</th>}
-                {isCol('unrealizedPL') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('unrealizedPL')}>Unrealized P&L{arrow('unrealizedPL')}</th>}
-                {isCol('realizedPL') && <th style={{ ...thStyle, textAlign: 'right' }} onClick={() => handleSort('realizedPL')}>Realized P&L{arrow('realizedPL')}</th>}
-                {isCol('52w') && <th style={thStyle}>52W Range</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(f => {
-                const isExpanded = expandedFund === f.fund_code;
-                const plColor = f.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)';
-                const rplColor = f.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
-                const visColCount = COL_DEFS.filter(c => isCol(c.id)).length;
+      <div className="table-container" style={{ overflowX: 'auto' }}>
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: '28px' }}></th>
+              <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+                Fund<SortIcon field="name" />
+              </th>
+              {col('units') && <th onClick={() => handleSort('units')} style={{ cursor: 'pointer' }}>
+                Units<SortIcon field="units" />
+              </th>}
+              {col('avgNav') && <th onClick={() => handleSort('avgNav')} style={{ cursor: 'pointer' }}>
+                Avg NAV<SortIcon field="avgNav" />
+              </th>}
+              {col('invested') && <th onClick={() => handleSort('invested')} style={{ cursor: 'pointer' }}>
+                Invested<SortIcon field="invested" />
+              </th>}
+              {col('currentNav') && <th onClick={() => handleSort('currentNav')} style={{ cursor: 'pointer' }}>
+                Current NAV<SortIcon field="currentNav" />
+              </th>}
+              {col('currentValue') && <th onClick={() => handleSort('currentValue')} style={{ cursor: 'pointer' }}>
+                Current Value<SortIcon field="currentValue" />
+              </th>}
+              {col('unrealizedPL') && <th onClick={() => handleSort('unrealizedPL')} style={{ cursor: 'pointer' }}>
+                Unrealized P&L<SortIcon field="unrealizedPL" />
+              </th>}
+              {col('realizedPL') && <th onClick={() => handleSort('realizedPL')} style={{ cursor: 'pointer' }}>
+                Realized P&L<SortIcon field="realizedPL" />
+              </th>}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(f => {
+              const isExpanded = expandedFund === f.fund_code;
+              const hasHeld = f.total_held_units > 0;
+              const plColor = f.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)';
+              const rplColor = f.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
+              const sipCfg = getSIPForFund(f.fund_code);
 
-                return (
-                  <React.Fragment key={f.fund_code}>
-                    {/* ── Summary row ─────────────────────── */}
-                    <tr
-                      onClick={() => setExpandedFund(isExpanded ? null : f.fund_code)}
-                      style={{ cursor: 'pointer', background: isExpanded ? 'rgba(99,102,241,0.06)' : 'transparent', transition: 'background 0.15s' }}
-                      onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                      onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      {isCol('name') && (() => {
-                        const sipCfg = getSIPForFund(f.fund_code);
-                        return (
-                        <td style={tdStyle}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ flex: 1 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '13px' }}>
-                                {isExpanded ? '▾' : '▸'}{' '}
-                                {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '')}
-                              </span>
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 1 }}>
-                                {f.num_held_lots} lot{f.num_held_lots !== 1 ? 's' : ''}
-                                {f.num_sold_lots > 0 && <span> • {f.num_sold_lots} redeemed</span>}
-                                {sipCfg && sipCfg.enabled && (
-                                  <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, background: 'rgba(0,210,106,0.12)', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
-                                    SIP ₹{Number(sipCfg.amount).toLocaleString('en-IN')}/{sipCfg.frequency === 'weekly' ? 'wk' : sipCfg.frequency === 'quarterly' ? 'qtr' : 'mo'}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {f.total_held_units > 0 && onRedeemMF && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); onRedeemMF(f); }}
-                                style={{ padding: '2px 8px', fontSize: '11px', fontWeight: 500, background: 'rgba(255,71,87,0.1)', color: 'var(--red)', border: '1px solid rgba(255,71,87,0.2)', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                              >
-                                Redeem
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        );
-                      })()}
-                      {isCol('units') && <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace', fontSize: '12px' }}>{formatUnits(f.total_held_units)}</td>}
-                      {isCol('avgNav') && <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(f.avg_nav)}</td>}
-                      {isCol('invested') && <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>{formatINR(f.total_invested)}</td>}
-                      {isCol('currentNav') && (
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                          <span style={{ color: f.is_above_avg_nav ? 'var(--green)' : 'var(--red)' }}>{formatINR(f.current_nav)}</span>
-                        </td>
+              return (
+                <React.Fragment key={f.fund_code}>
+                  <tr
+                    className={f.is_above_avg_nav && hasHeld ? 'highlight-profit' : ''}
+                    style={{
+                      opacity: hasHeld ? 1 : 0.6,
+                      cursor: 'pointer',
+                      background: isExpanded ? 'var(--bg-card-hover)' : undefined,
+                    }}
+                    onClick={() => setExpandedFund(isExpanded ? null : f.fund_code)}
+                  >
+                    <td style={{ padding: '14px 4px 14px 16px', width: '28px', fontSize: '14px', color: 'var(--text-dim)' }}>
+                      {isExpanded ? '\u25BE' : '\u25B8'}
+                    </td>
+                    <td>
+                      <div className="stock-symbol">
+                        {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '')}
+                        {sipCfg && sipCfg.enabled && (
+                          <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, background: 'rgba(0,210,106,0.12)', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
+                            SIP
+                          </span>
+                        )}
+                      </div>
+                      <div className="stock-name">
+                        {f.num_held_lots} lot{f.num_held_lots !== 1 ? 's' : ''}
+                        {f.num_sold_lots > 0 && <span> &bull; {f.num_sold_lots} redeemed</span>}
+                      </div>
+                    </td>
+                    {col('units') && <td>
+                      <div style={{ fontWeight: 700, fontSize: '15px' }}>
+                        {hasHeld ? formatUnits(f.total_held_units) : '-'}
+                      </div>
+                      {f.num_held_lots > 1 && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {f.num_held_lots} lots
+                        </div>
                       )}
-                      {isCol('currentValue') && <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(f.current_value)}</td>}
-                      {isCol('unrealizedPL') && (
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                          <div style={{ color: plColor, fontWeight: 600 }}>
+                    </td>}
+                    {col('avgNav') && <td>{hasHeld ? formatINR(f.avg_nav) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
+                    {col('invested') && <td>{hasHeld ? formatINR(f.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
+                    {col('currentNav') && <td>
+                      {f.current_nav > 0 ? (
+                        <div style={{
+                          fontWeight: 600,
+                          color: hasHeld ? (f.is_above_avg_nav ? 'var(--green)' : 'var(--red)') : 'var(--text)',
+                        }}>
+                          {formatINR(f.current_nav)}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>--</span>
+                      )}
+                    </td>}
+                    {col('currentValue') && <td>
+                      <div style={{ fontWeight: 600 }}>
+                        {hasHeld ? formatINR(f.current_value) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
+                      </div>
+                    </td>}
+                    {col('unrealizedPL') && <td style={{ whiteSpace: 'nowrap' }}>
+                      {hasHeld && f.unrealized_pl !== 0 ? (
+                        <div>
+                          <div style={{ fontWeight: 600, color: plColor }}>
                             {f.unrealized_pl >= 0 ? '+' : ''}{formatINR(f.unrealized_pl)}
                           </div>
-                          <div style={{ fontSize: '11px', color: plColor, opacity: 0.8 }}>
+                          <div style={{ fontSize: '11px', color: plColor, opacity: 0.85 }}>
                             {f.unrealized_pl_pct >= 0 ? '+' : ''}{f.unrealized_pl_pct?.toFixed(2)}%
                           </div>
-                        </td>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
-                      {isCol('realizedPL') && (
-                        <td style={{ ...tdStyle, textAlign: 'right', color: rplColor, fontWeight: 500 }}>
+                    </td>}
+                    {col('realizedPL') && <td style={{ whiteSpace: 'nowrap' }}>
+                      {f.realized_pl !== 0 ? (
+                        <div style={{ fontWeight: 600, color: rplColor }}>
                           {f.realized_pl >= 0 ? '+' : ''}{formatINR(f.realized_pl)}
-                        </td>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
-                      {isCol('52w') && (
-                        <td style={tdStyle}>
-                          <NavRangeBar low={f.week_52_low} high={f.week_52_high} current={f.current_nav} avg={f.avg_nav} />
-                        </td>
-                      )}
+                    </td>}
+                  </tr>
+
+                  {/* ── Expanded detail row ────────────────── */}
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={TOTAL_COLS} style={{ padding: 0 }}>
+                        <FundDetail
+                          fund={f}
+                          onBuyMF={onBuyMF}
+                          onRedeemMF={onRedeemMF}
+                          onConfigSIP={onConfigSIP}
+                          getSIPForFund={getSIPForFund}
+                          selectedLots={selectedLots}
+                          onToggleLot={toggleLot}
+                          onToggleAllLots={toggleAllLots}
+                        />
+                      </td>
                     </tr>
-
-                    {/* ── Expanded detail ─────────────────── */}
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={visColCount} style={{ padding: '12px 16px 16px', background: 'rgba(99,102,241,0.03)', borderBottom: '2px solid var(--border)' }}>
-                          {/* ── Action buttons ──────────── */}
-                          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                            {onBuyMF && (
-                              <button
-                                onClick={() => onBuyMF({ fund_code: f.fund_code, name: f.name, fund_name: f.name })}
-                                className="btn btn-primary"
-                                style={{ padding: '4px 12px', fontSize: '12px' }}
-                              >
-                                + Buy {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '').substring(0, 25)}
-                              </button>
-                            )}
-                            {onConfigSIP && (
-                              <button
-                                onClick={() => onConfigSIP(f)}
-                                style={{
-                                  padding: '4px 12px', fontSize: '12px', fontWeight: 500,
-                                  background: getSIPForFund(f.fund_code) ? 'rgba(0,210,106,0.1)' : 'var(--bg-hover)',
-                                  color: getSIPForFund(f.fund_code) ? 'var(--green)' : 'var(--text-dim)',
-                                  border: `1px solid ${getSIPForFund(f.fund_code) ? 'rgba(0,210,106,0.3)' : 'var(--border)'}`,
-                                  borderRadius: 6, cursor: 'pointer',
-                                }}
-                              >
-                                {getSIPForFund(f.fund_code) ? '⚙ Edit SIP' : '⚙ Setup SIP'}
-                              </button>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                            {/* ── Held Lots ─────────────── */}
-                            {f.held_lots && f.held_lots.length > 0 && (
-                              <div style={{ flex: '1 1 400px' }}>
-                                <h4 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
-                                  Held Lots ({f.held_lots.length})
-                                  <span style={{ fontWeight: 400, fontSize: '12px', color: 'var(--text-muted)', marginLeft: 8 }}>
-                                    {formatUnits(f.total_held_units)} units
-                                  </span>
-                                </h4>
-                                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'auto', width: 'fit-content', maxWidth: '100%' }}>
-                                  <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
-                                    <thead>
-                                      <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                        <th style={{ ...subTh, width: '30px', textAlign: 'center', padding: '5px 4px' }}>
-                                          {(() => {
-                                            const allLotIds = f.held_lots.map(l => l.id);
-                                            const allSelected = allLotIds.length > 0 && allLotIds.every(id => selectedLots.has(id));
-                                            const someSelected = allLotIds.some(id => selectedLots.has(id));
-                                            return (
-                                              <input
-                                                type="checkbox"
-                                                checked={allSelected}
-                                                ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
-                                                onChange={() => toggleAllLots(allLotIds)}
-                                                style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
-                                                title="Select all lots for bulk redeem"
-                                              />
-                                            );
-                                          })()}
-                                        </th>
-                                        <th style={subTh}>Buy Date</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>Units</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>NAV</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>Cost</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>Current</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>P&L</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {f.held_lots.map((lot, i) => {
-                                        const lotPlColor = lot.pl >= 0 ? 'var(--green)' : 'var(--red)';
-                                        const isChecked = selectedLots.has(lot.id);
-                                        return (
-                                          <tr key={lot.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isChecked ? 'rgba(59,130,246,0.08)' : undefined }}>
-                                            <td style={{ textAlign: 'center', padding: '5px 4px', width: '30px' }}>
-                                              <input
-                                                type="checkbox"
-                                                checked={isChecked}
-                                                onChange={() => toggleLot(lot.id)}
-                                                style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
-                                              />
-                                            </td>
-                                            <td style={{ ...subTd, borderLeft: `3px solid ${lot.is_ltcg ? 'var(--green)' : '#f59e0b'}` }}>
-                                              <span style={{ fontSize: '12px' }}>{formatDate(lot.buy_date)}</span>
-                                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 4 }}>
-                                                {durationText(lot.buy_date)}
-                                              </span>
-                                              <span style={{ fontSize: '9px', marginLeft: 4, padding: '1px 4px', borderRadius: 3, background: lot.is_ltcg ? 'rgba(0,210,106,0.15)' : 'rgba(245,158,11,0.15)', color: lot.is_ltcg ? 'var(--green)' : '#f59e0b' }}>
-                                                {lot.is_ltcg ? 'LT' : 'ST'}
-                                              </span>
-                                            </td>
-                                            <td style={{ ...subTd, textAlign: 'right', fontFamily: 'monospace', fontSize: '11px' }}>{formatUnits(lot.units)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right' }}>{formatINR(lot.buy_price)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right' }}>{formatINR(lot.buy_cost)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right' }}>{formatINR(lot.current_value)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right', color: lotPlColor, fontWeight: 500 }}>
-                                              {lot.pl >= 0 ? '+' : ''}{formatINR(lot.pl)}
-                                              <div style={{ fontSize: '10px', opacity: 0.8 }}>
-                                                {lot.pl_pct >= 0 ? '+' : ''}{lot.pl_pct?.toFixed(1)}%
-                                              </div>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ── Redeemed (Sold) Lots ──── */}
-                            {f.sold_lots && f.sold_lots.length > 0 && (
-                              <div style={{ flex: '1 1 400px' }}>
-                                <h4 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
-                                  Redemptions ({f.sold_lots.length})
-                                  <span style={{ fontWeight: 400, fontSize: '12px', color: 'var(--text-muted)', marginLeft: 8 }}>
-                                    {formatUnits(f.total_sold_units)} units
-                                    {' • Net P&L: '}
-                                    <span style={{ color: f.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                      {f.realized_pl >= 0 ? '+' : ''}{formatINR(f.realized_pl)}
-                                    </span>
-                                  </span>
-                                </h4>
-                                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'auto', width: 'fit-content', maxWidth: '100%' }}>
-                                  <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
-                                    <thead>
-                                      <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                        <th style={subTh}>Buy Date</th>
-                                        <th style={subTh}>Sell Date</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>Units</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>Buy NAV</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>Sell NAV</th>
-                                        <th style={{ ...subTh, textAlign: 'right' }}>P&L</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {f.sold_lots.map((s, i) => {
-                                        const sPlColor = s.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
-                                        return (
-                                          <tr key={s.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                            <td style={subTd}>{formatDate(s.buy_date)}</td>
-                                            <td style={subTd}>{formatDate(s.sell_date)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right', fontFamily: 'monospace', fontSize: '11px' }}>{formatUnits(s.units)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right' }}>{formatINR(s.buy_nav)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right' }}>{formatINR(s.sell_nav)}</td>
-                                            <td style={{ ...subTd, textAlign: 'right', color: sPlColor, fontWeight: 500 }}>
-                                              {s.realized_pl >= 0 ? '+' : ''}{formatINR(s.realized_pl)}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* LTCG/STCG summary */}
-                          <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
-                            <div style={{ padding: '8px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
-                              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.4px' }}>LTCG (Unrealized)</div>
-                              <div style={{ fontSize: '14px', fontWeight: 600, color: f.ltcg_unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                {f.ltcg_unrealized_pl >= 0 ? '+' : ''}{formatINR(f.ltcg_unrealized_pl)}
-                              </div>
-                            </div>
-                            <div style={{ padding: '8px 12px', background: 'rgba(245,158,11,0.06)', borderRadius: 6, border: '1px solid rgba(245,158,11,0.15)' }}>
-                              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#f59e0b', fontWeight: 600, letterSpacing: '0.4px' }}>STCG (Unrealized)</div>
-                              <div style={{ fontSize: '14px', fontWeight: 600, color: f.stcg_unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                {f.stcg_unrealized_pl >= 0 ? '+' : ''}{formatINR(f.stcg_unrealized_pl)}
-                              </div>
-                            </div>
-                            {(f.ltcg_realized_pl !== 0 || f.stcg_realized_pl !== 0) && (
-                              <>
-                                <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.06)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.15)' }}>
-                                  <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#6366f1', fontWeight: 600, letterSpacing: '0.4px' }}>LTCG (Realized)</div>
-                                  <div style={{ fontSize: '14px', fontWeight: 600, color: f.ltcg_realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                    {f.ltcg_realized_pl >= 0 ? '+' : ''}{formatINR(f.ltcg_realized_pl)}
-                                  </div>
-                                </div>
-                                <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.06)', borderRadius: 6, border: '1px solid rgba(99,102,241,0.15)' }}>
-                                  <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#6366f1', fontWeight: 600, letterSpacing: '0.4px' }}>STCG (Realized)</div>
-                                  <div style={{ fontSize: '14px', fontWeight: 600, color: f.stcg_realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                    {f.stcg_realized_pl >= 0 ? '+' : ''}{formatINR(f.stcg_realized_pl)}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-
-              {/* ── Totals row ─────────────────────────── */}
-              <tr style={{ background: 'rgba(255,255,255,0.04)', fontWeight: 600 }}>
-                {isCol('name') && <td style={{ ...tdStyle, fontSize: '12px' }}>TOTAL ({filtered.length} funds)</td>}
-                {isCol('units') && <td style={tdStyle} />}
-                {isCol('avgNav') && <td style={tdStyle} />}
-                {isCol('invested') && <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalInvested)}</td>}
-                {isCol('currentNav') && <td style={tdStyle} />}
-                {isCol('currentValue') && <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalValue)}</td>}
-                {isCol('unrealizedPL') && (
-                  <td style={{ ...tdStyle, textAlign: 'right', color: totalUPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                    {totalUPL >= 0 ? '+' : ''}{formatINR(totalUPL)}
-                    <div style={{ fontSize: '11px', opacity: 0.8 }}>
-                      {totalInvested > 0 ? `${((totalUPL / totalInvested) * 100).toFixed(2)}%` : ''}
-                    </div>
-                  </td>
-                )}
-                {isCol('realizedPL') && (
-                  <td style={{ ...tdStyle, textAlign: 'right', color: totalRPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                    {totalRPL >= 0 ? '+' : ''}{formatINR(totalRPL)}
-                  </td>
-                )}
-                {isCol('52w') && <td style={tdStyle} />}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {/* ── Floating bulk action bar (lot-level) ──────── */}
-      {selectedLots.size > 0 && (() => {
-        // Find the expanded fund to get lot details
-        const expandedFundData = filtered.find(f => f.fund_code === expandedFund);
-        if (!expandedFundData || !expandedFundData.held_lots) return null;
-        const selItems = expandedFundData.held_lots.filter(l => selectedLots.has(l.id));
-        if (selItems.length === 0) return null;
-        const selUnits = selItems.reduce((s, l) => s + l.units, 0);
-        const selPL = selItems.reduce((s, l) => s + (l.pl || 0), 0);
-        return (
-          <div style={{
-            position: 'sticky',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: 'var(--bg-card)',
-            borderTop: '2px solid var(--blue)',
-            padding: '12px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            zIndex: 10,
-            borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
-            boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontWeight: 600, fontSize: '14px' }}>
-                {selItems.length} lot{selItems.length > 1 ? 's' : ''} selected
-                <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '8px' }}>
-                  ({formatUnits(selUnits)} units)
-                </span>
+      {selectedCount > 0 && selectedItems.length > 0 && (
+        <div style={{
+          position: 'sticky',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'var(--bg-card)',
+          borderTop: '2px solid var(--blue)',
+          padding: '12px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          zIndex: 10,
+          borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+          boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontWeight: 600, fontSize: '14px' }}>
+              {selectedItems.length} lot{selectedItems.length > 1 ? 's' : ''} selected
+              <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: '8px' }}>
+                ({formatUnits(selectedUnits)} units)
               </span>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setSelectedLots(new Set())}
-                style={{ fontSize: '12px' }}
-              >
-                Clear
-              </button>
-            </div>
+            </span>
             <button
-              className="btn btn-danger"
-              onClick={() => {
-                if (onRedeemMF) {
-                  onRedeemMF({ ...expandedFundData, preSelectedUnits: selUnits });
-                }
-              }}
-              style={{ fontWeight: 600, padding: '8px 24px' }}
+              className="btn btn-ghost btn-sm"
+              onClick={clearSelection}
+              style={{ fontSize: '12px' }}
             >
-              Redeem {selItems.length} Lot{selItems.length > 1 ? 's' : ''} ({formatUnits(selUnits)} units{selPL !== 0 ? `, ${selPL >= 0 ? '+' : ''}${formatINR(selPL)}` : ''})
+              Clear
             </button>
           </div>
-        );
-      })()}
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              if (onRedeemMF && expandedFundData) {
+                onRedeemMF({ ...expandedFundData, preSelectedUnits: selectedUnits });
+              }
+            }}
+            style={{ fontWeight: 600, padding: '8px 24px' }}
+          >
+            Redeem {selectedItems.length} Lot{selectedItems.length > 1 ? 's' : ''} ({formatUnits(selectedUnits)} units{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)}` : ''})
+          </button>
+        </div>
+      )}
     </div>
   );
 }
