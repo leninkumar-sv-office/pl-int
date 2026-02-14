@@ -84,7 +84,7 @@ function NavRangeBar({ low, high, current, avg }) {
 }
 
 
-export default function MutualFundTable({ funds, loading, mfDashboard }) {
+export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs }) {
   const [expandedFund, setExpandedFund] = useState(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
@@ -92,6 +92,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard }) {
   const [showColPicker, setShowColPicker] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [heldOnly, setHeldOnly] = useState(true);
+
+  // Helper: look up SIP config for a fund
+  const getSIPForFund = (fund_code) => (sipConfigs || []).find(s => s.fund_code === fund_code);
 
   const isCol = (id) => !hiddenCols.has(id);
 
@@ -270,21 +273,38 @@ export default function MutualFundTable({ funds, loading, mfDashboard }) {
                       onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--bg-hover)'; }}
                       onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}
                     >
-                      {isCol('name') && (
+                      {isCol('name') && (() => {
+                        const sipCfg = getSIPForFund(f.fund_code);
+                        return (
                         <td style={tdStyle}>
-                          <div>
-                            <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '13px' }}>
-                              {isExpanded ? '▾' : '▸'}{' '}
-                              {/* Short name: remove "- Direct Plan Growth" etc */}
-                              {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '')}
-                            </span>
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 1 }}>
-                              {f.num_held_lots} lot{f.num_held_lots !== 1 ? 's' : ''}
-                              {f.num_sold_lots > 0 && <span> • {f.num_sold_lots} redeemed</span>}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: '13px' }}>
+                                {isExpanded ? '▾' : '▸'}{' '}
+                                {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '')}
+                              </span>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 1 }}>
+                                {f.num_held_lots} lot{f.num_held_lots !== 1 ? 's' : ''}
+                                {f.num_sold_lots > 0 && <span> • {f.num_sold_lots} redeemed</span>}
+                                {sipCfg && sipCfg.enabled && (
+                                  <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, background: 'rgba(0,210,106,0.12)', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
+                                    SIP ₹{Number(sipCfg.amount).toLocaleString('en-IN')}/{sipCfg.frequency === 'weekly' ? 'wk' : sipCfg.frequency === 'quarterly' ? 'qtr' : 'mo'}
+                                  </span>
+                                )}
+                              </div>
                             </div>
+                            {f.total_held_units > 0 && onRedeemMF && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onRedeemMF(f); }}
+                                style={{ padding: '2px 8px', fontSize: '11px', fontWeight: 500, background: 'rgba(255,71,87,0.1)', color: 'var(--red)', border: '1px solid rgba(255,71,87,0.2)', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              >
+                                Redeem
+                              </button>
+                            )}
                           </div>
                         </td>
-                      )}
+                        );
+                      })()}
                       {isCol('units') && <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace', fontSize: '12px' }}>{formatUnits(f.total_held_units)}</td>}
                       {isCol('avgNav') && <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(f.avg_nav)}</td>}
                       {isCol('invested') && <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>{formatINR(f.total_invested)}</td>}
@@ -320,6 +340,32 @@ export default function MutualFundTable({ funds, loading, mfDashboard }) {
                     {isExpanded && (
                       <tr>
                         <td colSpan={visColCount} style={{ padding: '12px 16px 16px', background: 'rgba(99,102,241,0.03)', borderBottom: '2px solid var(--border)' }}>
+                          {/* ── Action buttons ──────────── */}
+                          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                            {onBuyMF && (
+                              <button
+                                onClick={() => onBuyMF({ fund_code: f.fund_code, name: f.name, fund_name: f.name })}
+                                className="btn btn-primary"
+                                style={{ padding: '4px 12px', fontSize: '12px' }}
+                              >
+                                + Buy {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '').substring(0, 25)}
+                              </button>
+                            )}
+                            {onConfigSIP && (
+                              <button
+                                onClick={() => onConfigSIP(f)}
+                                style={{
+                                  padding: '4px 12px', fontSize: '12px', fontWeight: 500,
+                                  background: getSIPForFund(f.fund_code) ? 'rgba(0,210,106,0.1)' : 'var(--bg-hover)',
+                                  color: getSIPForFund(f.fund_code) ? 'var(--green)' : 'var(--text-dim)',
+                                  border: `1px solid ${getSIPForFund(f.fund_code) ? 'rgba(0,210,106,0.3)' : 'var(--border)'}`,
+                                  borderRadius: 6, cursor: 'pointer',
+                                }}
+                              >
+                                {getSIPForFund(f.fund_code) ? '⚙ Edit SIP' : '⚙ Setup SIP'}
+                              </button>
+                            )}
+                          </div>
                           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                             {/* ── Held Lots ─────────────── */}
                             {f.held_lots && f.held_lots.length > 0 && (

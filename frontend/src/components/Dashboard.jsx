@@ -5,7 +5,7 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function Dashboard({ summary, loading }) {
+export default function Dashboard({ summary, mfDashboard, loading }) {
   if (loading && !summary) {
     return (
       <div className="summary-grid">
@@ -21,34 +21,49 @@ export default function Dashboard({ summary, loading }) {
 
   if (!summary) return null;
 
+  // Combine stock + MF numbers when MF data is available
+  const hasMF = mfDashboard && mfDashboard.total_invested > 0;
+  const totalInvested = summary.total_invested + (hasMF ? mfDashboard.total_invested : 0);
+  const totalCurrentValue = summary.current_value + (hasMF ? mfDashboard.current_value : 0);
+  const totalUnrealizedPL = summary.unrealized_pl + (hasMF ? mfDashboard.unrealized_pl : 0);
+  const totalUnrealizedPLPct = totalInvested > 0 ? (totalUnrealizedPL / totalInvested) * 100 : 0;
+  const totalRealizedPL = summary.realized_pl + (hasMF ? mfDashboard.realized_pl : 0);
+  const totalHoldings = summary.total_holdings + (hasMF ? mfDashboard.total_funds : 0);
+  const inProfit = summary.stocks_in_profit + (hasMF ? mfDashboard.funds_in_profit : 0);
+  const inLoss = summary.stocks_in_loss + (hasMF ? mfDashboard.funds_in_loss : 0);
+
+  const holdingSub = hasMF
+    ? `${summary.total_holdings} stocks, ${mfDashboard.total_funds} funds`
+    : `${summary.total_holdings} stocks`;
+
   const cards = [
     {
       label: 'Total Invested',
-      value: formatINR(summary.total_invested),
-      sub: `${summary.total_holdings} stocks`,
+      value: formatINR(totalInvested),
+      sub: holdingSub,
       color: 'var(--text)',
     },
     {
       label: 'Current Value',
-      value: formatINR(summary.current_value),
-      sub: summary.current_value >= summary.total_invested ? 'Above cost' : 'Below cost',
-      color: summary.current_value >= summary.total_invested ? 'var(--green)' : 'var(--red)',
+      value: formatINR(totalCurrentValue),
+      sub: totalCurrentValue >= totalInvested ? 'Above cost' : 'Below cost',
+      color: totalCurrentValue >= totalInvested ? 'var(--green)' : 'var(--red)',
     },
     {
       label: 'Unrealized P&L',
-      value: formatINR(summary.unrealized_pl),
-      sub: `${summary.unrealized_pl_pct >= 0 ? '+' : ''}${summary.unrealized_pl_pct.toFixed(2)}%`,
-      color: summary.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)',
+      value: formatINR(totalUnrealizedPL),
+      sub: `${totalUnrealizedPLPct >= 0 ? '+' : ''}${totalUnrealizedPLPct.toFixed(2)}%`,
+      color: totalUnrealizedPL >= 0 ? 'var(--green)' : 'var(--red)',
     },
     {
       label: 'Realized P&L',
-      value: formatINR(summary.realized_pl),
-      sub: summary.realized_pl >= 0 ? 'Net profit from sales' : 'Net loss from sales',
-      color: summary.realized_pl >= 0 ? 'var(--green)' : 'var(--red)',
+      value: formatINR(totalRealizedPL),
+      sub: totalRealizedPL >= 0 ? 'Net profit from sales' : 'Net loss from sales',
+      color: totalRealizedPL >= 0 ? 'var(--green)' : 'var(--red)',
     },
     {
       label: 'Profit / Loss Split',
-      value: `${summary.stocks_in_profit} / ${summary.stocks_in_loss}`,
+      value: `${inProfit} / ${inLoss}`,
       sub: 'In profit / In loss',
       color: 'var(--text)',
     },

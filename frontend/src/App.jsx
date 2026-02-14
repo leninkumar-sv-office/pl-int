@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -13,6 +13,9 @@ import MarketTicker from './components/MarketTicker';
 import DividendModal from './components/DividendModal';
 import ImportPreviewModal from './components/ImportPreviewModal';
 import MutualFundTable from './components/MutualFundTable';
+import AddMFModal from './components/AddMFModal';
+import RedeemMFModal from './components/RedeemMFModal';
+import SIPConfigModal from './components/SIPConfigModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -40,6 +43,10 @@ export default function App() {
   const [importResult, setImportResult] = useState(null);   // persistent banner after import
   const [mfSummary, setMfSummary] = useState([]);           // mutual fund per-fund summaries
   const [mfDashboard, setMfDashboard] = useState(null);     // mutual fund dashboard totals
+  const [addMFModalData, setAddMFModalData] = useState(null); // null=closed, {}=open, {fund_code,...}=prefill
+  const [redeemTarget, setRedeemTarget] = useState(null);     // null=closed, {fund_code, name, ...}=open
+  const [sipTarget, setSipTarget] = useState(null);           // null=closed, {fund_code, name, ...}=SIP config
+  const [sipConfigs, setSipConfigs] = useState([]);           // SIP configuration list
 
   // Read cached data from backend (fast, no external calls)
   // Uses allSettled so one failing endpoint doesn't block the rest
@@ -97,14 +104,16 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load Zerodha status:', err);
     }
-    // Mutual fund data (non-blocking)
+    // Mutual fund data + SIP configs (non-blocking)
     try {
-      const [mfSumResult, mfDashResult] = await Promise.allSettled([
+      const [mfSumResult, mfDashResult, sipResult] = await Promise.allSettled([
         getMFSummary(),
         getMFDashboard(),
+        getSIPConfigs(),
       ]);
       if (mfSumResult.status === 'fulfilled') setMfSummary(mfSumResult.value);
       if (mfDashResult.status === 'fulfilled') setMfDashboard(mfDashResult.value);
+      if (sipResult.status === 'fulfilled') setSipConfigs(sipResult.value);
     } catch (err) {
       console.error('Failed to load MF data:', err);
     }
@@ -364,6 +373,64 @@ export default function App() {
     }
   };
 
+  // ── Mutual Fund handlers ────────────────────────
+  const handleAddMFHolding = async (data) => {
+    try {
+      await addMFHolding(data);
+      toast.success(`Added ${data.units} units of ${data.fund_name}`);
+      setAddMFModalData(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to add MF holding');
+    }
+  };
+
+  const handleRedeemMF = async (data) => {
+    try {
+      const result = await redeemMFUnits(data);
+      const plText = result.realized_pl >= 0
+        ? `Profit: ${formatINR(result.realized_pl)}`
+        : `Loss: ${formatINR(Math.abs(result.realized_pl))}`;
+      toast.success(`Redeemed! ${plText}`);
+      setRedeemTarget(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to redeem MF');
+    }
+  };
+
+  const handleSaveSIP = async (config) => {
+    try {
+      await addSIPConfig(config);
+      toast.success(`SIP configured for ${config.fund_name}`);
+      setSipTarget(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save SIP config');
+    }
+  };
+
+  const handleDeleteSIP = async (fundCode) => {
+    try {
+      await deleteSIPConfig(fundCode);
+      toast.success('SIP removed');
+      setSipTarget(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete SIP');
+    }
+  };
+
+  const handleExecuteSIP = async (fundCode) => {
+    try {
+      const result = await executeSIP(fundCode);
+      toast.success(result.message || 'SIP executed');
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to execute SIP');
+    }
+  };
+
   const handleRefresh = async () => {
     setLoading(true);
     await liveRefresh();
@@ -591,7 +658,7 @@ export default function App() {
 
       {/* Header */}
       <header className="header">
-        <h1><span>Stock</span> Portfolio Dashboard</h1>
+        <h1><span>Portfolio</span> Dashboard</h1>
         <div className="header-actions">
           {/* Zerodha status */}
           {zerodhaStatus && (
@@ -633,31 +700,31 @@ export default function App() {
           <button className="btn btn-ghost" onClick={handleRefresh} disabled={loading}>
             {loading ? '⟳ Loading...' : '⟳ Refresh'}
           </button>
-          <button className="btn btn-primary" onClick={() => setAddModalData({})}>
-            + Add Stock
-          </button>
+          {activeTab === 'mutualfunds' ? (
+            <button className="btn btn-primary" onClick={() => setAddMFModalData({})}>
+              + Buy MF
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={() => setAddModalData({})}>
+              + Add Stock
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Dashboard Summary */}
-      <Dashboard summary={summary} loading={loading} />
+      {/* Dashboard Summary — combined Stocks + MF */}
+      <Dashboard summary={summary} mfDashboard={mfDashboard} loading={loading} />
 
       {/* Tabs */}
       <div className="tabs">
         <button className={`tab ${activeTab === 'stocks' ? 'active' : ''}`} onClick={() => setActiveTab('stocks')}>
           Stocks
         </button>
-        <button className={`tab ${activeTab === 'holdings' ? 'active' : ''}`} onClick={() => setActiveTab('holdings')}>
-          All Lots
+        <button className={`tab ${activeTab === 'mutualfunds' ? 'active' : ''}`} onClick={() => setActiveTab('mutualfunds')}>
+          Mutual Funds
         </button>
         <button className={`tab ${activeTab === 'charts' ? 'active' : ''}`} onClick={() => setActiveTab('charts')}>
           Charts
-        </button>
-        <button className={`tab ${activeTab === 'transactions' ? 'active' : ''}`} onClick={() => setActiveTab('transactions')}>
-          Transactions
-        </button>
-        <button className={`tab ${activeTab === 'mutualfunds' ? 'active' : ''}`} onClick={() => setActiveTab('mutualfunds')}>
-          Mutual Funds
         </button>
       </div>
 
@@ -677,21 +744,8 @@ export default function App() {
         />
       )}
 
-      {activeTab === 'holdings' && (
-        <PortfolioTable
-          portfolio={portfolio}
-          loading={loading}
-          onSell={(holding) => setSellTarget(holding)}
-          onAddStock={() => setAddModalData({})}
-        />
-      )}
-
       {activeTab === 'charts' && (
         <Charts portfolio={portfolio} summary={summary} transactions={transactions} />
-      )}
-
-      {activeTab === 'transactions' && (
-        <TransactionHistory transactions={transactions} />
       )}
 
       {activeTab === 'mutualfunds' && (
@@ -699,6 +753,10 @@ export default function App() {
           funds={mfSummary}
           loading={loading}
           mfDashboard={mfDashboard}
+          onBuyMF={(fundData) => setAddMFModalData(fundData || {})}
+          onRedeemMF={(fund) => setRedeemTarget(fund)}
+          onConfigSIP={(fund) => setSipTarget(fund)}
+          sipConfigs={sipConfigs}
         />
       )}
 
@@ -742,6 +800,34 @@ export default function App() {
           existingSymbols={new Set(stockSummary.map(s => s.symbol))}
           onConfirm={handleConfirmImport}
           onCancel={() => setImportPreview(null)}
+        />
+      )}
+
+      {/* MF Modals */}
+      {addMFModalData !== null && (
+        <AddMFModal
+          initialData={addMFModalData}
+          funds={mfSummary}
+          onAdd={handleAddMFHolding}
+          onClose={() => setAddMFModalData(null)}
+        />
+      )}
+
+      {redeemTarget && (
+        <RedeemMFModal
+          fund={redeemTarget}
+          onRedeem={handleRedeemMF}
+          onClose={() => setRedeemTarget(null)}
+        />
+      )}
+
+      {sipTarget && (
+        <SIPConfigModal
+          fund={sipTarget}
+          existingSIP={sipConfigs.find(s => s.fund_code === sipTarget.fund_code)}
+          onSave={handleSaveSIP}
+          onDelete={handleDeleteSIP}
+          onClose={() => setSipTarget(null)}
         />
       )}
     </div>

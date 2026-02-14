@@ -565,6 +565,204 @@ class MFXlsxPortfolio:
             "funds_in_loss": funds_in_loss,
         }
 
+    # ── Public WRITE API ─────────────────────────────────
+
+    def _create_mf_file(self, fund_code: str, fund_name: str) -> Path:
+        """Create a new xlsx file for a mutual fund."""
+        # Sanitise name for filename
+        safe_name = fund_name.replace("/", "-").replace("\\", "-").replace(":", "-")
+        filepath = self.mf_dir / f"{safe_name}.xlsx"
+        if filepath.exists():
+            return filepath
+
+        wb = openpyxl.Workbook()
+
+        # Trading History sheet
+        ws_th = wb.active
+        ws_th.title = "Trading History"
+        # Row 4 headers (matching existing format)
+        headers = ["DATE", "EXCH", "ACTION", "Units", "NAV", "COST", "REMARKS",
+                    "STT", "ADD CHARGES", "Current Price", "Gain%"]
+        for col, h in enumerate(headers, 1):
+            ws_th.cell(4, col, value=h)
+
+        # Index sheet
+        ws_idx = wb.create_sheet("Index")
+        ws_idx.cell(1, 2, value="Code")
+        ws_idx.cell(1, 3, value=fund_code)
+        ws_idx.cell(2, 2, value="Current Price")
+        ws_idx.cell(2, 3, value=0.0)
+        ws_idx.cell(3, 2, value="52 Week High")
+        ws_idx.cell(3, 3, value=0.0)
+        ws_idx.cell(4, 2, value="52 Week Low")
+        ws_idx.cell(4, 3, value=0.0)
+
+        wb.save(filepath)
+        wb.close()
+
+        # Register in maps
+        self._file_map[fund_code] = filepath
+        self._name_map[fund_code] = fund_name
+        print(f"[MF-XlsxDB] Created new MF file: {filepath.name}")
+        return filepath
+
+    def _find_header_row(self, ws):
+        """Find the header row in a Trading History sheet."""
+        max_row = ws.max_row or 0
+        for r in range(1, min(11, max_row + 1)):
+            vals = [ws.cell(r, c).value for c in range(1, 5)]
+            if "DATE" in vals and "ACTION" in vals:
+                return r
+        return 4  # default
+
+    def add_mf_holding(
+        self,
+        fund_code: str,
+        fund_name: str,
+        units: float,
+        nav: float,
+        buy_date: str,
+        remarks: str = "",
+    ) -> dict:
+        """Add a Buy transaction for a mutual fund.
+
+        If the fund doesn't exist, creates a new xlsx file.
+        Returns a dict with the new holding info.
+        """
+        with self._lock:
+            # Find or create file
+            filepath = self._file_map.get(fund_code)
+            if not filepath or not filepath.exists():
+                filepath = self._create_mf_file(fund_code, fund_name)
+
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+            header_row = self._find_header_row(ws)
+
+            # Insert Buy row at top (below header)
+            insert_at = header_row + 1
+            ws.insert_rows(insert_at)
+
+            # Parse date
+            try:
+                dt_obj = datetime.strptime(buy_date, "%Y-%m-%d")
+            except ValueError:
+                dt_obj = datetime.now()
+
+            cost = round(units * nav, 2)
+
+            ws.cell(insert_at, 1, value=dt_obj)      # A: DATE
+            ws.cell(insert_at, 2, value="NSE")        # B: EXCH
+            ws.cell(insert_at, 3, value="Buy")        # C: ACTION
+            ws.cell(insert_at, 4, value=round(units, 6))  # D: Units
+            ws.cell(insert_at, 5, value=round(nav, 4))    # E: NAV
+            ws.cell(insert_at, 6, value=cost)              # F: COST
+            ws.cell(insert_at, 7, value=remarks or "~")   # G: REMARKS
+
+            wb.save(filepath)
+            wb.close()
+
+            # Invalidate cache to force re-parse
+            self._cache.pop(fund_code, None)
+
+            print(f"[MF-XlsxDB] Added Buy: {units:.4f} units of {fund_name} @ NAV {nav:.4f}")
+
+            return {
+                "fund_code": fund_code,
+                "fund_name": fund_name,
+                "units": round(units, 6),
+                "nav": round(nav, 4),
+                "cost": cost,
+                "buy_date": buy_date,
+                "message": f"Added {units:.4f} units of {fund_name}",
+            }
+
+    def add_mf_sell_transaction(
+        self,
+        fund_code: str,
+        units: float,
+        nav: float,
+        sell_date: str = "",
+        remarks: str = "",
+    ) -> dict:
+        """Record a Sell (redemption) for a mutual fund.
+
+        Inserts a Sell row, uses FIFO matching to compute realized P&L.
+        Returns dict with realized_pl and remaining_units.
+        """
+        with self._lock:
+            filepath = self._file_map.get(fund_code)
+            if not filepath or not filepath.exists():
+                raise ValueError(f"No file found for fund {fund_code}")
+
+            if not sell_date:
+                sell_date = datetime.now().strftime("%Y-%m-%d")
+
+            # First, get current holdings to validate
+            holdings, _, _ = self._get_fund_data(fund_code)
+            total_held = sum(h.units for h in holdings)
+            if units > total_held + 0.0001:
+                raise ValueError(
+                    f"Cannot redeem {units:.4f} units. Only {total_held:.4f} held."
+                )
+
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+            header_row = self._find_header_row(ws)
+
+            # Insert Sell row at top
+            insert_at = header_row + 1
+            ws.insert_rows(insert_at)
+
+            try:
+                dt_obj = datetime.strptime(sell_date, "%Y-%m-%d")
+            except ValueError:
+                dt_obj = datetime.now()
+
+            cost = round(units * nav, 2)
+
+            ws.cell(insert_at, 1, value=dt_obj)           # A: DATE
+            ws.cell(insert_at, 2, value="NSE")             # B: EXCH
+            ws.cell(insert_at, 3, value="Sell")            # C: ACTION
+            ws.cell(insert_at, 4, value=round(units, 6))   # D: Units
+            ws.cell(insert_at, 5, value=round(nav, 4))     # E: NAV
+            ws.cell(insert_at, 6, value=cost)               # F: COST
+            ws.cell(insert_at, 7, value=remarks or "~")    # G: REMARKS
+
+            wb.save(filepath)
+            wb.close()
+
+            # Invalidate cache and re-parse to get FIFO-matched realized P&L
+            self._cache.pop(fund_code, None)
+
+            # Re-read to compute realized P&L via FIFO
+            new_holdings, sold_positions, _ = self._get_fund_data(fund_code)
+            remaining_units = sum(h.units for h in new_holdings)
+
+            # The sell we just inserted — find matching sold positions
+            # that include the sell_date
+            realized_pl = 0.0
+            for sp in sold_positions:
+                if sp.sell_date == sell_date and abs(sp.sell_nav - nav) < 0.01:
+                    realized_pl += sp.realized_pl
+
+            fund_name = self._name_map.get(fund_code, fund_code)
+            print(f"[MF-XlsxDB] Redeemed {units:.4f} units of {fund_name} @ NAV {nav:.4f}, P&L={realized_pl:.2f}")
+
+            return {
+                "message": f"Redeemed {units:.4f} units",
+                "realized_pl": round(realized_pl, 2),
+                "remaining_units": round(remaining_units, 6),
+            }
+
+    def get_fund_nav(self, fund_code: str) -> float:
+        """Get the current NAV for a fund from its Index sheet."""
+        try:
+            _, _, idx_data = self._get_fund_data(fund_code)
+            return idx_data.get("current_nav", 0.0)
+        except Exception:
+            return 0.0
+
 
 # ═══════════════════════════════════════════════════════════
 #  MODULE-LEVEL SINGLETON

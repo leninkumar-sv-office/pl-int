@@ -772,6 +772,61 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         </div>
       </div>
 
+      {/* ── Stock Summary Bar (matches MF dashboard pattern) ── */}
+      {(() => {
+        const heldStocks = stocks.filter(s => s.total_held_qty > 0);
+        const sumInvested = heldStocks.reduce((s, st) => s + (st.total_invested || 0), 0);
+        const sumCurrentVal = heldStocks.reduce((s, st) => s + (st.current_value || 0), 0);
+        const sumUPL = heldStocks.reduce((s, st) => s + (st.unrealized_profit || 0) + (st.unrealized_loss || 0), 0);
+        const uplPct = sumInvested > 0 ? (sumUPL / sumInvested) * 100 : 0;
+        const sumRPL = stocks.reduce((s, st) => s + (st.realized_pl || 0), 0);
+        const sumDiv = stocks.reduce((s, st) => s + (st.total_dividend || 0), 0);
+        return (
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invested</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(sumInvested)}</div>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Value</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(sumCurrentVal)}</div>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized P&L</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: sumUPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {sumUPL >= 0 ? '+' : ''}{formatINR(sumUPL)}
+                <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4 }}>
+                  ({uplPct >= 0 ? '+' : ''}{uplPct.toFixed(2)}%)
+                </span>
+              </div>
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Realized P&L</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: sumRPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {sumRPL >= 0 ? '+' : ''}{formatINR(sumRPL)}
+              </div>
+            </div>
+            {sumDiv > 0 && (
+              <div style={{ flex: '1 1 100px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dividends</div>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>
+                  +{formatINR(sumDiv)}
+                </div>
+              </div>
+            )}
+            <div style={{ flex: '1 1 80px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stocks</div>
+              <div style={{ fontSize: '16px', fontWeight: 600 }}>
+                {totalHeldStocks}
+                <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4, color: 'var(--text-muted)' }}>
+                  ({inProfit}↑ {inLoss}↓)
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Search bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
         <div style={{ position: 'relative', flex: '1' }}>

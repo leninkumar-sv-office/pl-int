@@ -216,3 +216,37 @@ class MFSummaryItem(BaseModel):
     week_52_high: float = 0.0
     week_52_low: float = 0.0
     is_above_avg_nav: bool = False
+
+
+# ── MF Request Models ──────────────────────────────────
+
+class AddMFRequest(BaseModel):
+    """Request to add a mutual fund holding (Buy)."""
+    fund_code: str = Field(default="", description="MUTF_IN:xxx code (empty for new fund)")
+    fund_name: str = Field(..., description="Fund name e.g. 'SBI Small Cap Fund - Direct Growth'")
+    units: float = Field(..., gt=0, description="Fractional units purchased")
+    nav: float = Field(..., gt=0, description="NAV at purchase")
+    buy_date: str = Field(..., description="Purchase date YYYY-MM-DD")
+    remarks: str = ""
+
+
+class RedeemMFRequest(BaseModel):
+    """Request to redeem mutual fund units (Sell)."""
+    fund_code: str = Field(..., description="MUTF_IN:xxx code of the fund")
+    units: float = Field(..., gt=0, description="Units to redeem")
+    nav: float = Field(..., gt=0, description="Redemption NAV")
+    sell_date: str = Field(default="", description="Redemption date YYYY-MM-DD (defaults to today)")
+    remarks: str = ""
+
+
+class SIPConfigRequest(BaseModel):
+    """Request to create or update a SIP configuration."""
+    fund_code: str = Field(..., description="MUTF_IN:xxx code")
+    fund_name: str = Field(..., description="Fund display name")
+    amount: float = Field(..., gt=0, description="SIP amount in rupees")
+    frequency: str = Field(default="monthly", description="weekly, monthly, or quarterly")
+    sip_date: int = Field(default=1, ge=1, le=28, description="Day of month (1-28) for monthly/quarterly")
+    start_date: str = Field(default="", description="SIP start date YYYY-MM-DD")
+    end_date: Optional[str] = Field(default=None, description="SIP end date (null = perpetual)")
+    enabled: bool = True
+    notes: str = ""

@@ -150,6 +150,43 @@ export async function getMFDashboard() {
   return data;
 }
 
+export async function addMFHolding(payload) {
+  const { data } = await api.post('/mutual-funds/buy', payload);
+  return data;
+}
+
+export async function redeemMFUnits(payload) {
+  const { data } = await api.post('/mutual-funds/redeem', payload);
+  return data;
+}
+
+// ── SIP Configuration ────────────────────────────────
+
+export async function getSIPConfigs() {
+  const { data } = await api.get('/mutual-funds/sip');
+  return data;
+}
+
+export async function addSIPConfig(payload) {
+  const { data } = await api.post('/mutual-funds/sip', payload);
+  return data;
+}
+
+export async function deleteSIPConfig(fundCode) {
+  const { data } = await api.delete(`/mutual-funds/sip/${encodeURIComponent(fundCode)}`);
+  return data;
+}
+
+export async function getPendingSIPs() {
+  const { data } = await api.get('/mutual-funds/sip/pending');
+  return data;
+}
+
+export async function executeSIP(fundCode) {
+  const { data } = await api.post(`/mutual-funds/sip/execute/${encodeURIComponent(fundCode)}`);
+  return data;
+}
+
 // ── Zerodha ────────────────────────────────────────
 
 export async function getZerodhaStatus() {

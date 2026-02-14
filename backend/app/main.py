@@ -18,6 +18,7 @@ from .models import (
     AddStockRequest, SellStockRequest, AddDividendRequest, ManualPriceRequest,
     Holding, SoldPosition, StockLiveData, Transaction,
     PortfolioSummary, HoldingWithLive, StockSummaryItem,
+    AddMFRequest, RedeemMFRequest, SIPConfigRequest,
 )
 from .xlsx_database import xlsx_db as db
 from .mf_xlsx_database import mf_db
@@ -1573,6 +1574,131 @@ def get_mf_summary():
 def get_mf_dashboard():
     """Get aggregated MF portfolio summary for the dashboard."""
     return mf_db.get_dashboard_summary()
+
+
+@app.post("/api/mutual-funds/buy")
+def add_mf_holding_endpoint(req: AddMFRequest):
+    """Add a mutual fund holding (Buy transaction)."""
+    try:
+        result = mf_db.add_mf_holding(
+            fund_code=req.fund_code,
+            fund_name=req.fund_name,
+            units=req.units,
+            nav=req.nav,
+            buy_date=req.buy_date,
+            remarks=req.remarks,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mutual-funds/redeem")
+def redeem_mf_units_endpoint(req: RedeemMFRequest):
+    """Redeem mutual fund units (Sell transaction)."""
+    sell_date = req.sell_date or datetime.now().strftime("%Y-%m-%d")
+    try:
+        result = mf_db.add_mf_sell_transaction(
+            fund_code=req.fund_code,
+            units=req.units,
+            nav=req.nav,
+            sell_date=sell_date,
+            remarks=req.remarks,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  SIP CONFIGURATION
+# ══════════════════════════════════════════════════════════
+
+from .sip_manager import sip_mgr
+
+
+@app.get("/api/mutual-funds/sip")
+def get_sip_configs():
+    """Get all SIP configurations."""
+    return sip_mgr.load_configs()
+
+
+@app.post("/api/mutual-funds/sip")
+def add_sip_config(req: SIPConfigRequest):
+    """Add or update a SIP configuration."""
+    try:
+        result = sip_mgr.add_sip(
+            fund_code=req.fund_code,
+            fund_name=req.fund_name,
+            amount=req.amount,
+            frequency=req.frequency,
+            sip_date=req.sip_date,
+            start_date=req.start_date,
+            end_date=req.end_date,
+            enabled=req.enabled,
+            notes=req.notes,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/mutual-funds/sip/{fund_code:path}")
+def delete_sip_config_endpoint(fund_code: str):
+    """Delete a SIP configuration."""
+    try:
+        sip_mgr.delete_sip(fund_code)
+        return {"message": f"SIP for {fund_code} deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/mutual-funds/sip/pending")
+def get_pending_sips():
+    """Get SIPs due for execution today."""
+    return sip_mgr.get_pending_sips()
+
+
+@app.post("/api/mutual-funds/sip/execute/{fund_code:path}")
+def execute_sip_endpoint(fund_code: str):
+    """Execute a pending SIP — creates a Buy entry using current NAV."""
+    configs = sip_mgr.load_configs()
+    config = next((c for c in configs if c["fund_code"] == fund_code), None)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"No SIP config for {fund_code}")
+    if not config.get("enabled", True):
+        raise HTTPException(status_code=400, detail="SIP is disabled")
+
+    # Get current NAV from the fund's Index sheet
+    current_nav = mf_db.get_fund_nav(fund_code)
+    if current_nav <= 0:
+        raise HTTPException(status_code=400, detail="Current NAV unavailable. Update the fund's xlsx first.")
+
+    amount = config["amount"]
+    units = round(amount / current_nav, 6)
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    try:
+        result = mf_db.add_mf_holding(
+            fund_code=fund_code,
+            fund_name=config["fund_name"],
+            units=units,
+            nav=current_nav,
+            buy_date=today,
+            remarks=f"SIP: ₹{amount:.0f} {config['frequency']}",
+        )
+        sip_mgr.mark_processed(fund_code, today)
+        return {
+            "message": f"SIP executed: {units:.4f} units @ ₹{current_nav:.4f}",
+            "units": units,
+            "nav": current_nav,
+            "amount": amount,
+            "next_sip_date": sip_mgr.load_configs()
+                              and next((c["next_sip_date"] for c in sip_mgr.load_configs()
+                                       if c["fund_code"] == fund_code), ""),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ══════════════════════════════════════════════════════════
