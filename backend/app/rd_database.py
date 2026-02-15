@@ -476,42 +476,33 @@ def add(data: dict) -> dict:
     cumulative = max((i.get("cumulative_interest", 0) for i in installments), default=0)
     maturity_amount = round(total_all_deposits + cumulative, 2)
 
-    # Create xlsx file
-    try:
-        _create_rd_xlsx(
-            name=name,
-            bank=bank,
-            monthly_amount=monthly,
-            rate_pct=rate,
-            tenure_months=tenure,
-            start_date=start_date,
-            frequency=freq,
-        )
-    except Exception as e:
-        print(f"[RD] Warning: Could not create xlsx for {name}: {e}")
+    # Create xlsx file (this is the only storage — parser picks it up on next load)
+    _create_rd_xlsx(
+        name=name,
+        bank=bank,
+        monthly_amount=monthly,
+        rate_pct=rate,
+        tenure_months=tenure,
+        start_date=start_date,
+        frequency=freq,
+    )
 
-    # Save to JSON
-    with _lock:
-        items = _load_json()
-        rd = {
-            "id": _gen_rd_id(name),
-            "name": name,
-            "account_number": account_number,
-            "bank": bank,
-            "monthly_amount": monthly,
-            "interest_rate": rate,
-            "compounding_frequency": freq,
-            "tenure_months": tenure,
-            "start_date": start_date,
-            "maturity_date": maturity_date,
-            "maturity_amount": maturity_amount,
-            "total_deposited": 0,
-            "status": data.get("status", "Active"),
-            "remarks": data.get("remarks", ""),
-        }
-        items.append(rd)
-        _save_json(items)
-        return rd
+    return {
+        "id": _gen_rd_id(name),
+        "name": name,
+        "account_number": account_number,
+        "bank": bank,
+        "monthly_amount": monthly,
+        "interest_rate": rate,
+        "compounding_frequency": freq,
+        "tenure_months": tenure,
+        "start_date": start_date,
+        "maturity_date": maturity_date,
+        "maturity_amount": maturity_amount,
+        "total_deposited": 0,
+        "status": data.get("status", "Active"),
+        "remarks": data.get("remarks", ""),
+    }
 
 
 def update(rd_id: str, data: dict) -> dict:
@@ -547,7 +538,17 @@ def update(rd_id: str, data: dict) -> dict:
 
 
 def delete(rd_id: str) -> dict:
-    """Delete a manual RD."""
+    """Delete an RD — removes xlsx file and/or JSON entry."""
+    # Try xlsx first
+    if RD_XLSX_DIR.exists():
+        for f in RD_XLSX_DIR.glob("*.xlsx"):
+            if f.name.startswith("~$"):
+                continue
+            if _gen_rd_id(f.stem) == rd_id:
+                f.unlink()
+                return {"message": f"RD {rd_id} deleted (xlsx)", "item": {"id": rd_id, "name": f.stem}}
+
+    # Try JSON
     with _lock:
         items = _load_json()
         idx = next((i for i, x in enumerate(items) if x["id"] == rd_id), None)

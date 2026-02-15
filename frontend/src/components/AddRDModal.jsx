@@ -5,6 +5,13 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const COMPOUNDING_OPTIONS = [
+  { value: 1,  label: 'Monthly' },
+  { value: 4,  label: 'Quarterly' },
+  { value: 6,  label: 'Half-Yearly' },
+  { value: 12, label: 'Annually' },
+];
+
 export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
   // mode: 'add' | 'edit' | 'installment'
   const isEdit = mode === 'edit';
@@ -19,6 +26,7 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
     monthly_amount: initialData?.monthly_amount || '',
     interest_rate: initialData?.interest_rate || '',
     tenure_months: initialData?.tenure_months || '',
+    compounding_frequency: initialData?.compounding_frequency || 4,
     start_date: initialData?.start_date || new Date().toISOString().split('T')[0],
     maturity_date: initialData?.maturity_date || '',
     status: initialData?.status || 'Active',
@@ -31,24 +39,28 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // Auto-calculate maturity preview for RD
+  // Auto-calculate maturity preview using the actual compound interest formula
   const maturityCalc = useMemo(() => {
     if (isInstallment) return null;
-    const m = parseFloat(form.monthly_amount) || 0;
+    const sip = parseFloat(form.monthly_amount) || 0;
     const r = parseFloat(form.interest_rate) || 0;
     const t = parseInt(form.tenure_months) || 0;
-    if (m <= 0 || r <= 0 || t <= 0) return null;
-    const n = 4;
-    const rate = r / (100 * n);
-    let total = 0;
-    for (let month = 0; month < t; month++) {
-      const remaining = t - month;
-      const quarters = remaining / 3;
-      total += m * Math.pow(1 + rate, quarters);
+    const freq = parseInt(form.compounding_frequency) || 4;
+    if (sip <= 0 || r <= 0 || t <= 0) return null;
+
+    const rateDec = r / 100;
+    let cumulativeInterest = 0;
+    for (let m = 1; m <= t; m++) {
+      if (freq > 0 && m % freq === 0) {
+        const interest = (sip * m + cumulativeInterest) * rateDec * freq / 12;
+        cumulativeInterest += interest;
+      }
     }
-    const totalDeposited = m * t;
-    return { maturity: Math.round(total * 100) / 100, totalDeposited, interest: Math.round((total - totalDeposited) * 100) / 100 };
-  }, [form.monthly_amount, form.interest_rate, form.tenure_months, isInstallment]);
+    const totalDeposited = sip * t;
+    const maturity = Math.round((totalDeposited + cumulativeInterest) * 100) / 100;
+    const interest = Math.round(cumulativeInterest * 100) / 100;
+    return { maturity, totalDeposited, interest };
+  }, [form.monthly_amount, form.interest_rate, form.tenure_months, form.compounding_frequency, isInstallment]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,6 +80,7 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
         monthly_amount: parseFloat(form.monthly_amount),
         interest_rate: parseFloat(form.interest_rate),
         tenure_months: parseInt(form.tenure_months),
+        compounding_frequency: parseInt(form.compounding_frequency),
       };
       if (isEdit) payload.id = initialData.id;
       await onAdd(payload);
@@ -90,7 +103,7 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
                 <input name="date" type="date" value={form.date} onChange={handleChange} required />
               </div>
               <div className="form-group">
-                <label>Amount (₹) *</label>
+                <label>Amount ({'\u20B9'}) *</label>
                 <input name="amount" type="number" step="0.01" min="1" value={form.amount} onChange={handleChange} required />
               </div>
             </div>
@@ -110,6 +123,8 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
     );
   }
 
+  const selectedFreqLabel = COMPOUNDING_OPTIONS.find(o => o.value === parseInt(form.compounding_frequency))?.label || 'Quarterly';
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -122,7 +137,7 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Monthly Amount (₹) *</label>
+              <label>Monthly Amount ({'\u20B9'}) *</label>
               <input name="monthly_amount" type="number" step="0.01" min="1" value={form.monthly_amount} onChange={handleChange} placeholder="Monthly installment" required />
             </div>
             <div className="form-group">
@@ -137,17 +152,31 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
               <input name="tenure_months" type="number" min="1" max="120" value={form.tenure_months} onChange={handleChange} placeholder="e.g. 12, 24, 60" required />
             </div>
             <div className="form-group">
-              <label>Start Date *</label>
-              <input name="start_date" type="date" value={form.start_date} onChange={handleChange} required />
+              <label>Compounding Frequency *</label>
+              <select name="compounding_frequency" value={form.compounding_frequency} onChange={handleChange}>
+                {COMPOUNDING_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Interest compounds {selectedFreqLabel.toLowerCase()}
+              </span>
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group">
+              <label>Start Date *</label>
+              <input name="start_date" type="date" value={form.start_date} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
               <label>Maturity Date</label>
               <input name="maturity_date" type="date" value={form.maturity_date} onChange={handleChange} />
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Leave empty to auto-calculate</span>
             </div>
+          </div>
+
+          <div className="form-row">
             <div className="form-group">
               <label>Status</label>
               <select name="status" value={form.status} onChange={handleChange}>
@@ -156,11 +185,10 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
                 <option value="Closed">Closed</option>
               </select>
             </div>
-          </div>
-
-          <div className="form-group">
-            <label>Remarks</label>
-            <input name="remarks" value={form.remarks} onChange={handleChange} placeholder="Optional notes" />
+            <div className="form-group">
+              <label>Remarks</label>
+              <input name="remarks" value={form.remarks} onChange={handleChange} placeholder="Optional notes" />
+            </div>
           </div>
 
           {/* Maturity Preview */}
@@ -169,18 +197,21 @@ export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
               background: 'var(--bg-input)', borderRadius: '8px', padding: '12px 16px',
               textAlign: 'center', marginTop: '8px',
             }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                Projection: {formatINR(form.monthly_amount)}/month for {form.tenure_months} months at {form.interest_rate}% ({selectedFreqLabel} compounding)
+              </div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '32px' }}>
                 <div>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '4px' }}>Total Deposits</div>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>{formatINR(maturityCalc.totalDeposited)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '4px' }}>Maturity Amount</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>{formatINR(maturityCalc.maturity)}</div>
-                </div>
-                <div>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '4px' }}>Interest</div>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--green)' }}>{formatINR(maturityCalc.interest)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '4px' }}>Maturity Amount</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--green)' }}>{formatINR(maturityCalc.maturity)}</div>
                 </div>
               </div>
             </div>

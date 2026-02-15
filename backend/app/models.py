@@ -331,6 +331,7 @@ class AddRDRequest(BaseModel):
     monthly_amount: float = Field(..., gt=0, description="Monthly installment amount")
     interest_rate: float = Field(..., gt=0, description="Annual interest rate (%)")
     tenure_months: int = Field(..., gt=0, description="Tenure in months")
+    compounding_frequency: int = Field(default=4, description="Compounding frequency: 1=Monthly, 4=Quarterly, 6=Half-Yearly, 12=Annually")
     start_date: str = Field(..., description="Start date YYYY-MM-DD")
     maturity_date: str = Field(default="", description="Maturity date YYYY-MM-DD (auto-calculated if empty)")
     status: str = Field(default="Active", description="Active/Matured/Closed")

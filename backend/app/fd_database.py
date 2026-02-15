@@ -450,44 +450,35 @@ def add(data: dict) -> dict:
     maturity_date = data.get("maturity_date") or _calc_maturity_date(start_date, tenure_months)
     name = data.get("name", f"{bank} {fd_type}")
 
-    # Create xlsx file
-    try:
-        _create_fd_xlsx(
-            name=name,
-            bank=bank,
-            principal=principal,
-            rate_pct=rate,
-            tenure_months=tenure_months,
-            start_date=start_date,
-            interest_payout=interest_payout,
-            fd_type=fd_type,
-        )
-    except Exception as e:
-        print(f"[FD] Warning: Could not create xlsx for {name}: {e}")
+    # Create xlsx file (this is the only storage — parser picks it up on next load)
+    _create_fd_xlsx(
+        name=name,
+        bank=bank,
+        principal=principal,
+        rate_pct=rate,
+        tenure_months=tenure_months,
+        start_date=start_date,
+        interest_payout=interest_payout,
+        fd_type=fd_type,
+    )
 
-    # Also save to JSON for metadata
-    with _lock:
-        items = _load_json()
-        fd = {
-            "id": _gen_fd_id(name),
-            "name": name,
-            "bank": bank,
-            "type": fd_type,
-            "principal": principal,
-            "interest_rate": rate,
-            "interest_payout": interest_payout,
-            "tenure_months": tenure_months,
-            "start_date": start_date,
-            "maturity_date": maturity_date,
-            "maturity_amount": calcs["maturity_amount"],
-            "interest_earned": calcs["interest_earned"],
-            "tds": data.get("tds", 0),
-            "status": data.get("status", "Active"),
-            "remarks": data.get("remarks", ""),
-        }
-        items.append(fd)
-        _save_json(items)
-        return fd
+    return {
+        "id": _gen_fd_id(name),
+        "name": name,
+        "bank": bank,
+        "type": fd_type,
+        "principal": principal,
+        "interest_rate": rate,
+        "interest_payout": interest_payout,
+        "tenure_months": tenure_months,
+        "start_date": start_date,
+        "maturity_date": maturity_date,
+        "maturity_amount": calcs["maturity_amount"],
+        "interest_earned": calcs["interest_earned"],
+        "tds": data.get("tds", 0),
+        "status": data.get("status", "Active"),
+        "remarks": data.get("remarks", ""),
+    }
 
 
 def update(fd_id: str, data: dict) -> dict:
@@ -518,7 +509,15 @@ def update(fd_id: str, data: dict) -> dict:
 
 
 def delete(fd_id: str) -> dict:
-    """Delete a manual FD."""
+    """Delete an FD — removes xlsx file and/or JSON entry."""
+    # Try xlsx first
+    if FD_XLSX_DIR.exists():
+        for f in FD_XLSX_DIR.glob("*.xlsx"):
+            if _gen_fd_id(f.stem) == fd_id:
+                f.unlink()
+                return {"message": f"FD {fd_id} deleted (xlsx)", "item": {"id": fd_id, "name": f.stem}}
+
+    # Try JSON
     with _lock:
         items = _load_json()
         idx = next((i for i, x in enumerate(items) if x["id"] == fd_id), None)

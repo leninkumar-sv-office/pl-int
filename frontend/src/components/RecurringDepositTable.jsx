@@ -44,7 +44,7 @@ function loadVisibleCols() {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
   } catch (_) {}
-  const DEFAULT_HIDDEN = ['compounding'];
+  const DEFAULT_HIDDEN = [];
   return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
 
