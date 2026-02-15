@@ -250,3 +250,197 @@ class SIPConfigRequest(BaseModel):
     end_date: Optional[str] = Field(default=None, description="SIP end date (null = perpetual)")
     enabled: bool = True
     notes: str = ""
+
+
+# ═══════════════════════════════════════════════════════════
+#  FIXED DEPOSIT MODELS
+# ═══════════════════════════════════════════════════════════
+
+class FDItem(BaseModel):
+    """A single Fixed Deposit."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    bank: str
+    principal: float
+    interest_rate: float
+    tenure_months: int
+    start_date: str
+    maturity_date: str
+    maturity_amount: float = 0.0
+    interest_earned: float = 0.0
+    tds: float = 0.0
+    status: str = "Active"   # Active / Matured / Premature / Closed
+    remarks: str = ""
+
+
+class AddFDRequest(BaseModel):
+    """Request to add a Fixed Deposit."""
+    bank: str = Field(..., description="Bank or institution name")
+    principal: float = Field(..., gt=0, description="Deposit amount")
+    interest_rate: float = Field(..., gt=0, description="Annual interest rate (%)")
+    tenure_months: int = Field(..., gt=0, description="Tenure in months")
+    start_date: str = Field(..., description="Start date YYYY-MM-DD")
+    maturity_date: str = Field(default="", description="Maturity date YYYY-MM-DD (auto-calculated if empty)")
+    tds: float = Field(default=0.0, ge=0, description="TDS deducted")
+    status: str = Field(default="Active", description="Active/Matured/Premature/Closed")
+    remarks: str = ""
+
+
+class UpdateFDRequest(BaseModel):
+    """Request to update a Fixed Deposit."""
+    bank: Optional[str] = None
+    principal: Optional[float] = None
+    interest_rate: Optional[float] = None
+    tenure_months: Optional[int] = None
+    start_date: Optional[str] = None
+    maturity_date: Optional[str] = None
+    tds: Optional[float] = None
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+# ═══════════════════════════════════════════════════════════
+#  RECURRING DEPOSIT MODELS
+# ═══════════════════════════════════════════════════════════
+
+class RDInstallment(BaseModel):
+    """A single RD installment payment."""
+    date: str
+    amount: float
+    remarks: str = ""
+
+
+class RDItem(BaseModel):
+    """A single Recurring Deposit."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    bank: str
+    monthly_amount: float
+    interest_rate: float
+    tenure_months: int
+    start_date: str
+    maturity_date: str
+    maturity_amount: float = 0.0
+    total_deposited: float = 0.0
+    status: str = "Active"   # Active / Matured / Closed
+    remarks: str = ""
+    installments: list = Field(default_factory=list)  # List[RDInstallment]
+
+
+class AddRDRequest(BaseModel):
+    """Request to add a Recurring Deposit."""
+    bank: str = Field(..., description="Bank or institution name")
+    monthly_amount: float = Field(..., gt=0, description="Monthly installment amount")
+    interest_rate: float = Field(..., gt=0, description="Annual interest rate (%)")
+    tenure_months: int = Field(..., gt=0, description="Tenure in months")
+    start_date: str = Field(..., description="Start date YYYY-MM-DD")
+    maturity_date: str = Field(default="", description="Maturity date YYYY-MM-DD (auto-calculated if empty)")
+    status: str = Field(default="Active", description="Active/Matured/Closed")
+    remarks: str = ""
+
+
+class UpdateRDRequest(BaseModel):
+    """Request to update a Recurring Deposit."""
+    bank: Optional[str] = None
+    monthly_amount: Optional[float] = None
+    interest_rate: Optional[float] = None
+    tenure_months: Optional[int] = None
+    start_date: Optional[str] = None
+    maturity_date: Optional[str] = None
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class AddRDInstallmentRequest(BaseModel):
+    """Request to add an RD installment."""
+    date: str = Field(..., description="Installment date YYYY-MM-DD")
+    amount: float = Field(..., gt=0, description="Installment amount")
+    remarks: str = ""
+
+
+# ═══════════════════════════════════════════════════════════
+#  INSURANCE POLICY MODELS
+# ═══════════════════════════════════════════════════════════
+
+class InsurancePolicy(BaseModel):
+    """A single Insurance Policy."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    policy_name: str
+    provider: str
+    type: str = "Health"     # Health / Car / Bike / Life / Other
+    policy_number: str = ""
+    premium: float = 0.0
+    coverage_amount: float = 0.0
+    start_date: str = ""
+    expiry_date: str = ""
+    payment_frequency: str = "Annual"  # Monthly / Quarterly / Annual
+    status: str = "Active"   # Active / Expired / Cancelled
+    remarks: str = ""
+
+
+class AddInsuranceRequest(BaseModel):
+    """Request to add an Insurance Policy."""
+    policy_name: str = Field(..., description="Policy name")
+    provider: str = Field(..., description="Insurance provider/company")
+    type: str = Field(default="Health", description="Health/Car/Bike/Life/Other")
+    policy_number: str = Field(default="", description="Policy number")
+    premium: float = Field(..., gt=0, description="Premium amount")
+    coverage_amount: float = Field(default=0.0, ge=0, description="Sum assured / coverage")
+    start_date: str = Field(..., description="Policy start date YYYY-MM-DD")
+    expiry_date: str = Field(..., description="Policy expiry date YYYY-MM-DD")
+    payment_frequency: str = Field(default="Annual", description="Monthly/Quarterly/Annual")
+    status: str = Field(default="Active", description="Active/Expired/Cancelled")
+    remarks: str = ""
+
+
+class UpdateInsuranceRequest(BaseModel):
+    """Request to update an Insurance Policy."""
+    policy_name: Optional[str] = None
+    provider: Optional[str] = None
+    type: Optional[str] = None
+    policy_number: Optional[str] = None
+    premium: Optional[float] = None
+    coverage_amount: Optional[float] = None
+    start_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    payment_frequency: Optional[str] = None
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+# ═══════════════════════════════════════════════════════════
+#  PPF (PUBLIC PROVIDENT FUND) MODELS
+# ═══════════════════════════════════════════════════════════
+
+class PPFContribution(BaseModel):
+    """A single PPF contribution."""
+    date: str
+    amount: float
+    remarks: str = ""
+
+
+class AddPPFRequest(BaseModel):
+    """Request to add a PPF account."""
+    account_name: str = Field(default="PPF Account", description="Account display name")
+    bank: str = Field(..., description="Bank or Post Office")
+    account_number: str = Field(default="", description="PPF account number")
+    interest_rate: float = Field(default=7.1, description="Annual interest rate (%)")
+    start_date: str = Field(..., description="Account opening date YYYY-MM-DD")
+    tenure_years: int = Field(default=15, description="Lock-in period in years")
+    remarks: str = ""
+
+
+class UpdatePPFRequest(BaseModel):
+    """Request to update a PPF account."""
+    account_name: Optional[str] = None
+    bank: Optional[str] = None
+    account_number: Optional[str] = None
+    interest_rate: Optional[float] = None
+    start_date: Optional[str] = None
+    tenure_years: Optional[int] = None
+    remarks: Optional[str] = None
+
+
+class AddPPFContributionRequest(BaseModel):
+    """Request to add a PPF contribution."""
+    date: str = Field(..., description="Contribution date YYYY-MM-DD")
+    amount: float = Field(..., gt=0, description="Contribution amount")
+    remarks: str = ""

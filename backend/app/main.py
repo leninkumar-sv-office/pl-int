@@ -19,6 +19,10 @@ from .models import (
     Holding, SoldPosition, StockLiveData, Transaction,
     PortfolioSummary, HoldingWithLive, StockSummaryItem,
     AddMFRequest, RedeemMFRequest, SIPConfigRequest,
+    AddFDRequest, UpdateFDRequest,
+    AddRDRequest, UpdateRDRequest, AddRDInstallmentRequest,
+    AddInsuranceRequest, UpdateInsuranceRequest,
+    AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest,
 )
 from .xlsx_database import xlsx_db as db
 from .mf_xlsx_database import mf_db
@@ -1697,6 +1701,220 @@ def execute_sip_endpoint(fund_code: str):
                               and next((c["next_sip_date"] for c in sip_mgr.load_configs()
                                        if c["fund_code"] == fund_code), ""),
         }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  FIXED DEPOSITS
+# ══════════════════════════════════════════════════════════
+
+from .fd_database import get_all as fd_get_all, get_dashboard as fd_get_dashboard, add as fd_add, update as fd_update, delete as fd_delete
+
+
+@app.get("/api/fixed-deposits/summary")
+def get_fd_summary():
+    """List all Fixed Deposits."""
+    return fd_get_all()
+
+
+@app.get("/api/fixed-deposits/dashboard")
+def get_fd_dashboard():
+    """Aggregate FD totals for dashboard."""
+    return fd_get_dashboard()
+
+
+@app.post("/api/fixed-deposits/add")
+def add_fd_endpoint(req: AddFDRequest):
+    """Add a new Fixed Deposit."""
+    try:
+        return fd_add(req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/fixed-deposits/{fd_id}")
+def update_fd_endpoint(fd_id: str, req: UpdateFDRequest):
+    """Update an existing Fixed Deposit."""
+    try:
+        return fd_update(fd_id, req.dict(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/fixed-deposits/{fd_id}")
+def delete_fd_endpoint(fd_id: str):
+    """Delete a Fixed Deposit."""
+    try:
+        return fd_delete(fd_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  RECURRING DEPOSITS
+# ══════════════════════════════════════════════════════════
+
+from .rd_database import get_all as rd_get_all, get_dashboard as rd_get_dashboard, add as rd_add, update as rd_update, delete as rd_delete, add_installment as rd_add_installment
+
+
+@app.get("/api/recurring-deposits/summary")
+def get_rd_summary():
+    """List all Recurring Deposits."""
+    return rd_get_all()
+
+
+@app.get("/api/recurring-deposits/dashboard")
+def get_rd_dashboard():
+    """Aggregate RD totals for dashboard."""
+    return rd_get_dashboard()
+
+
+@app.post("/api/recurring-deposits/add")
+def add_rd_endpoint(req: AddRDRequest):
+    """Add a new Recurring Deposit."""
+    try:
+        return rd_add(req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/recurring-deposits/{rd_id}")
+def update_rd_endpoint(rd_id: str, req: UpdateRDRequest):
+    """Update an existing Recurring Deposit."""
+    try:
+        return rd_update(rd_id, req.dict(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/recurring-deposits/{rd_id}")
+def delete_rd_endpoint(rd_id: str):
+    """Delete a Recurring Deposit."""
+    try:
+        return rd_delete(rd_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/recurring-deposits/{rd_id}/installment")
+def add_rd_installment_endpoint(rd_id: str, req: AddRDInstallmentRequest):
+    """Add an installment to a Recurring Deposit."""
+    try:
+        return rd_add_installment(rd_id, req.dict())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  INSURANCE POLICIES
+# ══════════════════════════════════════════════════════════
+
+from .insurance_database import get_all as ins_get_all, get_dashboard as ins_get_dashboard, add as ins_add, update as ins_update, delete as ins_delete
+
+
+@app.get("/api/insurance/summary")
+def get_insurance_summary():
+    """List all Insurance Policies."""
+    return ins_get_all()
+
+
+@app.get("/api/insurance/dashboard")
+def get_insurance_dashboard():
+    """Aggregate Insurance totals for dashboard."""
+    return ins_get_dashboard()
+
+
+@app.post("/api/insurance/add")
+def add_insurance_endpoint(req: AddInsuranceRequest):
+    """Add a new Insurance Policy."""
+    try:
+        return ins_add(req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/insurance/{policy_id}")
+def update_insurance_endpoint(policy_id: str, req: UpdateInsuranceRequest):
+    """Update an existing Insurance Policy."""
+    try:
+        return ins_update(policy_id, req.dict(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/insurance/{policy_id}")
+def delete_insurance_endpoint(policy_id: str):
+    """Delete an Insurance Policy."""
+    try:
+        return ins_delete(policy_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  PPF (PUBLIC PROVIDENT FUND)
+# ══════════════════════════════════════════════════════════
+
+from .ppf_database import get_all as ppf_get_all, get_dashboard as ppf_get_dashboard, add as ppf_add, update as ppf_update, delete as ppf_delete, add_contribution as ppf_add_contribution
+
+
+@app.get("/api/ppf/summary")
+def get_ppf_summary():
+    """List all PPF accounts."""
+    return ppf_get_all()
+
+
+@app.get("/api/ppf/dashboard")
+def get_ppf_dashboard():
+    """Aggregate PPF totals for dashboard."""
+    return ppf_get_dashboard()
+
+
+@app.post("/api/ppf/add")
+def add_ppf_endpoint(req: AddPPFRequest):
+    """Add a new PPF account."""
+    try:
+        return ppf_add(req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/ppf/{ppf_id}")
+def update_ppf_endpoint(ppf_id: str, req: UpdatePPFRequest):
+    """Update an existing PPF account."""
+    try:
+        return ppf_update(ppf_id, req.dict(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/ppf/{ppf_id}")
+def delete_ppf_endpoint(ppf_id: str):
+    """Delete a PPF account."""
+    try:
+        return ppf_delete(ppf_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/ppf/{ppf_id}/contribution")
+def add_ppf_contribution_endpoint(ppf_id: str, req: AddPPFContributionRequest):
+    """Add a contribution to a PPF account."""
+    try:
+        return ppf_add_contribution(ppf_id, req.dict())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

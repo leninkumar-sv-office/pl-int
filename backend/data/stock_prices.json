@@ -1,7 +1,7 @@
 {
   "PIIND.NSE": {
     "price": 3150.6,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4330,
     "week_52_low": 2951.1,
     "day_change": -71.7,
@@ -81,7 +81,7 @@
   },
   "OIL.NSE": {
     "price": 455.25,
-    "name": "Oil India Ltd",
+    "name": "OIL",
     "week_52_high": 524,
     "week_52_low": 325,
     "day_change": -19.6,
@@ -581,7 +581,7 @@
   },
   "PIIND.BSE": {
     "price": 3152.35,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4329,
     "week_52_low": 2952.05,
     "day_change": -71.85,
@@ -1121,7 +1121,7 @@
   },
   "SILVERBEES.NSE": {
     "price": 232.58,
-    "name": "Nippon Silver",
+    "name": "SILVERBEES",
     "week_52_high": 360,
     "week_52_low": 77.55,
     "day_change": -12.81,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -16,6 +16,14 @@ import MutualFundTable from './components/MutualFundTable';
 import AddMFModal from './components/AddMFModal';
 import RedeemMFModal from './components/RedeemMFModal';
 import SIPConfigModal from './components/SIPConfigModal';
+import FixedDepositTable from './components/FixedDepositTable';
+import AddFDModal from './components/AddFDModal';
+import RecurringDepositTable from './components/RecurringDepositTable';
+import AddRDModal from './components/AddRDModal';
+import InsuranceTable from './components/InsuranceTable';
+import AddInsuranceModal from './components/AddInsuranceModal';
+import PPFTable from './components/PPFTable';
+import AddPPFModal from './components/AddPPFModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -47,6 +55,24 @@ export default function App() {
   const [redeemTarget, setRedeemTarget] = useState(null);     // null=closed, {fund_code, name, ...}=open
   const [sipTarget, setSipTarget] = useState(null);           // null=closed, {fund_code, name, ...}=SIP config
   const [sipConfigs, setSipConfigs] = useState([]);           // SIP configuration list
+
+  // FD / RD / Insurance states
+  const [fdSummary, setFdSummary] = useState([]);
+  const [fdDashboard, setFdDashboard] = useState(null);
+  const [addFDModalData, setAddFDModalData] = useState(null);     // null=closed, {}=add, {id,...}=edit
+  const [rdSummary, setRdSummary] = useState([]);
+  const [rdDashboard, setRdDashboard] = useState(null);
+  const [addRDModalData, setAddRDModalData] = useState(null);     // null=closed, {}=add, {id,...}=edit
+  const [rdModalMode, setRdModalMode] = useState('add');          // 'add' | 'edit' | 'installment'
+  const [insurancePolicies, setInsurancePolicies] = useState([]);
+  const [insuranceDashboard, setInsuranceDashboard] = useState(null);
+  const [addInsuranceModalData, setAddInsuranceModalData] = useState(null);
+
+  // PPF states
+  const [ppfAccounts, setPpfAccounts] = useState([]);
+  const [ppfDashboard, setPpfDashboard] = useState(null);
+  const [addPPFModalData, setAddPPFModalData] = useState(null);
+  const [ppfModalMode, setPpfModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
 
   // Read cached data from backend (fast, no external calls)
   // Uses allSettled so one failing endpoint doesn't block the rest
@@ -116,6 +142,25 @@ export default function App() {
       if (sipResult.status === 'fulfilled') setSipConfigs(sipResult.value);
     } catch (err) {
       console.error('Failed to load MF data:', err);
+    }
+    // FD / RD / Insurance / PPF data (non-blocking)
+    try {
+      const [fdSumR, fdDashR, rdSumR, rdDashR, insSumR, insDashR, ppfSumR, ppfDashR] = await Promise.allSettled([
+        getFDSummary(), getFDDashboard(),
+        getRDSummary(), getRDDashboard(),
+        getInsuranceSummary(), getInsuranceDashboard(),
+        getPPFSummary(), getPPFDashboard(),
+      ]);
+      if (fdSumR.status === 'fulfilled') setFdSummary(fdSumR.value);
+      if (fdDashR.status === 'fulfilled') setFdDashboard(fdDashR.value);
+      if (rdSumR.status === 'fulfilled') setRdSummary(rdSumR.value);
+      if (rdDashR.status === 'fulfilled') setRdDashboard(rdDashR.value);
+      if (insSumR.status === 'fulfilled') setInsurancePolicies(insSumR.value);
+      if (insDashR.status === 'fulfilled') setInsuranceDashboard(insDashR.value);
+      if (ppfSumR.status === 'fulfilled') setPpfAccounts(ppfSumR.value);
+      if (ppfDashR.status === 'fulfilled') setPpfDashboard(ppfDashR.value);
+    } catch (err) {
+      console.error('Failed to load FD/RD/Insurance/PPF data:', err);
     }
   }, []);
 
@@ -431,6 +476,122 @@ export default function App() {
     }
   };
 
+  // ── Fixed Deposit handlers ────────────────────────
+  const handleAddFD = async (data) => {
+    try {
+      if (data.id) {
+        await updateFD(data.id, data);
+        toast.success('FD updated');
+      } else {
+        await addFD(data);
+        toast.success(`Added FD at ${data.bank}`);
+      }
+      setAddFDModalData(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save FD');
+    }
+  };
+
+  const handleDeleteFD = async (fdId) => {
+    try {
+      await deleteFD(fdId);
+      toast.success('FD deleted');
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete FD');
+    }
+  };
+
+  // ── Recurring Deposit handlers ────────────────────
+  const handleAddRD = async (data) => {
+    try {
+      if (data.rd_id) {
+        // Adding installment
+        await addRDInstallment(data.rd_id, { date: data.date, amount: data.amount, remarks: data.remarks });
+        toast.success('Installment added');
+      } else if (data.id) {
+        await updateRD(data.id, data);
+        toast.success('RD updated');
+      } else {
+        await addRD(data);
+        toast.success(`Added RD at ${data.bank}`);
+      }
+      setAddRDModalData(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save RD');
+    }
+  };
+
+  const handleDeleteRD = async (rdId) => {
+    try {
+      await deleteRD(rdId);
+      toast.success('RD deleted');
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete RD');
+    }
+  };
+
+  // ── Insurance handlers ────────────────────────────
+  const handleAddInsurance = async (data) => {
+    try {
+      if (data.id) {
+        await updateInsurance(data.id, data);
+        toast.success('Policy updated');
+      } else {
+        await addInsurance(data);
+        toast.success(`Added policy: ${data.policy_name}`);
+      }
+      setAddInsuranceModalData(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save policy');
+    }
+  };
+
+  const handleDeleteInsurance = async (policyId) => {
+    try {
+      await deleteInsurance(policyId);
+      toast.success('Policy deleted');
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete policy');
+    }
+  };
+
+  // ── PPF handlers ────────────────────────────────
+  const handleAddPPF = async (data) => {
+    try {
+      if (data.ppf_id) {
+        // Adding contribution
+        await addPPFContribution(data.ppf_id, { date: data.date, amount: data.amount, remarks: data.remarks });
+        toast.success('Contribution added');
+      } else if (data.id) {
+        await updatePPF(data.id, data);
+        toast.success('PPF account updated');
+      } else {
+        await addPPF(data);
+        toast.success(`Added PPF account: ${data.account_name}`);
+      }
+      setAddPPFModalData(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save PPF');
+    }
+  };
+
+  const handleDeletePPF = async (ppfId) => {
+    try {
+      await deletePPF(ppfId);
+      toast.success('PPF account deleted');
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete PPF');
+    }
+  };
+
   const handleRefresh = async () => {
     setLoading(true);
     await liveRefresh();
@@ -704,6 +865,22 @@ export default function App() {
             <button className="btn btn-primary" onClick={() => setAddMFModalData({})}>
               + Buy MF
             </button>
+          ) : activeTab === 'fixeddeposits' ? (
+            <button className="btn btn-primary" onClick={() => setAddFDModalData({})}>
+              + Add FD
+            </button>
+          ) : activeTab === 'recurringdeposits' ? (
+            <button className="btn btn-primary" onClick={() => { setRdModalMode('add'); setAddRDModalData({}); }}>
+              + Add RD
+            </button>
+          ) : activeTab === 'insurance' ? (
+            <button className="btn btn-primary" onClick={() => setAddInsuranceModalData({})}>
+              + Add Policy
+            </button>
+          ) : activeTab === 'ppf' ? (
+            <button className="btn btn-primary" onClick={() => { setPpfModalMode('add'); setAddPPFModalData({}); }}>
+              + Add PPF
+            </button>
           ) : (
             <button className="btn btn-primary" onClick={() => setAddModalData({})}>
               + Add Stock
@@ -722,6 +899,18 @@ export default function App() {
         </button>
         <button className={`tab ${activeTab === 'mutualfunds' ? 'active' : ''}`} onClick={() => setActiveTab('mutualfunds')}>
           Mutual Funds
+        </button>
+        <button className={`tab ${activeTab === 'fixeddeposits' ? 'active' : ''}`} onClick={() => setActiveTab('fixeddeposits')}>
+          Fixed Deposits
+        </button>
+        <button className={`tab ${activeTab === 'recurringdeposits' ? 'active' : ''}`} onClick={() => setActiveTab('recurringdeposits')}>
+          Recurring Deposits
+        </button>
+        <button className={`tab ${activeTab === 'insurance' ? 'active' : ''}`} onClick={() => setActiveTab('insurance')}>
+          Insurance
+        </button>
+        <button className={`tab ${activeTab === 'ppf' ? 'active' : ''}`} onClick={() => setActiveTab('ppf')}>
+          PPF
         </button>
         <button className={`tab ${activeTab === 'charts' ? 'active' : ''}`} onClick={() => setActiveTab('charts')}>
           Charts
@@ -757,6 +946,52 @@ export default function App() {
           onRedeemMF={(fund) => setRedeemTarget(fund)}
           onConfigSIP={(fund) => setSipTarget(fund)}
           sipConfigs={sipConfigs}
+        />
+      )}
+
+      {activeTab === 'fixeddeposits' && (
+        <FixedDepositTable
+          deposits={fdSummary}
+          loading={loading}
+          fdDashboard={fdDashboard}
+          onAddFD={() => setAddFDModalData({})}
+          onEditFD={(fd) => setAddFDModalData(fd)}
+          onDeleteFD={handleDeleteFD}
+        />
+      )}
+
+      {activeTab === 'recurringdeposits' && (
+        <RecurringDepositTable
+          deposits={rdSummary}
+          loading={loading}
+          rdDashboard={rdDashboard}
+          onAddRD={() => { setRdModalMode('add'); setAddRDModalData({}); }}
+          onEditRD={(rd) => { setRdModalMode('edit'); setAddRDModalData(rd); }}
+          onDeleteRD={handleDeleteRD}
+          onAddInstallment={(rd) => { setRdModalMode('installment'); setAddRDModalData(rd); }}
+        />
+      )}
+
+      {activeTab === 'insurance' && (
+        <InsuranceTable
+          policies={insurancePolicies}
+          loading={loading}
+          insuranceDashboard={insuranceDashboard}
+          onAddInsurance={() => setAddInsuranceModalData({})}
+          onEditInsurance={(p) => setAddInsuranceModalData(p)}
+          onDeleteInsurance={handleDeleteInsurance}
+        />
+      )}
+
+      {activeTab === 'ppf' && (
+        <PPFTable
+          accounts={ppfAccounts}
+          loading={loading}
+          ppfDashboard={ppfDashboard}
+          onAddPPF={() => { setPpfModalMode('add'); setAddPPFModalData({}); }}
+          onEditPPF={(ppf) => { setPpfModalMode('edit'); setAddPPFModalData(ppf); }}
+          onDeletePPF={handleDeletePPF}
+          onAddContribution={(ppf) => { setPpfModalMode('contribution'); setAddPPFModalData(ppf); }}
         />
       )}
 
@@ -828,6 +1063,44 @@ export default function App() {
           onSave={handleSaveSIP}
           onDelete={handleDeleteSIP}
           onClose={() => setSipTarget(null)}
+        />
+      )}
+
+      {/* FD Modal */}
+      {addFDModalData !== null && (
+        <AddFDModal
+          initialData={addFDModalData}
+          onAdd={handleAddFD}
+          onClose={() => setAddFDModalData(null)}
+        />
+      )}
+
+      {/* RD Modal (add / edit / installment) */}
+      {addRDModalData !== null && (
+        <AddRDModal
+          initialData={addRDModalData}
+          mode={rdModalMode}
+          onAdd={handleAddRD}
+          onClose={() => setAddRDModalData(null)}
+        />
+      )}
+
+      {/* Insurance Modal */}
+      {addInsuranceModalData !== null && (
+        <AddInsuranceModal
+          initialData={addInsuranceModalData}
+          onAdd={handleAddInsurance}
+          onClose={() => setAddInsuranceModalData(null)}
+        />
+      )}
+
+      {/* PPF Modal (add / edit / contribution) */}
+      {addPPFModalData !== null && (
+        <AddPPFModal
+          initialData={addPPFModalData}
+          mode={ppfModalMode}
+          onSubmit={handleAddPPF}
+          onClose={() => setAddPPFModalData(null)}
         />
       )}
     </div>

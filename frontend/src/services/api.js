@@ -208,3 +208,121 @@ export async function validateZerodha() {
   const { data } = await api.get('/zerodha/validate');
   return data;
 }
+
+// ── Fixed Deposits ────────────────────────────────────
+
+export async function getFDSummary() {
+  const { data } = await api.get('/fixed-deposits/summary');
+  return data;
+}
+
+export async function getFDDashboard() {
+  const { data } = await api.get('/fixed-deposits/dashboard');
+  return data;
+}
+
+export async function addFD(payload) {
+  const { data } = await api.post('/fixed-deposits/add', payload);
+  return data;
+}
+
+export async function updateFD(fdId, payload) {
+  const { data } = await api.put(`/fixed-deposits/${fdId}`, payload);
+  return data;
+}
+
+export async function deleteFD(fdId) {
+  const { data } = await api.delete(`/fixed-deposits/${fdId}`);
+  return data;
+}
+
+// ── Recurring Deposits ────────────────────────────────
+
+export async function getRDSummary() {
+  const { data } = await api.get('/recurring-deposits/summary');
+  return data;
+}
+
+export async function getRDDashboard() {
+  const { data } = await api.get('/recurring-deposits/dashboard');
+  return data;
+}
+
+export async function addRD(payload) {
+  const { data } = await api.post('/recurring-deposits/add', payload);
+  return data;
+}
+
+export async function updateRD(rdId, payload) {
+  const { data } = await api.put(`/recurring-deposits/${rdId}`, payload);
+  return data;
+}
+
+export async function deleteRD(rdId) {
+  const { data } = await api.delete(`/recurring-deposits/${rdId}`);
+  return data;
+}
+
+export async function addRDInstallment(rdId, payload) {
+  const { data } = await api.post(`/recurring-deposits/${rdId}/installment`, payload);
+  return data;
+}
+
+// ── Insurance ────────────────────────────────────────
+
+export async function getInsuranceSummary() {
+  const { data } = await api.get('/insurance/summary');
+  return data;
+}
+
+export async function getInsuranceDashboard() {
+  const { data } = await api.get('/insurance/dashboard');
+  return data;
+}
+
+export async function addInsurance(payload) {
+  const { data } = await api.post('/insurance/add', payload);
+  return data;
+}
+
+export async function updateInsurance(policyId, payload) {
+  const { data } = await api.put(`/insurance/${policyId}`, payload);
+  return data;
+}
+
+export async function deleteInsurance(policyId) {
+  const { data } = await api.delete(`/insurance/${policyId}`);
+  return data;
+}
+
+// ── PPF (Public Provident Fund) ──────────────────────────
+
+export async function getPPFSummary() {
+  const { data } = await api.get('/ppf/summary');
+  return data;
+}
+
+export async function getPPFDashboard() {
+  const { data } = await api.get('/ppf/dashboard');
+  return data;
+}
+
+export async function addPPF(payload) {
+  const { data } = await api.post('/ppf/add', payload);
+  return data;
+}
+
+export async function updatePPF(ppfId, payload) {
+  const { data } = await api.put(`/ppf/${ppfId}`, payload);
+  return data;
+}
+
+export async function deletePPF(ppfId) {
+  const { data } = await api.delete(`/ppf/${ppfId}`);
+  return data;
+}
+
+export async function addPPFContribution(ppfId, payload) {
+  const { data } = await api.post(`/ppf/${ppfId}/contribution`, payload);
+  return data;
+}
