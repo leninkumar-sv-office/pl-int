@@ -121,7 +121,7 @@ export default function AddMFModal({ onAdd, onClose, initialData, funds }) {
               <input
                 name="units"
                 type="number"
-                step="0.001"
+                step="any"
                 min="0.001"
                 value={form.units}
                 onChange={handleChange}
@@ -134,7 +134,7 @@ export default function AddMFModal({ onAdd, onClose, initialData, funds }) {
               <input
                 name="nav"
                 type="number"
-                step="0.01"
+                step="any"
                 min="0.01"
                 value={form.nav}
                 onChange={handleChange}

@@ -25,7 +25,7 @@ from .models import (
     AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest,
 )
 from .xlsx_database import xlsx_db as db
-from .mf_xlsx_database import mf_db
+from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache
 from . import stock_service
 from . import zerodha_service
 from . import contract_note_parser
@@ -1581,6 +1581,15 @@ def get_mf_summary():
 def get_mf_dashboard():
     """Get aggregated MF portfolio summary for the dashboard."""
     return mf_db.get_dashboard_summary()
+
+
+@app.post("/api/mutual-funds/refresh-nav")
+def refresh_mf_nav():
+    """Clear MF NAV cache and re-fetch live NAVs."""
+    clear_mf_nav_cache()
+    summary = mf_db.get_fund_summary()
+    with_nav = sum(1 for f in summary if f.get("current_nav", 0) > 0)
+    return {"message": f"NAV refreshed: {with_nav}/{len(summary)} funds with live prices"}
 
 
 @app.post("/api/mutual-funds/buy")

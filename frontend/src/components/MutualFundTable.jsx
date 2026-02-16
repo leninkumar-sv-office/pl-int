@@ -39,9 +39,9 @@ function durationText(dateStr) {
 const COL_DEFS = [
   { id: 'units',        label: 'Units' },
   { id: 'avgNav',       label: 'Avg NAV' },
-  { id: 'invested',     label: 'Invested' },
   { id: 'currentNav',   label: 'Current NAV' },
   { id: 'currentValue', label: 'Current Value' },
+  { id: 'invested',     label: 'Invested' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
   { id: 'realizedPL',   label: 'Realized P&L' },
 ];
@@ -914,14 +914,14 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               {col('avgNav') && <th onClick={() => handleSort('avgNav')} style={{ cursor: 'pointer' }}>
                 Avg NAV<SortIcon field="avgNav" />
               </th>}
-              {col('invested') && <th onClick={() => handleSort('invested')} style={{ cursor: 'pointer' }}>
-                Invested<SortIcon field="invested" />
-              </th>}
               {col('currentNav') && <th onClick={() => handleSort('currentNav')} style={{ cursor: 'pointer' }}>
                 Current NAV<SortIcon field="currentNav" />
               </th>}
               {col('currentValue') && <th onClick={() => handleSort('currentValue')} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="currentValue" />
+              </th>}
+              {col('invested') && <th onClick={() => handleSort('invested')} style={{ cursor: 'pointer' }}>
+                Invested<SortIcon field="invested" />
               </th>}
               {col('unrealizedPL') && <th onClick={() => handleSort('unrealizedPL')} style={{ cursor: 'pointer' }}>
                 Unrealized P&L<SortIcon field="unrealizedPL" />
@@ -978,7 +978,6 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       )}
                     </td>}
                     {col('avgNav') && <td>{hasHeld ? formatINR(f.avg_nav) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
-                    {col('invested') && <td>{hasHeld ? formatINR(f.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
                     {col('currentNav') && <td>
                       {f.current_nav > 0 ? (
                         <div style={{
@@ -996,6 +995,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         {hasHeld ? formatINR(f.current_value) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                       </div>
                     </td>}
+                    {col('invested') && <td>{hasHeld ? formatINR(f.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
                     {col('unrealizedPL') && <td style={{ whiteSpace: 'nowrap' }}>
                       {hasHeld && f.unrealized_pl !== 0 ? (
                         <div>

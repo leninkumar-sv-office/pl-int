@@ -14,14 +14,83 @@ Key differences from stock xlsx:
 """
 
 import hashlib
+import re
 import threading
+import time
+import random
 from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import requests as _requests
 import openpyxl
 
 from .models import MFHolding, MFSoldPosition
+
+
+# ═══════════════════════════════════════════════════════════
+#  LIVE NAV FETCHING (Google Finance)
+# ═══════════════════════════════════════════════════════════
+
+_GOOGLE_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/120.0.0.0 Safari/537.36"),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+_nav_cache: Dict[str, float] = {}
+_nav_cache_lock = threading.Lock()
+
+
+def _fetch_nav_google_finance(fund_code: str) -> Optional[float]:
+    """Fetch current NAV from Google Finance for a mutual fund.
+
+    fund_code is like 'MUTF_IN:SBI_SMAL_CAP_HY56CY'.
+    Google Finance URL: /finance/quote/SBI_SMAL_CAP_HY56CY:MUTF_IN
+    """
+    if not fund_code or ":" not in fund_code:
+        return None
+    parts = fund_code.split(":", 1)
+    gf_symbol = f"{parts[1]}:{parts[0]}"
+    url = f"https://www.google.com/finance/quote/{gf_symbol}"
+    for attempt in range(2):
+        try:
+            resp = _requests.get(url, headers=_GOOGLE_HEADERS, timeout=10)
+            if resp.status_code == 200:
+                match = re.search(r'data-last-price="([\d,.]+)"', resp.text)
+                if match:
+                    price = float(match.group(1).replace(",", ""))
+                    if price > 0:
+                        return price
+        except Exception:
+            pass
+        if attempt < 1:
+            time.sleep(1)
+    return None
+
+
+def fetch_live_navs(fund_codes: List[str]) -> Dict[str, float]:
+    """Fetch live NAVs for a list of fund codes. Returns {fund_code: nav}."""
+    results: Dict[str, float] = {}
+    for code in fund_codes:
+        with _nav_cache_lock:
+            if code in _nav_cache:
+                results[code] = _nav_cache[code]
+                continue
+        nav = _fetch_nav_google_finance(code)
+        if nav and nav > 0:
+            with _nav_cache_lock:
+                _nav_cache[code] = nav
+            results[code] = nav
+        time.sleep(random.uniform(0.3, 0.8))
+    return results
+
+
+def clear_nav_cache():
+    """Clear the NAV cache to force fresh fetches."""
+    with _nav_cache_lock:
+        _nav_cache.clear()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -433,7 +502,11 @@ class MFXlsxPortfolio:
         summaries = []
         today = dt.now()
 
-        for fund_code in list(self._file_map.keys()):
+        # Pre-fetch live NAVs for all funds
+        all_codes = list(self._file_map.keys())
+        live_navs = fetch_live_navs(all_codes)
+
+        for fund_code in all_codes:
             try:
                 holdings, sold, idx_data = self._get_fund_data(fund_code)
             except Exception as e:
@@ -441,7 +514,8 @@ class MFXlsxPortfolio:
                 continue
 
             name = self._name_map.get(fund_code, fund_code)
-            current_nav = idx_data.get("current_nav", 0.0)
+            # Prefer live NAV, fall back to xlsx Index sheet value
+            current_nav = live_navs.get(fund_code, 0.0) or idx_data.get("current_nav", 0.0)
             w52_high = idx_data.get("week_52_high", 0.0)
             w52_low = idx_data.get("week_52_low", 0.0)
 
@@ -756,7 +830,10 @@ class MFXlsxPortfolio:
             }
 
     def get_fund_nav(self, fund_code: str) -> float:
-        """Get the current NAV for a fund from its Index sheet."""
+        """Get the current NAV for a fund — live first, then xlsx fallback."""
+        live = fetch_live_navs([fund_code])
+        if fund_code in live and live[fund_code] > 0:
+            return live[fund_code]
         try:
             _, _, idx_data = self._get_fund_data(fund_code)
             return idx_data.get("current_nav", 0.0)
