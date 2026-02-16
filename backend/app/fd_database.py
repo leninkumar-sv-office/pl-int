@@ -13,10 +13,15 @@ xlsx layout (common to FD & MIS):
     Row 5: headers
     Row 6+: monthly data rows (formulas that reference NOW() — unreliable when read)
 
-Interest logic:
-    FD  → Quarterly payout: SIP * rate / 4 every 3rd month (months 3,6,9,…)
-    MIS → Monthly payout:   SIP * rate / 12 every month (months 2,3,4,…)
+Interest logic (payout frequency driven):
+    Monthly   → SIP * rate / 12 every month from month 2
+    Quarterly → SIP * rate / 4  every 3 months from month 3
+    Half-Yearly → SIP * rate / 2 every 6 months from month 6
+    Annually  → SIP * rate every 12 months from month 12
     Month 1 = deposit month, no interest.
+
+    xlsx FD files: payout read from H2 cell.
+    MIS files always default to Monthly.
 """
 
 import json
@@ -50,6 +55,27 @@ _lock = threading.Lock()
 def _gen_fd_id(name: str) -> str:
     """Deterministic ID from FD name."""
     return hashlib.md5(name.encode()).hexdigest()[:8]
+
+
+def _payout_to_period(payout: str) -> int:
+    """Convert interest payout string to period in months.
+    Monthly → 1, Quarterly → 3, Half-Yearly → 6, Annually → 12.
+    """
+    p = (payout or "").strip().lower()
+    if "month" in p:
+        return 1
+    if "quarter" in p or "quartely" in p:  # handle typo in xlsx
+        return 3
+    if "half" in p or "semi" in p:
+        return 6
+    if "annual" in p or "year" in p:
+        return 12
+    return 3  # default quarterly
+
+
+def _payout_periods_per_year(period_months: int) -> int:
+    """Number of interest periods per year."""
+    return 12 // period_months if period_months > 0 else 4
 
 
 def _to_date(val) -> date | None:
@@ -98,9 +124,13 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
 
     end_dt = start_dt + relativedelta(months=tenure_months)
 
-    # Determine type
+    # Determine type and payout period
     is_mis = "MIS" in name.upper()
     fd_type = "MIS" if is_mis else "FD"
+    period_months = _payout_to_period(interest_payout)
+    if is_mis:
+        period_months = 1  # MIS always pays monthly
+    periods_per_year = _payout_periods_per_year(period_months)
 
     # ── Generate installments ─────────────────────────────
     today = date.today()
@@ -115,16 +145,11 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
         # Investment: lump-sum in month 1 only
         invested = sip if m == 1 else 0.0
 
-        # Interest calculation
+        # Interest: paid every period_months, starting from that period
+        # e.g. Monthly → month 2,3,4,...; Quarterly → month 3,6,9,...
         interest = 0.0
-        if fd_type == "FD":
-            # Quarterly: every 3rd month starting from month 3
-            if m >= 3 and m % 3 == 0:
-                interest = round(sip * rate_for_calc / 4, 2)
-        else:
-            # MIS: monthly from month 2 onwards
-            if m >= 2:
-                interest = round(sip * rate_for_calc / 12, 2)
+        if m > 1 and m % period_months == 0:
+            interest = round(sip * rate_for_calc / periods_per_year, 2)
 
         if is_past:
             total_interest_earned += interest
@@ -236,8 +261,9 @@ def _create_fd_xlsx(name: str, bank: str, principal: float, rate_pct: float,
     for i, h in enumerate(headers, 1):
         ws.cell(5, i, h)
 
-    # Data rows: compute values
-    is_mis = fd_type == "MIS"
+    # Data rows: compute values using payout frequency
+    period_months = _payout_to_period(interest_payout)
+    periods_per_year = _payout_periods_per_year(period_months)
     for m in range(1, tenure_months + 1):
         row = m + 5
         inst_date = start_dt + relativedelta(months=m - 1)
@@ -247,22 +273,14 @@ def _create_fd_xlsx(name: str, bank: str, principal: float, rate_pct: float,
         ws.cell(row, 5, principal if m == 1 else 0)
 
         interest = 0.0
-        if is_mis:
-            if m >= 2:
-                interest = round(principal * rate_dec / 12, 2)
-        else:
-            if m >= 3 and m % 3 == 0:
-                interest = round(principal * rate_dec / 4, 2)
+        if m > 1 and m % period_months == 0:
+            interest = round(principal * rate_dec / periods_per_year, 2)
         ws.cell(row, 6, interest)
         ws.cell(row, 7, interest)
 
     # Compute and set E2 (total interest) and E3 (maturity amount)
-    total_interest = 0.0
-    if is_mis:
-        total_interest = round(principal * rate_dec / 12 * (tenure_months - 1), 2)
-    else:
-        quarters = tenure_months // 3
-        total_interest = round(principal * rate_dec / 4 * quarters, 2)
+    num_periods = tenure_months // period_months
+    total_interest = round(principal * rate_dec / periods_per_year * num_periods, 2)
 
     ws.cell(2, 5, total_interest)  # E2
     ws.cell(3, 5, round(principal + total_interest, 2))  # E3
@@ -297,16 +315,14 @@ def _save_json(data: list):
 # ═══════════════════════════════════════════════════════════
 
 def _calc_maturity(principal: float, rate: float, tenure_months: int,
-                   fd_type: str = "FD") -> dict:
-    """Calculate total interest and maturity amount."""
+                   interest_payout: str = "Quarterly") -> dict:
+    """Calculate total interest and maturity amount using payout frequency."""
     rate_dec = rate / 100
-    if fd_type == "MIS":
-        # Monthly payout from month 2
-        total_interest = round(principal * rate_dec / 12 * (tenure_months - 1), 2)
-    else:
-        # Quarterly payout from month 3
-        quarters = tenure_months // 3
-        total_interest = round(principal * rate_dec / 4 * quarters, 2)
+    period_months = _payout_to_period(interest_payout)
+    periods_per_year = _payout_periods_per_year(period_months)
+    num_periods = tenure_months // period_months
+    interest_per_period = principal * rate_dec / periods_per_year
+    total_interest = round(interest_per_period * num_periods, 2)
     return {
         "maturity_amount": round(principal + total_interest, 2),
         "interest_earned": total_interest,
@@ -323,11 +339,13 @@ def _calc_maturity_date(start_date: str, tenure_months: int) -> str:
 
 
 def _generate_installments(principal: float, rate_pct: float, tenure_months: int,
-                           start_date: str, fd_type: str = "FD") -> list:
+                           start_date: str, interest_payout: str = "Quarterly") -> list:
     """Generate installment schedule for a manual entry."""
     today = date.today()
     start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
     rate_dec = rate_pct / 100
+    period_months = _payout_to_period(interest_payout)
+    periods_per_year = _payout_periods_per_year(period_months)
     installments = []
 
     for m in range(1, tenure_months + 1):
@@ -336,12 +354,8 @@ def _generate_installments(principal: float, rate_pct: float, tenure_months: int
         invested = principal if m == 1 else 0.0
 
         interest = 0.0
-        if fd_type == "MIS":
-            if m >= 2:
-                interest = round(principal * rate_dec / 12, 2)
-        else:
-            if m >= 3 and m % 3 == 0:
-                interest = round(principal * rate_dec / 4, 2)
+        if m > 1 and m % period_months == 0:
+            interest = round(principal * rate_dec / periods_per_year, 2)
 
         installments.append({
             "month": m,
@@ -363,15 +377,16 @@ def _enrich_json_item(item: dict) -> dict:
     rate = item.get("interest_rate", 0)
     tenure = item.get("tenure_months", 60)
     start_date = item.get("start_date", "")
+    payout = item.get("interest_payout", "Monthly" if fd_type == "MIS" else "Quarterly")
 
     # Generate installments
     if start_date and principal > 0:
-        installments = _generate_installments(principal, rate, tenure, start_date, fd_type)
+        installments = _generate_installments(principal, rate, tenure, start_date, payout)
     else:
         installments = []
 
     # Calculate totals
-    calcs = _calc_maturity(principal, rate, tenure, fd_type)
+    calcs = _calc_maturity(principal, rate, tenure, payout)
 
     try:
         mat = datetime.strptime(item.get("maturity_date", ""), "%Y-%m-%d").date()
@@ -446,7 +461,7 @@ def add(data: dict) -> dict:
     bank = data["bank"]
     interest_payout = data.get("interest_payout", "Quarterly" if fd_type == "FD" else "Monthly")
 
-    calcs = _calc_maturity(principal, rate, tenure_months, fd_type)
+    calcs = _calc_maturity(principal, rate, tenure_months, interest_payout)
     maturity_date = data.get("maturity_date") or _calc_maturity_date(start_date, tenure_months)
     name = data.get("name", f"{bank} {fd_type}")
 
@@ -494,8 +509,8 @@ def update(fd_id: str, data: dict) -> dict:
             if val is not None and key in item:
                 item[key] = val
 
-        fd_type = item.get("type", "FD")
-        calcs = _calc_maturity(item["principal"], item["interest_rate"], item["tenure_months"], fd_type)
+        payout = item.get("interest_payout", "Quarterly")
+        calcs = _calc_maturity(item["principal"], item["interest_rate"], item["tenure_months"], payout)
         item["maturity_amount"] = calcs["maturity_amount"]
         item["interest_earned"] = calcs["interest_earned"]
 

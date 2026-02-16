@@ -278,6 +278,8 @@ class AddFDRequest(BaseModel):
     principal: float = Field(..., gt=0, description="Deposit amount")
     interest_rate: float = Field(..., gt=0, description="Annual interest rate (%)")
     tenure_months: int = Field(..., gt=0, description="Tenure in months")
+    type: str = Field(default="FD", description="FD or MIS")
+    interest_payout: str = Field(default="Quarterly", description="Monthly/Quarterly/Half-Yearly/Annually")
     start_date: str = Field(..., description="Start date YYYY-MM-DD")
     maturity_date: str = Field(default="", description="Maturity date YYYY-MM-DD (auto-calculated if empty)")
     tds: float = Field(default=0.0, ge=0, description="TDS deducted")
