@@ -686,6 +686,8 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const selectedItems = expandedFundData?.held_lots?.filter(l => selectedLots.has(l.id)) || [];
   const selectedUnits = selectedItems.reduce((sum, l) => sum + l.units, 0);
   const selectedPL = selectedItems.reduce((sum, l) => sum + (l.pl || 0), 0);
+  const selectedCost = selectedItems.reduce((sum, l) => sum + (l.buy_cost || (l.buy_price * l.units) || 0), 0);
+  const selectedPLPct = selectedCost > 0 ? (selectedPL / selectedCost * 100) : 0;
 
   if (loading && (funds || []).length === 0) {
     return (
@@ -1085,7 +1087,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
             }}
             style={{ fontWeight: 600, padding: '8px 24px' }}
           >
-            Redeem {selectedItems.length} Lot{selectedItems.length > 1 ? 's' : ''} ({formatUnits(selectedUnits)} units{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)}` : ''})
+            Redeem {selectedItems.length} Lot{selectedItems.length > 1 ? 's' : ''} ({formatUnits(selectedUnits)} units{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)} (${selectedPLPct >= 0 ? '+' : ''}${selectedPLPct.toFixed(2)}%)` : ''})
           </button>
         </div>
       )}
