@@ -709,7 +709,10 @@ def get_stock_summary():
 
     # Use cached prices (instant, no network calls)
     # Request both BSE and NSE for each symbol so exchange fallback works
+    # Include BOTH held and sold symbols so fully-sold stocks get live data too
     base_symbols = set((h.symbol, h.exchange) for h in holdings)
+    for s in sold_positions:
+        base_symbols.add((s.symbol, s.exchange))
     symbols_with_alt = set(base_symbols)
     for sym, exch in base_symbols:
         alt = "NSE" if exch == "BSE" else "BSE"

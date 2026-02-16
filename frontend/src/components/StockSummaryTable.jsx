@@ -346,7 +346,12 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                       )}
                       {hCol('pl')        && (
                         <td style={{ ...heldTd, fontWeight: 600, color: lotPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                          {cp > 0 ? `${lotPL >= 0 ? '+' : ''}${formatINR(lotPL)}` : '--'}
+                          {cp > 0 ? <>
+                            {lotPL >= 0 ? '+' : ''}{formatINR(lotPL)}
+                            <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.8, marginLeft: '4px' }}>
+                              ({((lotPL / (h.buy_price * h.quantity)) * 100).toFixed(2)}%)
+                            </span>
+                          </> : '--'}
                         </td>
                       )}
                       <td style={heldTd}>
@@ -411,6 +416,9 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                     <td style={heldTd}>{formatINR(t.sell_price)}</td>
                     <td style={{ ...heldTd, fontWeight: 600, color: t.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                       {t.realized_pl >= 0 ? '+' : ''}{formatINR(t.realized_pl)}
+                      <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.8, marginLeft: '4px' }}>
+                        ({((t.realized_pl / (t.buy_price * t.quantity)) * 100).toFixed(2)}%)
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -727,6 +735,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     const cp = item.live?.current_price || 0;
     return sum + (cp > 0 ? (cp - item.holding.buy_price) * item.holding.quantity : 0);
   }, 0);
+  const selectedCost = selectedItems.reduce((sum, item) => sum + item.holding.buy_price * item.holding.quantity, 0);
+  const selectedPLPct = selectedCost > 0 ? (selectedPL / selectedCost * 100) : 0;
 
   return (
     <div className="section">
@@ -1572,7 +1582,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             onClick={handleBulkSell}
             style={{ fontWeight: 600, padding: '8px 24px' }}
           >
-            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} share{selectedQty !== 1 ? 's' : ''}{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)}` : ''})
+            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} share{selectedQty !== 1 ? 's' : ''}{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)} (${selectedPLPct >= 0 ? '+' : ''}${selectedPLPct.toFixed(2)}%)` : ''})
           </button>
         </div>
       )}

@@ -459,6 +459,11 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                     <td style={heldTd}>{formatINR(s.sell_nav)}</td>
                     <td style={{ ...heldTd, fontWeight: 600, color: s.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                       {s.realized_pl >= 0 ? '+' : ''}{formatINR(s.realized_pl)}
+                      {s.buy_nav > 0 && s.units > 0 && (
+                        <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.8, marginLeft: '4px' }}>
+                          ({((s.realized_pl / (s.buy_nav * s.units)) * 100).toFixed(2)}%)
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
