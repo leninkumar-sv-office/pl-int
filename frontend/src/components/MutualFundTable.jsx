@@ -150,6 +150,18 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
 
   const totalSoldUnits = soldLots.reduce((sum, s) => sum + (s.units || 0), 0);
   const totalSoldPL = soldLots.reduce((sum, s) => sum + (s.realized_pl || 0), 0);
+  const totalSoldCost = soldLots.reduce((sum, s) => sum + ((s.buy_nav || 0) * (s.units || 0)), 0);
+  const totalSoldPLPct = totalSoldCost > 0 ? (totalSoldPL / totalSoldCost * 100) : 0;
+  const totalSoldWeightedDays = soldLots.reduce((sum, s) => {
+    const cost = (s.buy_nav || 0) * (s.units || 0);
+    if (cost <= 0 || !s.buy_date || !s.sell_date) return sum;
+    const days = Math.floor((new Date(s.sell_date + 'T00:00:00') - new Date(s.buy_date + 'T00:00:00')) / (1000 * 60 * 60 * 24));
+    return sum + cost * Math.max(days, 1);
+  }, 0);
+  const avgSoldDays = totalSoldCost > 0 ? totalSoldWeightedDays / totalSoldCost : 0;
+  const totalSoldPLPa = avgSoldDays > 0 && totalSoldCost > 0
+    ? (Math.pow(1 + totalSoldPL / totalSoldCost, 365 / avgSoldDays) - 1) * 100
+    : null;
   const fundShortName = f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '');
 
   return (
@@ -387,16 +399,30 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                           {currentNav > 0 ? formatINR(lot.current_value) : '--'}
                         </td>
                       )}
-                      {hCol('pl') && (
-                        <td style={{ ...heldTd, fontWeight: 600, color: inProfit ? 'var(--green)' : 'var(--red)' }}>
-                          {currentNav > 0 ? `${inProfit ? '+' : ''}${formatINR(lot.pl)}` : '--'}
-                          {currentNav > 0 && (
-                            <div style={{ fontSize: '10px', opacity: 0.85 }}>
-                              {lot.pl_pct >= 0 ? '+' : ''}{lot.pl_pct?.toFixed(1)}%
+                      {hCol('pl') && (() => {
+                        const mfDays = lot.buy_date ? Math.floor((Date.now() - new Date(lot.buy_date).getTime()) / 86400000) : 0;
+                        const mfCost = lot.buy_cost || (lot.buy_price * lot.units) || 0;
+                        const mfPa = mfDays > 0 && mfCost > 0
+                          ? (Math.pow(1 + lot.pl / mfCost, 365 / mfDays) - 1) * 100 : null;
+                        const clr = inProfit ? 'var(--green)' : 'var(--red)';
+                        return (
+                        <td style={heldTd}>
+                          {currentNav > 0 ? (
+                            <div>
+                              <div style={{ fontWeight: 600, color: clr }}>{inProfit ? '+' : ''}{formatINR(lot.pl)}</div>
+                              <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                                {lot.pl_pct >= 0 ? '+' : ''}{lot.pl_pct?.toFixed(2)}%
+                              </div>
+                              {mfPa !== null && (
+                                <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                                  {mfPa >= 0 ? '+' : ''}{mfPa.toFixed(2)}% p.a.
+                                </div>
+                              )}
                             </div>
-                          )}
+                          ) : '--'}
                         </td>
-                      )}
+                        );
+                      })()}
                       <td style={heldTd}>
                         <button
                           className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
@@ -428,7 +454,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
               fontWeight: 600,
               color: totalSoldPL >= 0 ? 'var(--green)' : 'var(--red)',
             }}>
-              Net P&L: {totalSoldPL >= 0 ? '+' : ''}{formatINR(totalSoldPL)}
+              Net P&L: {totalSoldPL >= 0 ? '+' : ''}{formatINR(totalSoldPL)} ({totalSoldPLPct >= 0 ? '+' : ''}{totalSoldPLPct.toFixed(2)}%){totalSoldPLPa !== null && <span style={{ marginLeft: '6px', opacity: 0.85 }}>({totalSoldPLPa >= 0 ? '+' : ''}{totalSoldPLPa.toFixed(2)}% p.a.)</span>}
             </span>
           </div>
           <div style={{
@@ -457,14 +483,33 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                     <td style={{ ...heldTd, fontWeight: 600 }}>{formatUnits(s.units)}</td>
                     <td style={heldTd}>{formatINR(s.buy_nav)}</td>
                     <td style={heldTd}>{formatINR(s.sell_nav)}</td>
-                    <td style={{ ...heldTd, fontWeight: 600, color: s.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {s.realized_pl >= 0 ? '+' : ''}{formatINR(s.realized_pl)}
-                      {s.buy_nav > 0 && s.units > 0 && (
-                        <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.8, marginLeft: '4px' }}>
-                          ({((s.realized_pl / (s.buy_nav * s.units)) * 100).toFixed(2)}%)
-                        </span>
-                      )}
+                    {(() => {
+                      const mfsCost = (s.buy_nav || 0) * (s.units || 0);
+                      const mfsPct = mfsCost > 0 ? (s.realized_pl / mfsCost * 100) : 0;
+                      const mfsDays = s.buy_date && s.sell_date
+                        ? Math.floor((new Date(s.sell_date + 'T00:00:00') - new Date(s.buy_date + 'T00:00:00')) / 86400000) : 0;
+                      const mfsPa = mfsDays > 0 && mfsCost > 0
+                        ? (Math.pow(1 + s.realized_pl / mfsCost, 365 / mfsDays) - 1) * 100 : null;
+                      const clr = s.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
+                      const sign = s.realized_pl >= 0 ? '+' : '';
+                      return (
+                    <td style={heldTd}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: clr }}>{sign}{formatINR(s.realized_pl)}</div>
+                        {mfsCost > 0 && (
+                          <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                            {sign}{mfsPct.toFixed(2)}%
+                          </div>
+                        )}
+                        {mfsPa !== null && (
+                          <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                            {mfsPa >= 0 ? '+' : ''}{mfsPa.toFixed(2)}% p.a.
+                          </div>
+                        )}
+                      </div>
                     </td>
+                      );
+                    })()}
                   </tr>
                 ))}
               </tbody>

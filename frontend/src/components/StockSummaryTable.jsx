@@ -99,6 +99,19 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
   // Sold transactions totals
   const totalSoldQty = soldTrades.reduce((sum, t) => sum + (t.quantity || 0), 0);
   const totalSoldPL = soldTrades.reduce((sum, t) => sum + (t.realized_pl || 0), 0);
+  const totalSoldCost = soldTrades.reduce((sum, t) => sum + ((t.buy_price || 0) * (t.quantity || 0)), 0);
+  const totalSoldPLPct = totalSoldCost > 0 ? (totalSoldPL / totalSoldCost * 100) : 0;
+  // Cost-weighted average holding days for p.a. calculation
+  const totalSoldWeightedDays = soldTrades.reduce((sum, t) => {
+    const cost = (t.buy_price || 0) * (t.quantity || 0);
+    if (cost <= 0 || !t.buy_date || !t.sell_date) return sum;
+    const days = Math.floor((new Date(t.sell_date + 'T00:00:00') - new Date(t.buy_date + 'T00:00:00')) / (1000 * 60 * 60 * 24));
+    return sum + cost * Math.max(days, 1);
+  }, 0);
+  const avgSoldDays = totalSoldCost > 0 ? totalSoldWeightedDays / totalSoldCost : 0;
+  const totalSoldPLPa = avgSoldDays > 0 && totalSoldCost > 0
+    ? (Math.pow(1 + totalSoldPL / totalSoldCost, 365 / avgSoldDays) - 1) * 100
+    : null;
 
   return (
     <div style={{
@@ -344,16 +357,30 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                           {cp > 0 ? formatINR(cp) : '--'}
                         </td>
                       )}
-                      {hCol('pl')        && (
-                        <td style={{ ...heldTd, fontWeight: 600, color: lotPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                          {cp > 0 ? <>
-                            {lotPL >= 0 ? '+' : ''}{formatINR(lotPL)}
-                            <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.8, marginLeft: '4px' }}>
-                              ({((lotPL / (h.buy_price * h.quantity)) * 100).toFixed(2)}%)
-                            </span>
-                          </> : '--'}
+                      {hCol('pl')        && (() => {
+                        const lotCost = h.buy_price * h.quantity;
+                        const lotPct = lotCost > 0 ? (lotPL / lotCost * 100) : 0;
+                        const lotPa = _daysSinceBuy > 0 && lotCost > 0
+                          ? (Math.pow(1 + lotPL / lotCost, 365 / _daysSinceBuy) - 1) * 100 : null;
+                        const clr = lotPL >= 0 ? 'var(--green)' : 'var(--red)';
+                        return (
+                        <td style={heldTd}>
+                          {cp > 0 ? (
+                            <div>
+                              <div style={{ fontWeight: 600, color: clr }}>{lotPL >= 0 ? '+' : ''}{formatINR(lotPL)}</div>
+                              <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                                {lotPct >= 0 ? '+' : ''}{lotPct.toFixed(2)}%
+                              </div>
+                              {lotPa !== null && (
+                                <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                                  {lotPa >= 0 ? '+' : ''}{lotPa.toFixed(2)}% p.a.
+                                </div>
+                              )}
+                            </div>
+                          ) : '--'}
                         </td>
-                      )}
+                        );
+                      })()}
                       <td style={heldTd}>
                         <button
                           className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
@@ -385,7 +412,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
               fontWeight: 600,
               color: totalSoldPL >= 0 ? 'var(--green)' : 'var(--red)',
             }}>
-              Net P&L: {totalSoldPL >= 0 ? '+' : ''}{formatINR(totalSoldPL)}
+              Net P&L: {totalSoldPL >= 0 ? '+' : ''}{formatINR(totalSoldPL)} ({totalSoldPLPct >= 0 ? '+' : ''}{totalSoldPLPct.toFixed(2)}%){totalSoldPLPa !== null && <span style={{ marginLeft: '6px', opacity: 0.85 }}>({totalSoldPLPa >= 0 ? '+' : ''}{totalSoldPLPa.toFixed(2)}% p.a.)</span>}
             </span>
           </div>
           <div style={{
@@ -414,12 +441,30 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                     <td style={{ ...heldTd, fontWeight: 600 }}>{t.quantity}</td>
                     <td style={heldTd}>{formatINR(t.buy_price)}</td>
                     <td style={heldTd}>{formatINR(t.sell_price)}</td>
-                    <td style={{ ...heldTd, fontWeight: 600, color: t.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {t.realized_pl >= 0 ? '+' : ''}{formatINR(t.realized_pl)}
-                      <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.8, marginLeft: '4px' }}>
-                        ({((t.realized_pl / (t.buy_price * t.quantity)) * 100).toFixed(2)}%)
-                      </span>
+                    {(() => {
+                      const sCost = t.buy_price * t.quantity;
+                      const sPct = sCost > 0 ? (t.realized_pl / sCost * 100) : 0;
+                      const sDays = t.buy_date && t.sell_date
+                        ? Math.floor((new Date(t.sell_date + 'T00:00:00') - new Date(t.buy_date + 'T00:00:00')) / 86400000) : 0;
+                      const sPa = sDays > 0 && sCost > 0
+                        ? (Math.pow(1 + t.realized_pl / sCost, 365 / sDays) - 1) * 100 : null;
+                      const clr = t.realized_pl >= 0 ? 'var(--green)' : 'var(--red)';
+                      return (
+                    <td style={heldTd}>
+                      <div>
+                        <div style={{ fontWeight: 600, color: clr }}>{t.realized_pl >= 0 ? '+' : ''}{formatINR(t.realized_pl)}</div>
+                        <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                          {sPct >= 0 ? '+' : ''}{sPct.toFixed(2)}%
+                        </div>
+                        {sPa !== null && (
+                          <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                            {sPa >= 0 ? '+' : ''}{sPa.toFixed(2)}% p.a.
+                          </div>
+                        )}
+                      </div>
                     </td>
+                      );
+                    })()}
                   </tr>
                 ))}
               </tbody>
