@@ -59,12 +59,13 @@ function loadVisibleCols() {
 
 /* ── Held lots sub-table column definitions ───────────── */
 const HELD_COL_DEFS = [
-  { id: 'buyDate',  label: 'Buy Date' },
-  { id: 'units',    label: 'Units' },
-  { id: 'nav',      label: 'NAV' },
-  { id: 'cost',     label: 'Cost' },
-  { id: 'current',  label: 'Current' },
-  { id: 'pl',       label: 'P&L' },
+  { id: 'buyDate',    label: 'Buy Date' },
+  { id: 'units',      label: 'Units' },
+  { id: 'nav',        label: 'Buy NAV' },
+  { id: 'currentNav', label: 'Current NAV' },
+  { id: 'cost',       label: 'Cost' },
+  { id: 'current',    label: 'Current Value' },
+  { id: 'pl',         label: 'P&L' },
 ];
 const HELD_COL_LS_KEY = 'mfHeldLotsHiddenCols';
 
@@ -337,12 +338,13 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                       title="Select all lots for bulk redeem"
                     />
                   </th>
-                  {hCol('buyDate') && <th style={heldTh}>Buy Date</th>}
-                  {hCol('units')   && <th style={heldTh}>Units</th>}
-                  {hCol('nav')     && <th style={heldTh}>NAV</th>}
-                  {hCol('cost')    && <th style={heldTh}>Cost</th>}
-                  {hCol('current') && <th style={heldTh}>Current</th>}
-                  {hCol('pl')      && <th style={heldTh}>P&L</th>}
+                  {hCol('buyDate')    && <th style={heldTh}>Buy Date</th>}
+                  {hCol('units')      && <th style={heldTh}>Units</th>}
+                  {hCol('nav')        && <th style={heldTh}>Buy NAV</th>}
+                  {hCol('currentNav') && <th style={heldTh}>Current NAV</th>}
+                  {hCol('cost')       && <th style={heldTh}>Cost</th>}
+                  {hCol('current')    && <th style={heldTh}>Current Value</th>}
+                  {hCol('pl')         && <th style={heldTh}>P&L</th>}
                   <th style={heldTh}>Action</th>
                 </tr>
               </thead>
@@ -393,6 +395,11 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                       )}
                       {hCol('units')   && <td style={{ ...heldTd, fontWeight: 600 }}>{formatUnits(lot.units)}</td>}
                       {hCol('nav')     && <td style={heldTd}>{formatINR(lot.buy_price)}</td>}
+                      {hCol('currentNav') && (
+                        <td style={{ ...heldTd, fontWeight: 600, color: currentNav > 0 && currentNav >= lot.buy_price ? 'var(--green)' : 'var(--red)' }}>
+                          {currentNav > 0 ? formatINR(currentNav) : '--'}
+                        </td>
+                      )}
                       {hCol('cost')    && <td style={heldTd}>{formatINR(lot.buy_cost)}</td>}
                       {hCol('current') && (
                         <td style={{ ...heldTd, color: inProfit ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
@@ -472,6 +479,8 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                   <th style={heldTh}>Units</th>
                   <th style={heldTh}>Buy NAV</th>
                   <th style={heldTh}>Sell NAV</th>
+                  <th style={heldTh}>Cost</th>
+                  <th style={heldTh}>Sale Value</th>
                   <th style={heldTh}>Realized P&L</th>
                 </tr>
               </thead>
@@ -483,6 +492,8 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                     <td style={{ ...heldTd, fontWeight: 600 }}>{formatUnits(s.units)}</td>
                     <td style={heldTd}>{formatINR(s.buy_nav)}</td>
                     <td style={heldTd}>{formatINR(s.sell_nav)}</td>
+                    <td style={heldTd}>{formatINR((s.buy_nav || 0) * (s.units || 0))}</td>
+                    <td style={{ ...heldTd, fontWeight: 600 }}>{formatINR((s.sell_nav || 0) * (s.units || 0))}</td>
                     {(() => {
                       const mfsCost = (s.buy_nav || 0) * (s.units || 0);
                       const mfsPct = mfsCost > 0 ? (s.realized_pl / mfsCost * 100) : 0;
