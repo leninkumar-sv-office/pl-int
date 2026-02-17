@@ -1294,6 +1294,20 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                               {live.day_change >= 0 ? '+' : ''}{live.day_change.toFixed(2)} ({live.day_change_pct.toFixed(2)}%)
                             </div>
                           )}
+                          {(live.week_change_pct !== 0 || live.month_change_pct !== 0) && (
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '10px', marginTop: '2px' }}>
+                              {live.week_change_pct !== 0 && (
+                                <span style={{ color: live.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  7D: {live.week_change_pct >= 0 ? '+' : ''}{live.week_change_pct.toFixed(2)}%
+                                </span>
+                              )}
+                              {live.month_change_pct !== 0 && (
+                                <span style={{ color: live.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  1M: {live.month_change_pct >= 0 ? '+' : ''}{live.month_change_pct.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span style={{ color: stock.price_error ? 'var(--red)' : 'var(--text-muted)', fontSize: '12px' }}>

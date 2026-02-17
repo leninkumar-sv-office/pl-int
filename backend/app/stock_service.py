@@ -103,6 +103,8 @@ def _file_fallback(symbol: str, exchange: str) -> Optional[StockLiveData]:
         week_52_low=float(info.get("week_52_low", 0) or 0),
         day_change=float(info.get("day_change", 0) or 0),
         day_change_pct=float(info.get("day_change_pct", 0) or 0),
+        week_change_pct=float(info.get("week_change_pct", 0) or 0),
+        month_change_pct=float(info.get("month_change_pct", 0) or 0),
         volume=int(info.get("volume", 0) or 0),
         previous_close=float(info.get("previous_close", 0) or 0),
         is_manual=True,
@@ -381,6 +383,8 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                 "week_52_low": data.week_52_low,
                 "day_change": data.day_change,
                 "day_change_pct": data.day_change_pct,
+                "week_change_pct": data.week_change_pct,
+                "month_change_pct": data.month_change_pct,
                 "volume": data.volume,
                 "previous_close": data.previous_close,
             }
@@ -409,11 +413,15 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                     if w52 and w52.get("week_52_high", 0) > 0:
                         h = w52["week_52_high"]
                         l = w52["week_52_low"]
+                        wcp = w52.get("week_change_pct", 0.0)
+                        mcp = w52.get("month_change_pct", 0.0)
                     else:
                         # Fallback: use saved JSON or xlsx for 52-week
                         saved = saved_prices.get(key, {})
                         h = float(saved.get("week_52_high", 0) or 0)
                         l = float(saved.get("week_52_low", 0) or 0)
+                        wcp = float(saved.get("week_change_pct", 0) or 0)
+                        mcp = float(saved.get("month_change_pct", 0) or 0)
                         if h <= 0:
                             idx = _xlsx_single(sym)
                             h = idx.get("w52h", 0)
@@ -421,9 +429,13 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                     if h > 0 and key in results:
                         results[key].week_52_high = h
                         results[key].week_52_low = l
+                        results[key].week_change_pct = wcp
+                        results[key].month_change_pct = mcp
                         if key in to_save:
                             to_save[key]["week_52_high"] = h
                             to_save[key]["week_52_low"] = l
+                            to_save[key]["week_change_pct"] = wcp
+                            to_save[key]["month_change_pct"] = mcp
                 # Re-save with updated 52-week data
                 if to_save:
                     _save_prices_file(to_save)
@@ -581,6 +593,8 @@ def get_cached_prices(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData
                 week_52_low=float(info.get("week_52_low", 0) or 0),
                 day_change=float(info.get("day_change", 0) or 0),
                 day_change_pct=float(info.get("day_change_pct", 0) or 0),
+                week_change_pct=float(info.get("week_change_pct", 0) or 0),
+                month_change_pct=float(info.get("month_change_pct", 0) or 0),
                 volume=int(info.get("volume", 0) or 0),
                 previous_close=float(info.get("previous_close", 0) or 0),
                 is_manual=True,
@@ -602,6 +616,8 @@ def get_cached_prices(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData
                 week_52_low=float(alt_info.get("week_52_low", 0) or 0),
                 day_change=float(alt_info.get("day_change", 0) or 0),
                 day_change_pct=float(alt_info.get("day_change_pct", 0) or 0),
+                week_change_pct=float(alt_info.get("week_change_pct", 0) or 0),
+                month_change_pct=float(alt_info.get("month_change_pct", 0) or 0),
                 volume=int(alt_info.get("volume", 0) or 0),
                 previous_close=float(alt_info.get("previous_close", 0) or 0),
                 is_manual=True,
@@ -734,6 +750,8 @@ def bulk_update_prices(prices: Dict[str, dict]):
             week_52_low=float(info.get("week_52_low", 0) or 0),
             day_change=float(info.get("day_change", 0) or 0),
             day_change_pct=float(info.get("day_change_pct", 0) or 0),
+            week_change_pct=float(info.get("week_change_pct", 0) or 0),
+            month_change_pct=float(info.get("month_change_pct", 0) or 0),
             volume=int(info.get("volume", 0) or 0),
             previous_close=float(info.get("previous_close", 0) or 0),
             is_manual=True,
@@ -746,6 +764,8 @@ def bulk_update_prices(prices: Dict[str, dict]):
             "week_52_low": data.week_52_low,
             "day_change": data.day_change,
             "day_change_pct": data.day_change_pct,
+            "week_change_pct": data.week_change_pct,
+            "month_change_pct": data.month_change_pct,
             "volume": data.volume,
             "previous_close": data.previous_close,
         }

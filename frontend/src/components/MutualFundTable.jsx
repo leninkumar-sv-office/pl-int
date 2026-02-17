@@ -991,11 +991,27 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                     {col('avgNav') && <td>{hasHeld ? formatINR(f.avg_nav) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
                     {col('currentNav') && <td>
                       {f.current_nav > 0 ? (
-                        <div style={{
-                          fontWeight: 600,
-                          color: hasHeld ? (f.is_above_avg_nav ? 'var(--green)' : 'var(--red)') : 'var(--text)',
-                        }}>
-                          {formatINR(f.current_nav)}
+                        <div>
+                          <div style={{
+                            fontWeight: 600,
+                            color: hasHeld ? (f.is_above_avg_nav ? 'var(--green)' : 'var(--red)') : 'var(--text)',
+                          }}>
+                            {formatINR(f.current_nav)}
+                          </div>
+                          {(f.week_change_pct !== 0 || f.month_change_pct !== 0) && (
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '10px', marginTop: '2px' }}>
+                              {f.week_change_pct !== 0 && (
+                                <span style={{ color: f.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  7D: {f.week_change_pct >= 0 ? '+' : ''}{f.week_change_pct.toFixed(2)}%
+                                </span>
+                              )}
+                              {f.month_change_pct !== 0 && (
+                                <span style={{ color: f.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  1M: {f.month_change_pct >= 0 ? '+' : ''}{f.month_change_pct.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>--</span>

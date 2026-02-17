@@ -403,17 +403,18 @@ def _get_instrument_token(symbol: str, exchange: str) -> Optional[int]:
     return _instrument_token_cache.get(key)
 
 
-def _fetch_historical_52w(instrument_token: int) -> Optional[Tuple[float, float]]:
-    """Fetch 1 year of daily candles and compute 52-week high/low.
-    Returns (week_52_high, week_52_low) or None on failure.
+def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
+    """Fetch 1 year of daily candles and compute 52-week high/low + 7d/30d changes.
+    Returns {week_52_high, week_52_low, week_change_pct, month_change_pct} or None.
 
     Kite Historical Data API:
       GET /instruments/historical/{token}/day?from=YYYY-MM-DD&to=YYYY-MM-DD
       Response: {"data":{"candles":[[ts,open,high,low,close,volume],...]}}
     """
     from datetime import datetime, timedelta
-    to_date = datetime.now().strftime("%Y-%m-%d")
-    from_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    now = datetime.now()
+    to_date = now.strftime("%Y-%m-%d")
+    from_date = (now - timedelta(days=365)).strftime("%Y-%m-%d")
 
     path = f"/instruments/historical/{instrument_token}/day"
     data = _api_get(path, {"from": from_date, "to": to_date})
@@ -429,7 +430,37 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[Tuple[float, float]
     if not highs or not lows:
         return None
 
-    return (max(highs), min(lows))
+    latest_close = candles[-1][4] if len(candles[-1]) >= 5 else 0
+
+    # Find close price ~7 and ~30 calendar days ago
+    week_change_pct = 0.0
+    month_change_pct = 0.0
+    if latest_close > 0:
+        target_7d = now - timedelta(days=7)
+        target_30d = now - timedelta(days=30)
+        close_7d = 0.0
+        close_30d = 0.0
+        for c in candles:
+            try:
+                ts = c[0][:10] if isinstance(c[0], str) else c[0].strftime("%Y-%m-%d") if hasattr(c[0], 'strftime') else str(c[0])[:10]
+                candle_date = datetime.strptime(ts, "%Y-%m-%d")
+            except (ValueError, TypeError, AttributeError):
+                continue
+            if candle_date <= target_7d:
+                close_7d = c[4] if len(c) >= 5 else 0
+            if candle_date <= target_30d:
+                close_30d = c[4] if len(c) >= 5 else 0
+        if close_7d > 0:
+            week_change_pct = round((latest_close - close_7d) / close_7d * 100, 2)
+        if close_30d > 0:
+            month_change_pct = round((latest_close - close_30d) / close_30d * 100, 2)
+
+    return {
+        "week_52_high": max(highs),
+        "week_52_low": min(lows),
+        "week_change_pct": week_change_pct,
+        "month_change_pct": month_change_pct,
+    }
 
 
 def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
@@ -456,6 +487,8 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
             results[key] = {
                 "week_52_high": cached["week_52_high"],
                 "week_52_low": cached["week_52_low"],
+                "week_change_pct": cached.get("week_change_pct", 0.0),
+                "month_change_pct": cached.get("month_change_pct", 0.0),
             }
             continue
 
@@ -476,10 +509,11 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         try:
             result = _fetch_historical_52w(token)
             if result:
-                w52h, w52l = result
                 entry = {
-                    "week_52_high": round(w52h, 2),
-                    "week_52_low": round(w52l, 2),
+                    "week_52_high": round(result["week_52_high"], 2),
+                    "week_52_low": round(result["week_52_low"], 2),
+                    "week_change_pct": result.get("week_change_pct", 0.0),
+                    "month_change_pct": result.get("month_change_pct", 0.0),
                     "fetched_at": now,
                 }
                 with _52w_cache_lock:
@@ -487,6 +521,8 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 results[key] = {
                     "week_52_high": entry["week_52_high"],
                     "week_52_low": entry["week_52_low"],
+                    "week_change_pct": entry["week_change_pct"],
+                    "month_change_pct": entry["month_change_pct"],
                 }
                 fetched += 1
             else:

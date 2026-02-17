@@ -93,6 +93,95 @@ def clear_nav_cache():
         _nav_cache.clear()
 
 
+# ═══════════════════════════════════════════════════════════
+#  NAV HISTORY (for 7D / 1M change tracking)
+# ═══════════════════════════════════════════════════════════
+
+import os, json
+
+_NAV_HISTORY_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+_NAV_HISTORY_FILE = os.path.join(_NAV_HISTORY_DIR, "nav_history.json")
+_nav_history_lock = threading.Lock()
+
+
+def _load_nav_history() -> Dict[str, Dict[str, float]]:
+    """Load {fund_code: {date_str: nav, ...}} from disk."""
+    try:
+        with open(_NAV_HISTORY_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_nav_history(history: Dict[str, Dict[str, float]]):
+    """Persist NAV history to disk."""
+    os.makedirs(_NAV_HISTORY_DIR, exist_ok=True)
+    try:
+        with open(_NAV_HISTORY_FILE, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception as e:
+        print(f"[MF-NavHistory] Failed to save: {e}")
+
+
+def record_nav_history(live_navs: Dict[str, float]):
+    """Record today's NAVs into the history file."""
+    if not live_navs:
+        return
+    today_str = date.today().strftime("%Y-%m-%d")
+    with _nav_history_lock:
+        history = _load_nav_history()
+        for fund_code, nav in live_navs.items():
+            if nav <= 0:
+                continue
+            if fund_code not in history:
+                history[fund_code] = {}
+            history[fund_code][today_str] = nav
+        _save_nav_history(history)
+
+
+def compute_nav_changes(fund_code: str, current_nav: float) -> Dict[str, float]:
+    """Compute 7D and 30D NAV change percentages from history.
+    Returns {week_change_pct, month_change_pct}."""
+    result = {"week_change_pct": 0.0, "month_change_pct": 0.0}
+    if current_nav <= 0:
+        return result
+
+    with _nav_history_lock:
+        history = _load_nav_history()
+
+    fund_hist = history.get(fund_code, {})
+    if not fund_hist:
+        return result
+
+    from datetime import timedelta
+    today = date.today()
+    target_7d = today - timedelta(days=7)
+    target_30d = today - timedelta(days=30)
+
+    # Find the closest NAV on or before the target date
+    def find_closest_nav(target: date) -> float:
+        best_date = None
+        best_nav = 0.0
+        for date_str, nav in fund_hist.items():
+            try:
+                d = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if d <= target:
+                if best_date is None or d > best_date:
+                    best_date = d
+                    best_nav = nav
+        return best_nav
+
+    nav_7d = find_closest_nav(target_7d)
+    nav_30d = find_closest_nav(target_30d)
+
+    if nav_7d > 0:
+        result["week_change_pct"] = round((current_nav - nav_7d) / nav_7d * 100, 2)
+    if nav_30d > 0:
+        result["month_change_pct"] = round((current_nav - nav_30d) / nav_30d * 100, 2)
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -508,6 +597,9 @@ class MFXlsxPortfolio:
         all_codes = list(self._file_map.keys())
         live_navs = fetch_live_navs(all_codes)
 
+        # Record today's NAVs for 7d/30d tracking
+        record_nav_history(live_navs)
+
         for fund_code in all_codes:
             try:
                 holdings, sold, idx_data = self._get_fund_data(fund_code)
@@ -564,6 +656,9 @@ class MFXlsxPortfolio:
                 else:
                     stcg_rpl += s.realized_pl
 
+            # 7D / 1M NAV changes
+            nav_changes = compute_nav_changes(fund_code, current_nav)
+
             summaries.append({
                 "fund_code": fund_code,
                 "name": name,
@@ -584,6 +679,8 @@ class MFXlsxPortfolio:
                 "num_sold_lots": len(sold),
                 "week_52_high": w52_high,
                 "week_52_low": w52_low,
+                "week_change_pct": nav_changes["week_change_pct"],
+                "month_change_pct": nav_changes["month_change_pct"],
                 "is_above_avg_nav": current_nav > avg_nav if current_nav > 0 and avg_nav > 0 else False,
                 # Include held lots and sold lots for detail view
                 "held_lots": [

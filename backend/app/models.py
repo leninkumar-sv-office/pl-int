@@ -83,6 +83,8 @@ class StockLiveData(BaseModel):
     week_52_low: float
     day_change: float = 0.0
     day_change_pct: float = 0.0
+    week_change_pct: float = 0.0
+    month_change_pct: float = 0.0
     volume: int = 0
     previous_close: float = 0.0
     is_manual: bool = False
