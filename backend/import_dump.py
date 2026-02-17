@@ -20,7 +20,7 @@ from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).parent
-DUMP_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else SCRIPT_DIR.parent / "dumps" / "Stocks"
+DUMP_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/Users/lenin/Google Drive/My Drive/pl/dumps") / "Stocks"
 DB_FILE = SCRIPT_DIR / "data" / "portfolio.json"
 
 # ── Symbol resolution: dynamic from Zerodha + NSE (no hardcoded map) ──

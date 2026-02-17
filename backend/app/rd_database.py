@@ -40,7 +40,7 @@ from .models import RDItem
 #  FILE PATHS
 # ═══════════════════════════════════════════════════════════
 
-DUMPS_DIR = Path(__file__).resolve().parent.parent.parent / "dumps"
+from app.config import DUMPS_DIR
 RD_XLSX_DIR = DUMPS_DIR / "RD"
 RD_JSON_FILE = DUMPS_DIR / "recurring_deposits.json"
 

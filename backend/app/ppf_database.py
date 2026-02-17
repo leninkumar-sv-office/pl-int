@@ -18,7 +18,7 @@ from pathlib import Path
 #  FILE PATHS
 # ═══════════════════════════════════════════════════════════
 
-DUMPS_DIR = Path(__file__).resolve().parent.parent.parent / "dumps"
+from app.config import DUMPS_DIR
 PPF_FILE = DUMPS_DIR / "ppf_accounts.json"
 
 _lock = threading.Lock()

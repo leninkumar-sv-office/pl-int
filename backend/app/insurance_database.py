@@ -17,7 +17,7 @@ from .models import InsurancePolicy
 #  FILE PATH
 # ═══════════════════════════════════════════════════════════
 
-DUMPS_DIR = Path(__file__).resolve().parent.parent.parent / "dumps"
+from app.config import DUMPS_DIR
 INSURANCE_FILE = DUMPS_DIR / "insurance_policies.json"
 
 _lock = threading.Lock()

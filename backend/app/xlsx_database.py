@@ -1310,7 +1310,7 @@ class XlsxPortfolio:
 #  MODULE-LEVEL SINGLETON
 # ═══════════════════════════════════════════════════════════
 
-# Path: relative to backend/ directory → ../dumps/Stocks
-_STOCKS_DIR = Path(__file__).parent.parent.parent / "dumps" / "Stocks"
+from app.config import DUMPS_DIR as _DUMPS_DIR
+_STOCKS_DIR = _DUMPS_DIR / "Stocks"
 
 xlsx_db = XlsxPortfolio(_STOCKS_DIR)

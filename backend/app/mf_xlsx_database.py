@@ -847,6 +847,7 @@ class MFXlsxPortfolio:
 #  MODULE-LEVEL SINGLETON
 # ═══════════════════════════════════════════════════════════
 
-_MF_DIR = Path(__file__).parent.parent.parent / "dumps" / "Mutual Funds"
+from app.config import DUMPS_DIR as _DUMPS_DIR
+_MF_DIR = _DUMPS_DIR / "Mutual Funds"
 
 mf_db = MFXlsxPortfolio(_MF_DIR)

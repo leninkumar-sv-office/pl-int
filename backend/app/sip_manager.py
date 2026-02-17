@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
-_SIP_CONFIG_FILE = Path(__file__).parent.parent.parent / "dumps" / "sip_config.json"
+from app.config import DUMPS_DIR as _DUMPS_DIR
+_SIP_CONFIG_FILE = _DUMPS_DIR / "sip_config.json"
 
 
 class SIPManager:

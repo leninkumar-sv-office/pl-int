@@ -41,7 +41,7 @@ from .models import FDItem
 #  FILE PATHS
 # ═══════════════════════════════════════════════════════════
 
-DUMPS_DIR = Path(__file__).resolve().parent.parent.parent / "dumps"
+from app.config import DUMPS_DIR
 FD_XLSX_DIR = DUMPS_DIR / "FD"
 FD_JSON_FILE = DUMPS_DIR / "fixed_deposits.json"
 
