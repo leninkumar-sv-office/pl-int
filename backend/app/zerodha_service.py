@@ -801,11 +801,10 @@ def search_mf_instruments(query: str, plan: str = "direct", scheme_type: str = "
         if plan_filter and inst_plan != plan_filter:
             continue
         # Apply scheme type filter
-        # Kite scheme_type can be: growth, balanced, equity, debt, fund of funds, etc.
-        # dividend_type indicates IDCW: payout, reinvestment, etc.
-        inst_scheme = inst.get("scheme_type", "").lower()
-        inst_div_type = inst.get("dividend_type", "").lower()
-        is_dividend = inst_div_type not in ("", "na")
+        # Kite dividend_type: "growth", "payout", "reinvestment", "interim", "na", ""
+        # "growth" or empty/"na" → Growth fund; anything else → IDCW/Dividend
+        inst_div_type = inst.get("dividend_type", "").lower().strip()
+        is_dividend = inst_div_type not in ("", "na", "growth")
         if type_filter:
             if type_filter == "growth" and is_dividend:
                 continue
@@ -831,9 +830,18 @@ def search_mf_instruments(query: str, plan: str = "direct", scheme_type: str = "
         })
         if len(results) >= 15:
             break
+    if not results and q:
+        # Debug: show what's being filtered out
+        for inst in _mf_instruments[:5000]:
+            name_upper = inst["name"].upper()
+            if all(w in name_upper for w in words):
+                print(f"[MF-Search] Filtered out: {inst['name']} | plan={inst.get('plan','')} "
+                      f"| scheme_type={inst.get('scheme_type','')} | dividend_type={inst.get('dividend_type','')} "
+                      f"| filters: plan={plan_filter} type={type_filter}")
+                break
     results.sort(key=lambda r: (
         0 if r.get("plan", "").lower() == "direct" else 1,
-        0 if r.get("dividend_type", "").lower() in ("", "na") else 1,
+        0 if r.get("dividend_type", "").lower() in ("", "na", "growth") else 1,
         r["name"],
     ))
     return results
