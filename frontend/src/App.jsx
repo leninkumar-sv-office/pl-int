@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -74,83 +74,42 @@ export default function App() {
   const [addPPFModalData, setAddPPFModalData] = useState(null);
   const [ppfModalMode, setPpfModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
 
-  // Read cached data from backend (fast, no external calls)
-  // Uses allSettled so one failing endpoint doesn't block the rest
+  // Read ALL cached data from backend in one parallel batch
   const loadData = useCallback(async () => {
     try {
-      const [pResult, sResult, tResult, ssResult] = await Promise.allSettled([
+      const [
+        pR, sR, tR, ssR, tickR, zsR,
+        mfSumR, mfDashR, sipR,
+        fdSumR, fdDashR, rdSumR, rdDashR, insSumR, insDashR, ppfSumR, ppfDashR,
+      ] = await Promise.allSettled([
         getPortfolio(),
         getDashboardSummary(),
         getTransactions(),
         getStockSummary(),
-      ]);
-      if (pResult.status === 'fulfilled') setPortfolio(pResult.value);
-      else console.error('Portfolio load failed:', pResult.reason);
-
-      if (sResult.status === 'fulfilled') setSummary(sResult.value);
-      else console.error('Summary load failed:', sResult.reason);
-
-      if (tResult.status === 'fulfilled') setTransactions(tResult.value);
-      else console.error('Transactions load failed:', tResult.reason);
-
-      if (ssResult.status === 'fulfilled') setStockSummary(ssResult.value);
-      else console.error('Stock summary load failed:', ssResult.reason);
-
-      // Show toast with details on which endpoints failed
-      const results = [
-        { name: 'Portfolio', r: pResult },
-        { name: 'Summary', r: sResult },
-        { name: 'Transactions', r: tResult },
-        { name: 'Stocks', r: ssResult },
-      ];
-      const failed = results.filter(x => x.r.status === 'rejected');
-      if (failed.length === results.length) {
-        const reason = failed[0].r.reason?.message || 'Server unreachable';
-        toast.error(`Failed to load data: ${reason}`);
-      } else if (failed.length > 0) {
-        const names = failed.map(x => x.name).join(', ');
-        toast.error(`Failed to load: ${names}`);
-      }
-    } catch (err) {
-      console.error('Failed to load data:', err);
-      toast.error(`Failed to load portfolio data: ${err.message || err}`);
-    } finally {
-      setLoading(false);
-    }
-    // Load market ticker + Zerodha status + MF data separately (non-blocking)
-    try {
-      const tickerData = await getMarketTicker();
-      setMarketTicker(tickerData);
-    } catch (err) {
-      console.error('Failed to load market ticker:', err);
-    }
-    try {
-      const zs = await getZerodhaStatus();
-      setZerodhaStatus(zs);
-    } catch (err) {
-      console.error('Failed to load Zerodha status:', err);
-    }
-    // Mutual fund data + SIP configs (non-blocking)
-    try {
-      const [mfSumResult, mfDashResult, sipResult] = await Promise.allSettled([
+        getMarketTicker(),
+        getZerodhaStatus(),
         getMFSummary(),
         getMFDashboard(),
         getSIPConfigs(),
-      ]);
-      if (mfSumResult.status === 'fulfilled') setMfSummary(mfSumResult.value);
-      if (mfDashResult.status === 'fulfilled') setMfDashboard(mfDashResult.value);
-      if (sipResult.status === 'fulfilled') setSipConfigs(sipResult.value);
-    } catch (err) {
-      console.error('Failed to load MF data:', err);
-    }
-    // FD / RD / Insurance / PPF data (non-blocking)
-    try {
-      const [fdSumR, fdDashR, rdSumR, rdDashR, insSumR, insDashR, ppfSumR, ppfDashR] = await Promise.allSettled([
         getFDSummary(), getFDDashboard(),
         getRDSummary(), getRDDashboard(),
         getInsuranceSummary(), getInsuranceDashboard(),
         getPPFSummary(), getPPFDashboard(),
       ]);
+
+      // Core stock data
+      if (pR.status === 'fulfilled') setPortfolio(pR.value);
+      if (sR.status === 'fulfilled') setSummary(sR.value);
+      if (tR.status === 'fulfilled') setTransactions(tR.value);
+      if (ssR.status === 'fulfilled') setStockSummary(ssR.value);
+      // Market & status
+      if (tickR.status === 'fulfilled') setMarketTicker(tickR.value);
+      if (zsR.status === 'fulfilled') setZerodhaStatus(zsR.value);
+      // Mutual funds
+      if (mfSumR.status === 'fulfilled') setMfSummary(mfSumR.value);
+      if (mfDashR.status === 'fulfilled') setMfDashboard(mfDashR.value);
+      if (sipR.status === 'fulfilled') setSipConfigs(sipR.value);
+      // FD / RD / Insurance / PPF
       if (fdSumR.status === 'fulfilled') setFdSummary(fdSumR.value);
       if (fdDashR.status === 'fulfilled') setFdDashboard(fdDashR.value);
       if (rdSumR.status === 'fulfilled') setRdSummary(rdSumR.value);
@@ -159,24 +118,37 @@ export default function App() {
       if (insDashR.status === 'fulfilled') setInsuranceDashboard(insDashR.value);
       if (ppfSumR.status === 'fulfilled') setPpfAccounts(ppfSumR.value);
       if (ppfDashR.status === 'fulfilled') setPpfDashboard(ppfDashR.value);
+
+      // Toast only for core stock endpoints
+      const core = [
+        { name: 'Portfolio', r: pR }, { name: 'Summary', r: sR },
+        { name: 'Transactions', r: tR }, { name: 'Stocks', r: ssR },
+      ];
+      const failed = core.filter(x => x.r.status === 'rejected');
+      if (failed.length === core.length) {
+        toast.error(`Failed to load data: ${failed[0].r.reason?.message || 'Server unreachable'}`);
+      } else if (failed.length > 0) {
+        toast.error(`Failed to load: ${failed.map(x => x.name).join(', ')}`);
+      }
     } catch (err) {
-      console.error('Failed to load FD/RD/Insurance/PPF data:', err);
+      console.error('Failed to load data:', err);
+      toast.error(`Failed to load data: ${err.message || err}`);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // Trigger actual live refresh from external sources (Zerodha/Yahoo/Google)
-  // then read updated data
+  // Trigger ALL live refreshes in parallel, then reload all data
   const liveRefresh = useCallback(async () => {
     try {
-      // Fire both live refreshes in parallel
       await Promise.all([
         triggerPriceRefresh().catch(e => console.error('Price refresh error:', e)),
         triggerTickerRefresh().catch(e => console.error('Ticker refresh error:', e)),
+        triggerMFNavRefresh().catch(e => console.error('MF NAV refresh error:', e)),
       ]);
     } catch (err) {
       console.error('Live refresh error:', err);
     }
-    // Now read the updated data
     await loadData();
   }, [loadData]);
 

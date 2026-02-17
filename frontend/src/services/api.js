@@ -126,6 +126,11 @@ export async function triggerTickerRefresh() {
   return data;
 }
 
+export async function triggerMFNavRefresh() {
+  const { data } = await api.post('/mutual-funds/refresh-nav', null, { timeout: 120000 });
+  return data;
+}
+
 // ── Settings ────────────────────────────────────────
 
 export async function getRefreshInterval() {
