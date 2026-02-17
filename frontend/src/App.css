@@ -171,20 +171,20 @@ body {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
-  margin-bottom: 32px;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 .summary-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
   transition: border-color 0.2s;
 }
 .summary-card:hover { border-color: var(--blue); }
-.summary-card .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-.summary-card .value { font-size: 20px; font-weight: 700; }
-.summary-card .sub { font-size: 11px; margin-top: 3px; }
+.summary-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.summary-card .value { font-size: 15px; font-weight: 700; }
+.summary-card .sub { font-size: 10px; margin-top: 1px; }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
 .neutral { color: var(--text-dim); }
@@ -237,10 +237,9 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow-x: auto;
 }
 table { width: 100%; border-collapse: collapse; }
-thead { background: rgba(255,255,255,0.03); }
+thead { background: var(--bg-card); }
 th {
   padding: 12px 10px;
   text-align: left;
@@ -251,6 +250,10 @@ th {
   font-weight: 600;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  z-index: 10;
 }
 td {
   padding: 12px 10px;

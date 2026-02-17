@@ -684,6 +684,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'total_sold_qty': aVal = a.total_sold_qty; bVal = b.total_sold_qty; break;
       case 'total_invested': aVal = a.total_invested; bVal = b.total_invested; break;
       case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
+      case 'day_change_pct':
+        aVal = a.live?.day_change_pct || 0; bVal = b.live?.day_change_pct || 0; break;
       case 'unrealized_profit':
         aVal = a.unrealized_profit || 0; bVal = b.unrealized_profit || 0; break;
       case 'ltcg_unrealized_profit':
@@ -1026,7 +1028,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         </div>
       </div>
 
-      <div className="table-container" style={{ overflowX: 'auto' }}>
+      <div className="table-container">
         <table>
           <thead>
             {/* Row 1: grouped headers */}
@@ -1044,7 +1046,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('price') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Price</th>}
               {col('buyPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Buy Price</th>}
               {col('totalCost') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Total Cost</th>}
-              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Current Price</th>}
+              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('day_change_pct')} style={{ cursor: 'pointer' }}>
+                Current Price<SortIcon field="day_change_pct" />
+              </th>}
               {col('w52Low') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="week_52_low" />
               </th>}
@@ -1083,7 +1087,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     { label: 'STCG',  field: group.stcg },
                   ].map(c => (
                     <th key={c.field} onClick={() => handleSort(c.field)}
-                        style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.85, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.85, cursor: 'pointer', whiteSpace: 'nowrap', top: '36px' }}>
                       {c.label}<SortIcon field={c.field} />
                     </th>
                   ))}

@@ -814,9 +814,6 @@ export default function App() {
         );
       })()}
 
-      {/* Market Ticker */}
-      <MarketTicker tickers={marketTicker} loading={loading} />
-
       {/* Header */}
       <header className="header">
         <h1><span>Portfolio</span> Dashboard</h1>
@@ -891,6 +888,9 @@ export default function App() {
 
       {/* Dashboard Summary — combined Stocks + MF */}
       <Dashboard summary={summary} mfDashboard={mfDashboard} loading={loading} />
+
+      {/* Market Ticker */}
+      <MarketTicker tickers={marketTicker} loading={loading} />
 
       {/* Tabs */}
       <div className="tabs">

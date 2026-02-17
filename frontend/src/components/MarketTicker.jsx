@@ -92,18 +92,18 @@ const styles = {
     whiteSpace: 'nowrap',
   },
   label: {
-    fontSize: '11px',
+    fontSize: '12px',
     fontWeight: 600,
     color: 'var(--text-dim)',
     textTransform: 'uppercase',
     letterSpacing: '0.3px',
   },
   price: {
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: 700,
   },
   change: {
-    fontSize: '10px',
+    fontSize: '11px',
     fontWeight: 600,
     padding: '2px 6px',
     borderRadius: '4px',
