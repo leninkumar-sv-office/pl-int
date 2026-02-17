@@ -94,94 +94,182 @@ def clear_nav_cache():
 
 
 # ═══════════════════════════════════════════════════════════
-#  NAV HISTORY (for 7D / 1M change tracking)
+#  NAV HISTORY via mfapi.in  (7D / 1M change tracking)
 # ═══════════════════════════════════════════════════════════
 
 import os, json
 
-_NAV_HISTORY_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-_NAV_HISTORY_FILE = os.path.join(_NAV_HISTORY_DIR, "nav_history.json")
-_nav_history_lock = threading.Lock()
+_NAV_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+_SCHEME_MAP_FILE = os.path.join(_NAV_DATA_DIR, "mf_scheme_map.json")
+
+# In-memory cache: {fund_code: {week_change_pct, month_change_pct, fetched_at}}
+_nav_change_cache: Dict[str, dict] = {}
+_nav_change_cache_lock = threading.Lock()
+_NAV_CHANGE_CACHE_TTL = 6 * 3600  # 6 hours
 
 
-def _load_nav_history() -> Dict[str, Dict[str, float]]:
-    """Load {fund_code: {date_str: nav, ...}} from disk."""
+def _load_scheme_map() -> Dict[str, int]:
+    """Load {fund_code: amfi_scheme_code} mapping from disk."""
     try:
-        with open(_NAV_HISTORY_FILE) as f:
+        with open(_SCHEME_MAP_FILE) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
-def _save_nav_history(history: Dict[str, Dict[str, float]]):
-    """Persist NAV history to disk."""
-    os.makedirs(_NAV_HISTORY_DIR, exist_ok=True)
+def _save_scheme_map(mapping: Dict[str, int]):
+    """Persist scheme mapping to disk."""
+    os.makedirs(_NAV_DATA_DIR, exist_ok=True)
     try:
-        with open(_NAV_HISTORY_FILE, "w") as f:
-            json.dump(history, f, indent=2)
+        with open(_SCHEME_MAP_FILE, "w") as f:
+            json.dump(mapping, f, indent=2)
     except Exception as e:
-        print(f"[MF-NavHistory] Failed to save: {e}")
+        print(f"[MF-MFAPI] Failed to save scheme map: {e}")
 
 
-def record_nav_history(live_navs: Dict[str, float]):
-    """Record today's NAVs into the history file."""
-    if not live_navs:
-        return
-    today_str = date.today().strftime("%Y-%m-%d")
-    with _nav_history_lock:
-        history = _load_nav_history()
-        for fund_code, nav in live_navs.items():
-            if nav <= 0:
-                continue
-            if fund_code not in history:
-                history[fund_code] = {}
-            history[fund_code][today_str] = nav
-        _save_nav_history(history)
+def _search_mfapi_scheme(fund_name: str) -> Optional[int]:
+    """Search mfapi.in for a scheme code by fund name.
+    Returns AMFI scheme code (int) or None."""
+    # Clean the fund name for search
+    q = fund_name.strip()
+    # Remove common suffixes that might differ
+    for suffix in [" - Direct Plan", " Direct Plan", " - Direct", " Direct"]:
+        q = q.replace(suffix, "")
+    # Use first few significant words
+    words = q.split()[:5]
+    search_q = " ".join(words)
+    try:
+        resp = _requests.get(
+            f"https://api.mfapi.in/mf/search?q={search_q}",
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            results = resp.json()
+            if results and len(results) > 0:
+                # Try to find "Direct" + "Growth" variant first
+                name_upper = fund_name.upper()
+                for r in results:
+                    rn = r.get("schemeName", "").upper()
+                    if "DIRECT" in rn and "GROWTH" in rn:
+                        return int(r["schemeCode"])
+                # Fall back to first match with "Direct"
+                for r in results:
+                    rn = r.get("schemeName", "").upper()
+                    if "DIRECT" in rn:
+                        return int(r["schemeCode"])
+                # Fall back to first result
+                return int(results[0]["schemeCode"])
+    except Exception as e:
+        print(f"[MF-MFAPI] Search error for '{search_q}': {e}")
+    return None
 
 
-def compute_nav_changes(fund_code: str, current_nav: float) -> Dict[str, float]:
-    """Compute 7D and 30D NAV change percentages from history.
+def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
+    """Fetch NAV history from mfapi.in for a scheme.
+    Returns list of {date: DD-MM-YYYY, nav: str} or None."""
+    try:
+        resp = _requests.get(
+            f"https://api.mfapi.in/mf/{scheme_code}",
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("data", [])
+    except Exception as e:
+        print(f"[MF-MFAPI] Fetch error for scheme {scheme_code}: {e}")
+    return None
+
+
+def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
+    """Compute 7D and 30D NAV change % using mfapi.in historical data.
     Returns {week_change_pct, month_change_pct}."""
     result = {"week_change_pct": 0.0, "month_change_pct": 0.0}
     if current_nav <= 0:
         return result
 
-    with _nav_history_lock:
-        history = _load_nav_history()
+    # Check in-memory cache
+    now = time.time()
+    with _nav_change_cache_lock:
+        cached = _nav_change_cache.get(fund_code)
+        if cached and (now - cached.get("fetched_at", 0)) < _NAV_CHANGE_CACHE_TTL:
+            return {
+                "week_change_pct": cached["week_change_pct"],
+                "month_change_pct": cached["month_change_pct"],
+            }
 
-    fund_hist = history.get(fund_code, {})
-    if not fund_hist:
+    # Look up AMFI scheme code (cached on disk)
+    scheme_map = _load_scheme_map()
+    scheme_code = scheme_map.get(fund_code)
+
+    if not scheme_code:
+        scheme_code = _search_mfapi_scheme(fund_name)
+        if scheme_code:
+            scheme_map[fund_code] = scheme_code
+            _save_scheme_map(scheme_map)
+            print(f"[MF-MFAPI] Mapped {fund_name[:40]} → scheme {scheme_code}")
+        else:
+            print(f"[MF-MFAPI] No scheme found for {fund_name[:40]}")
+            # Cache the miss so we don't retry every call
+            with _nav_change_cache_lock:
+                _nav_change_cache[fund_code] = {
+                    "week_change_pct": 0.0, "month_change_pct": 0.0,
+                    "fetched_at": now,
+                }
+            return result
+
+    # Fetch historical NAV data
+    nav_data = _fetch_nav_history_mfapi(scheme_code)
+    if not nav_data:
         return result
 
+    # Parse dates and find NAVs ~7d and ~30d ago
     from datetime import timedelta
     today = date.today()
     target_7d = today - timedelta(days=7)
     target_30d = today - timedelta(days=30)
 
-    # Find the closest NAV on or before the target date
-    def find_closest_nav(target: date) -> float:
-        best_date = None
-        best_nav = 0.0
-        for date_str, nav in fund_hist.items():
-            try:
-                d = datetime.strptime(date_str, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if d <= target:
-                if best_date is None or d > best_date:
-                    best_date = d
-                    best_nav = nav
-        return best_nav
+    nav_7d = 0.0
+    nav_30d = 0.0
+    best_7d_date = None
+    best_30d_date = None
 
-    nav_7d = find_closest_nav(target_7d)
-    nav_30d = find_closest_nav(target_30d)
+    for entry in nav_data:
+        try:
+            d = datetime.strptime(entry["date"], "%d-%m-%Y").date()
+            nav_val = float(entry["nav"])
+        except (ValueError, KeyError, TypeError):
+            continue
+
+        # Find closest date on or before target_7d
+        if d <= target_7d:
+            if best_7d_date is None or d > best_7d_date:
+                best_7d_date = d
+                nav_7d = nav_val
+        # Find closest date on or before target_30d
+        if d <= target_30d:
+            if best_30d_date is None or d > best_30d_date:
+                best_30d_date = d
+                nav_30d = nav_val
 
     if nav_7d > 0:
         result["week_change_pct"] = round((current_nav - nav_7d) / nav_7d * 100, 2)
     if nav_30d > 0:
         result["month_change_pct"] = round((current_nav - nav_30d) / nav_30d * 100, 2)
 
+    # Cache result
+    with _nav_change_cache_lock:
+        _nav_change_cache[fund_code] = {
+            "week_change_pct": result["week_change_pct"],
+            "month_change_pct": result["month_change_pct"],
+            "fetched_at": now,
+        }
+
     return result
+
+
+def record_nav_history(live_navs: Dict[str, float]):
+    """No-op — kept for compatibility. mfapi.in provides history directly."""
+    pass
 
 
 # ═══════════════════════════════════════════════════════════
@@ -657,7 +745,7 @@ class MFXlsxPortfolio:
                     stcg_rpl += s.realized_pl
 
             # 7D / 1M NAV changes
-            nav_changes = compute_nav_changes(fund_code, current_nav)
+            nav_changes = compute_nav_changes(fund_code, name, current_nav)
 
             summaries.append({
                 "fund_code": fund_code,

@@ -998,18 +998,14 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                           }}>
                             {formatINR(f.current_nav)}
                           </div>
-                          {(f.week_change_pct !== 0 || f.month_change_pct !== 0) && (
-                            <div style={{ display: 'flex', gap: '8px', fontSize: '10px', marginTop: '2px' }}>
-                              {f.week_change_pct !== 0 && (
-                                <span style={{ color: f.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  7D: {f.week_change_pct >= 0 ? '+' : ''}{f.week_change_pct.toFixed(2)}%
-                                </span>
-                              )}
-                              {f.month_change_pct !== 0 && (
-                                <span style={{ color: f.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  1M: {f.month_change_pct >= 0 ? '+' : ''}{f.month_change_pct.toFixed(2)}%
-                                </span>
-                              )}
+                          {f.week_change_pct !== 0 && (
+                            <div style={{ fontSize: '10px', color: f.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              7D: {f.week_change_pct >= 0 ? '+' : ''}{f.week_change_pct.toFixed(2)}%
+                            </div>
+                          )}
+                          {f.month_change_pct !== 0 && (
+                            <div style={{ fontSize: '10px', color: f.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              1M: {f.month_change_pct >= 0 ? '+' : ''}{f.month_change_pct.toFixed(2)}%
                             </div>
                           )}
                         </div>
