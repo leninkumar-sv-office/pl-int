@@ -1007,7 +1007,28 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       </div>
                     </td>}
                     {col('invested') && <td>{hasHeld ? formatINR(f.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
-                    {col('unrealizedPL') && <td style={{ whiteSpace: 'nowrap' }}>
+                    {col('unrealizedPL') && (() => {
+                      const lots = f.held_lots || [];
+                      const totalCost = f.total_invested || 0;
+                      const weightedDays = lots.reduce((sum, l) => {
+                        const cost = l.buy_cost || (l.buy_price * l.units) || 0;
+                        if (cost <= 0 || !l.buy_date) return sum;
+                        const days = Math.floor((Date.now() - new Date(l.buy_date + 'T00:00:00').getTime()) / 86400000);
+                        return sum + cost * days;
+                      }, 0);
+                      const avgDays = totalCost > 0 ? Math.round(weightedDays / totalCost) : 0;
+                      const pa = avgDays > 0 && totalCost > 0
+                        ? (Math.pow(1 + f.unrealized_pl / totalCost, 365 / avgDays) - 1) * 100 : null;
+                      const durY = Math.floor(avgDays / 365);
+                      const durM = Math.floor((avgDays % 365) / 30);
+                      const durD = avgDays % 30;
+                      let durStr = '';
+                      if (durY > 0) durStr += `${durY}y `;
+                      if (durM > 0) durStr += `${durM}m `;
+                      if (durD > 0 && durY === 0) durStr += `${durD}d`;
+                      durStr = durStr.trim();
+                      return (
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {hasHeld && f.unrealized_pl !== 0 ? (
                         <div>
                           <div style={{ fontWeight: 600, color: plColor }}>
@@ -1015,12 +1036,19 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                           </div>
                           <div style={{ fontSize: '11px', color: plColor, opacity: 0.85 }}>
                             {f.unrealized_pl_pct >= 0 ? '+' : ''}{f.unrealized_pl_pct?.toFixed(2)}%
+                            {durStr ? ` in ${durStr}` : ''}
                           </div>
+                          {pa !== null && (
+                            <div style={{ fontSize: '11px', color: plColor, opacity: 0.85 }}>
+                              {pa >= 0 ? '+' : ''}{pa.toFixed(1)}% p.a.
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
-                    </td>}
+                    </td>);
+                    })()}
                     {col('realizedPL') && <td style={{ whiteSpace: 'nowrap' }}>
                       {f.realized_pl !== 0 ? (
                         <div style={{ fontWeight: 600, color: rplColor }}>

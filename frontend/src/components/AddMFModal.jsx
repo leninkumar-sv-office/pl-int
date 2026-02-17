@@ -117,19 +117,6 @@ export default function AddMFModal({ onAdd, onClose, initialData, funds }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Units *</label>
-              <input
-                name="units"
-                type="number"
-                step="any"
-                min="0.001"
-                value={form.units}
-                onChange={handleChange}
-                placeholder="Number of units"
-                required
-              />
-            </div>
-            <div className="form-group">
               <label>NAV (₹) *</label>
               <input
                 name="nav"
@@ -139,6 +126,19 @@ export default function AddMFModal({ onAdd, onClose, initialData, funds }) {
                 value={form.nav}
                 onChange={handleChange}
                 placeholder="NAV per unit"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Units *</label>
+              <input
+                name="units"
+                type="number"
+                step="any"
+                min="0.001"
+                value={form.units}
+                onChange={handleChange}
+                placeholder="Number of units"
                 required
               />
             </div>
