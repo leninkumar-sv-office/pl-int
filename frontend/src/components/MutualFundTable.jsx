@@ -911,7 +911,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       </div>
 
       {/* ── Main Table ───────────────────────────────── */}
-      <div className="table-container" style={{ overflowX: 'auto' }}>
+      <div className="table-container">
         <table>
           <thead>
             <tr>
