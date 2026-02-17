@@ -724,6 +724,132 @@ def search_instruments(query: str, exchange: str = "") -> list:
 
 
 # ═══════════════════════════════════════════════════════════
+#  MUTUAL FUND INSTRUMENTS
+# ═══════════════════════════════════════════════════════════
+
+# MF instrument cache: [{tradingsymbol, amc, name, last_price, last_price_date}, ...]
+_mf_instruments: List[dict] = []
+_mf_instruments_loaded = False
+_mf_instruments_lock = threading.Lock()
+
+
+def _load_mf_instruments():
+    """Download MF instruments from Kite: GET /mf/instruments (CSV).
+    Fields: tradingsymbol, amc, name, purchase_allowed, redemption_allowed,
+    minimum_purchase_amount, ..., last_price, last_price_date
+    """
+    global _mf_instruments_loaded
+    import csv
+    import io
+
+    if not _api_key or not _access_token:
+        return
+
+    with _mf_instruments_lock:
+        if _mf_instruments_loaded:
+            return
+
+    try:
+        resp = requests.get(
+            f"{_BASE_URL}/mf/instruments",
+            headers=_headers(),
+            timeout=(5, 30),
+        )
+        if resp.status_code != 200:
+            print(f"[Zerodha] MF instruments failed: {resp.status_code}")
+            return
+        reader = csv.DictReader(io.StringIO(resp.text))
+        instruments = []
+        for row in reader:
+            instruments.append({
+                "tradingsymbol": row.get("tradingsymbol", "").strip(),
+                "amc": row.get("amc", "").strip(),
+                "name": row.get("name", "").strip(),
+                "scheme_type": row.get("scheme_type", "").strip(),
+                "plan": row.get("plan", "").strip(),
+                "dividend_type": row.get("dividend_type", "").strip(),
+                "last_price": float(row.get("last_price", 0) or 0),
+                "last_price_date": row.get("last_price_date", "").strip(),
+            })
+        with _mf_instruments_lock:
+            _mf_instruments.clear()
+            _mf_instruments.extend(instruments)
+            _mf_instruments_loaded = True
+        print(f"[Zerodha] Loaded {len(instruments)} MF instruments")
+    except Exception as e:
+        print(f"[Zerodha] MF instruments error: {e}")
+
+
+def search_mf_instruments(query: str, plan: str = "direct", scheme_type: str = "") -> list:
+    """Search mutual fund instruments by name with optional filters.
+    plan: 'direct', 'regular', or '' (all)
+    scheme_type: 'growth', 'dividend', or '' (all)
+    Returns up to 15 matches."""
+    if not _mf_instruments_loaded:
+        _load_mf_instruments()
+    q = query.upper().strip()
+    if not q or len(q) < 2:
+        return []
+    words = q.split()
+    plan_filter = plan.lower().strip()
+    type_filter = scheme_type.lower().strip()
+    results = []
+    seen_keys = set()
+    for inst in _mf_instruments:
+        # Apply plan filter
+        inst_plan = inst.get("plan", "").lower()
+        if plan_filter and inst_plan != plan_filter:
+            continue
+        # Apply scheme type filter
+        # Kite scheme_type can be: growth, balanced, equity, debt, fund of funds, etc.
+        # dividend_type indicates IDCW: payout, reinvestment, etc.
+        inst_scheme = inst.get("scheme_type", "").lower()
+        inst_div_type = inst.get("dividend_type", "").lower()
+        is_dividend = inst_div_type not in ("", "na")
+        if type_filter:
+            if type_filter == "growth" and is_dividend:
+                continue
+            if type_filter == "dividend" and not is_dividend:
+                continue
+        name_upper = inst["name"].upper()
+        if not all(w in name_upper for w in words):
+            continue
+        # Deduplicate dividend variants (payout/reinvestment/interim)
+        scheme_group = "dividend" if is_dividend else "growth"
+        dedup_key = f"{inst['amc']}|{scheme_group}"
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+        results.append({
+            "tradingsymbol": inst["tradingsymbol"],
+            "name": inst["name"],
+            "amc": inst["amc"],
+            "scheme_type": inst.get("scheme_type", ""),
+            "plan": inst.get("plan", ""),
+            "dividend_type": inst.get("dividend_type", ""),
+            "last_price": inst["last_price"],
+        })
+        if len(results) >= 15:
+            break
+    results.sort(key=lambda r: (
+        0 if r.get("plan", "").lower() == "direct" else 1,
+        0 if r.get("dividend_type", "").lower() in ("", "na") else 1,
+        r["name"],
+    ))
+    return results
+
+
+def get_mf_ltp(tradingsymbol: str) -> float:
+    """Get last price for a mutual fund from cached instruments."""
+    if not _mf_instruments_loaded:
+        _load_mf_instruments()
+    for inst in _mf_instruments:
+        if inst["tradingsymbol"] == tradingsymbol:
+            return inst["last_price"]
+    return 0.0
+
+
+# ═══════════════════════════════════════════════════════════
 #  STATUS
 # ═══════════════════════════════════════════════════════════
 

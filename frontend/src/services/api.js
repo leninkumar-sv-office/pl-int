@@ -145,6 +145,11 @@ export async function getMFSummary() {
   return data;
 }
 
+export async function searchMFInstruments(query, plan = 'direct', schemeType = '') {
+  const { data } = await api.get('/mutual-funds/search', { params: { q: query, plan, scheme_type: schemeType } });
+  return data;
+}
+
 export async function getMFDashboard() {
   const { data } = await api.get('/mutual-funds/dashboard');
   return data;

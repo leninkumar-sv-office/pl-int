@@ -1592,6 +1592,12 @@ def refresh_mf_nav():
     return {"message": f"NAV refreshed: {with_nav}/{len(summary)} funds with live prices"}
 
 
+@app.get("/api/mutual-funds/search")
+def search_mf(q: str = "", plan: str = "direct", scheme_type: str = ""):
+    """Search Zerodha MF instruments by name with filters."""
+    return zerodha_service.search_mf_instruments(q, plan=plan, scheme_type=scheme_type)
+
+
 @app.post("/api/mutual-funds/buy")
 def add_mf_holding_endpoint(req: AddMFRequest):
     """Add a mutual fund holding (Buy transaction)."""
