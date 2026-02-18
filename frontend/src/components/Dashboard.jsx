@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,15 +6,31 @@ const formatINR = (num) => {
 };
 
 export default function Dashboard({ summary, mfDashboard, loading }) {
+  const [expanded, setExpanded] = useState(() => localStorage.getItem('dashboardExpanded') === 'true');
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    localStorage.setItem('dashboardExpanded', String(next));
+  };
+
   if (loading && !summary) {
     return (
-      <div className="summary-grid">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="summary-card">
-            <div className="label">Loading...</div>
-            <div className="value" style={{ color: 'var(--text-muted)' }}>--</div>
+      <div className="dashboard-section">
+        <button className="dashboard-toggle" onClick={toggle}>
+          <span className={`toggle-arrow ${expanded ? 'expanded' : ''}`}>&#9656;</span>
+          <span className="toggle-label">Portfolio Summary</span>
+        </button>
+        {expanded && (
+          <div className="summary-grid">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="summary-card">
+                <div className="label">Loading...</div>
+                <div className="value" style={{ color: 'var(--text-muted)' }}>--</div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     );
   }
@@ -28,7 +44,6 @@ export default function Dashboard({ summary, mfDashboard, loading }) {
   const totalUnrealizedPL = summary.unrealized_pl + (hasMF ? mfDashboard.unrealized_pl : 0);
   const totalUnrealizedPLPct = totalInvested > 0 ? (totalUnrealizedPL / totalInvested) * 100 : 0;
   const totalRealizedPL = summary.realized_pl + (hasMF ? mfDashboard.realized_pl : 0);
-  const totalHoldings = summary.total_holdings + (hasMF ? mfDashboard.total_funds : 0);
   const inProfit = summary.stocks_in_profit + (hasMF ? mfDashboard.funds_in_profit : 0);
   const inLoss = summary.stocks_in_loss + (hasMF ? mfDashboard.funds_in_loss : 0);
 
@@ -75,17 +90,33 @@ export default function Dashboard({ summary, mfDashboard, loading }) {
     },
   ];
 
+  // Collapsed inline summary: key numbers in a single line
+  const collapsedSummary = `${formatINR(totalCurrentValue)}  ·  P&L ${totalUnrealizedPL >= 0 ? '+' : ''}${formatINR(totalUnrealizedPL)} (${totalUnrealizedPLPct >= 0 ? '+' : ''}${totalUnrealizedPLPct.toFixed(2)}%)`;
+
   return (
-    <div className="summary-grid">
-      {cards.map((card, i) => (
-        <div key={i} className="summary-card">
-          <div className="label">{card.label}</div>
-          <div className="value" style={{ color: card.color }}>{card.value}</div>
-          <div className={`sub ${card.color === 'var(--green)' ? 'positive' : card.color === 'var(--red)' ? 'negative' : 'neutral'}`}>
-            {card.sub}
-          </div>
+    <div className="dashboard-section">
+      <button className="dashboard-toggle" onClick={toggle}>
+        <span className={`toggle-arrow ${expanded ? 'expanded' : ''}`}>&#9656;</span>
+        <span className="toggle-label">Portfolio Summary</span>
+        {!expanded && (
+          <span className="toggle-summary" style={{ color: totalUnrealizedPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
+            {collapsedSummary}
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="summary-grid">
+          {cards.map((card, i) => (
+            <div key={i} className="summary-card">
+              <div className="label">{card.label}</div>
+              <div className="value" style={{ color: card.color }}>{card.value}</div>
+              <div className={`sub ${card.color === 'var(--green)' ? 'positive' : card.color === 'var(--red)' ? 'negative' : 'neutral'}`}>
+                {card.sub}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
