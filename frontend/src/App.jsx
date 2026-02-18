@@ -38,7 +38,8 @@ export default function App() {
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('stocks');
+  const [activeTab, _setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'stocks');
+  const setActiveTab = (tab) => { localStorage.setItem('activeTab', tab); _setActiveTab(tab); };
   const [addModalData, setAddModalData] = useState(null); // null = closed, {} = open empty, {symbol,...} = pre-filled
   const [sellTarget, setSellTarget] = useState(null);
   const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
