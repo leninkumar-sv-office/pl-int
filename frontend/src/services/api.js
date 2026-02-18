@@ -336,3 +336,30 @@ export async function addPPFContribution(ppfId, payload) {
   const { data } = await api.post(`/ppf/${ppfId}/contribution`, payload);
   return data;
 }
+
+// ── Standing Instructions ──────────────────────────────
+
+export async function getSISummary() {
+  const { data } = await api.get('/standing-instructions/summary');
+  return data;
+}
+
+export async function getSIDashboard() {
+  const { data } = await api.get('/standing-instructions/dashboard');
+  return data;
+}
+
+export async function addSI(payload) {
+  const { data } = await api.post('/standing-instructions/add', payload);
+  return data;
+}
+
+export async function updateSI(siId, payload) {
+  const { data } = await api.put(`/standing-instructions/${siId}`, payload);
+  return data;
+}
+
+export async function deleteSI(siId) {
+  const { data } = await api.delete(`/standing-instructions/${siId}`);
+  return data;
+}

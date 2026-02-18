@@ -449,3 +449,56 @@ class AddPPFContributionRequest(BaseModel):
     date: str = Field(..., description="Contribution date YYYY-MM-DD")
     amount: float = Field(..., gt=0, description="Contribution amount")
     remarks: str = ""
+
+
+# ═══════════════════════════════════════════════════════════
+#  STANDING INSTRUCTION (SI) MODELS
+# ═══════════════════════════════════════════════════════════
+
+class SIItem(BaseModel):
+    """A single Standing Instruction (NACH/ECS/UPI Autopay mandate)."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    bank: str
+    beneficiary: str
+    amount: float
+    frequency: str = "Monthly"
+    purpose: str = "SIP"
+    mandate_type: str = "NACH"
+    account_number: str = ""
+    start_date: str
+    expiry_date: str
+    alert_days: int = 30
+    status: str = "Active"
+    remarks: str = ""
+
+
+class AddSIRequest(BaseModel):
+    """Request to add a Standing Instruction."""
+    bank: str = Field(..., description="Bank name")
+    beneficiary: str = Field(..., description="Who receives the payment")
+    amount: float = Field(..., gt=0, description="Debit amount")
+    frequency: str = Field(default="Monthly", description="Monthly/Quarterly/Half-Yearly/Annually")
+    purpose: str = Field(default="SIP", description="SIP/EMI/Utility/Insurance/Other")
+    mandate_type: str = Field(default="NACH", description="NACH/ECS/UPI Autopay/Other")
+    account_number: str = Field(default="", description="Bank account number")
+    start_date: str = Field(..., description="Mandate start date YYYY-MM-DD")
+    expiry_date: str = Field(..., description="Mandate expiry date YYYY-MM-DD")
+    alert_days: int = Field(default=30, ge=1, description="Alert before N days of expiry")
+    status: str = Field(default="Active", description="Active/Expired/Cancelled")
+    remarks: str = ""
+
+
+class UpdateSIRequest(BaseModel):
+    """Request to update a Standing Instruction."""
+    bank: Optional[str] = None
+    beneficiary: Optional[str] = None
+    amount: Optional[float] = None
+    frequency: Optional[str] = None
+    purpose: Optional[str] = None
+    mandate_type: Optional[str] = None
+    account_number: Optional[str] = None
+    start_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    alert_days: Optional[int] = None
+    status: Optional[str] = None
+    remarks: Optional[str] = None

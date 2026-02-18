@@ -23,6 +23,7 @@ from .models import (
     AddRDRequest, UpdateRDRequest, AddRDInstallmentRequest,
     AddInsuranceRequest, UpdateInsuranceRequest,
     AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest,
+    AddSIRequest, UpdateSIRequest,
 )
 from .xlsx_database import xlsx_db as db
 from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache
@@ -1935,6 +1936,54 @@ def add_ppf_contribution_endpoint(ppf_id: str, req: AddPPFContributionRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  STANDING INSTRUCTIONS
+# ══════════════════════════════════════════════════════════
+
+from .si_database import get_all as si_get_all, get_dashboard as si_get_dashboard, add as si_add, update as si_update, delete as si_delete
+
+
+@app.get("/api/standing-instructions/summary")
+def get_si_summary():
+    """List all Standing Instructions."""
+    return si_get_all()
+
+
+@app.get("/api/standing-instructions/dashboard")
+def get_si_dashboard():
+    """Aggregate SI totals for dashboard."""
+    return si_get_dashboard()
+
+
+@app.post("/api/standing-instructions/add")
+def add_si_endpoint(req: AddSIRequest):
+    """Add a new Standing Instruction."""
+    try:
+        return si_add(req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/standing-instructions/{si_id}")
+def update_si_endpoint(si_id: str, req: UpdateSIRequest):
+    """Update an existing Standing Instruction."""
+    try:
+        return si_update(si_id, req.dict(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/standing-instructions/{si_id}")
+def delete_si_endpoint(si_id: str):
+    """Delete a Standing Instruction."""
+    try:
+        return si_delete(si_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ══════════════════════════════════════════════════════════

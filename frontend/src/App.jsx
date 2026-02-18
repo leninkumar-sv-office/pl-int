@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -24,6 +24,8 @@ import InsuranceTable from './components/InsuranceTable';
 import AddInsuranceModal from './components/AddInsuranceModal';
 import PPFTable from './components/PPFTable';
 import AddPPFModal from './components/AddPPFModal';
+import StandingInstructionTable from './components/StandingInstructionTable';
+import AddSIModal from './components/AddSIModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -74,6 +76,12 @@ export default function App() {
   const [addPPFModalData, setAddPPFModalData] = useState(null);
   const [ppfModalMode, setPpfModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
 
+  // SI states
+  const [siSummary, setSiSummary] = useState([]);
+  const [siDashboard, setSiDashboard] = useState(null);
+  const [addSIModalData, setAddSIModalData] = useState(null);
+  const siAlertedRef = useRef(new Set());
+
   // Read ALL cached data from backend in one parallel batch
   const loadData = useCallback(async () => {
     try {
@@ -81,6 +89,7 @@ export default function App() {
         pR, sR, tR, ssR, tickR, zsR,
         mfSumR, mfDashR, sipR,
         fdSumR, fdDashR, rdSumR, rdDashR, insSumR, insDashR, ppfSumR, ppfDashR,
+        siSumR, siDashR,
       ] = await Promise.allSettled([
         getPortfolio(),
         getDashboardSummary(),
@@ -95,6 +104,7 @@ export default function App() {
         getRDSummary(), getRDDashboard(),
         getInsuranceSummary(), getInsuranceDashboard(),
         getPPFSummary(), getPPFDashboard(),
+        getSISummary(), getSIDashboard(),
       ]);
 
       // Core stock data
@@ -118,6 +128,18 @@ export default function App() {
       if (insDashR.status === 'fulfilled') setInsuranceDashboard(insDashR.value);
       if (ppfSumR.status === 'fulfilled') setPpfAccounts(ppfSumR.value);
       if (ppfDashR.status === 'fulfilled') setPpfDashboard(ppfDashR.value);
+      // Standing Instructions
+      if (siSumR.status === 'fulfilled') {
+        setSiSummary(siSumR.value);
+        // Fire expiry alert toasts for active SIs approaching expiry
+        for (const si of siSumR.value) {
+          if (si.status === 'Active' && si.days_to_expiry > 0 && si.days_to_expiry <= si.alert_days && !siAlertedRef.current.has(si.id)) {
+            siAlertedRef.current.add(si.id);
+            toast(`SI "${si.beneficiary}" at ${si.bank} expires in ${si.days_to_expiry} days`, { icon: '\u26A0\uFE0F', duration: 6000 });
+          }
+        }
+      }
+      if (siDashR.status === 'fulfilled') setSiDashboard(siDashR.value);
 
       // Toast only for core stock endpoints
       const core = [
@@ -564,6 +586,33 @@ export default function App() {
     }
   };
 
+  // ── Standing Instruction handlers ────────────────
+  const handleAddSI = async (data) => {
+    try {
+      if (data.id) {
+        await updateSI(data.id, data);
+        toast.success('SI updated');
+      } else {
+        await addSI(data);
+        toast.success(`Added SI: ${data.beneficiary} at ${data.bank}`);
+      }
+      setAddSIModalData(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save SI');
+    }
+  };
+
+  const handleDeleteSI = async (siId) => {
+    try {
+      await deleteSI(siId);
+      toast.success('SI deleted');
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete SI');
+    }
+  };
+
   const handleRefresh = async () => {
     setLoading(true);
     await liveRefresh();
@@ -850,6 +899,10 @@ export default function App() {
             <button className="btn btn-primary" onClick={() => { setPpfModalMode('add'); setAddPPFModalData({}); }}>
               + Add PPF
             </button>
+          ) : activeTab === 'standingInstructions' ? (
+            <button className="btn btn-primary" onClick={() => setAddSIModalData({})}>
+              + Add SI
+            </button>
           ) : (
             <button className="btn btn-primary" onClick={() => setAddModalData({})}>
               + Add Stock
@@ -883,6 +936,9 @@ export default function App() {
         </button>
         <button className={`tab ${activeTab === 'ppf' ? 'active' : ''}`} onClick={() => setActiveTab('ppf')}>
           PPF
+        </button>
+        <button className={`tab ${activeTab === 'standingInstructions' ? 'active' : ''}`} onClick={() => setActiveTab('standingInstructions')}>
+          Standing Instructions
         </button>
         <button className={`tab ${activeTab === 'charts' ? 'active' : ''}`} onClick={() => setActiveTab('charts')}>
           Charts
@@ -964,6 +1020,17 @@ export default function App() {
           onEditPPF={(ppf) => { setPpfModalMode('edit'); setAddPPFModalData(ppf); }}
           onDeletePPF={handleDeletePPF}
           onAddContribution={(ppf) => { setPpfModalMode('contribution'); setAddPPFModalData(ppf); }}
+        />
+      )}
+
+      {activeTab === 'standingInstructions' && (
+        <StandingInstructionTable
+          instructions={siSummary}
+          loading={loading}
+          siDashboard={siDashboard}
+          onAddSI={() => setAddSIModalData({})}
+          onEditSI={(si) => setAddSIModalData(si)}
+          onDeleteSI={handleDeleteSI}
         />
       )}
 
@@ -1073,6 +1140,15 @@ export default function App() {
           mode={ppfModalMode}
           onSubmit={handleAddPPF}
           onClose={() => setAddPPFModalData(null)}
+        />
+      )}
+
+      {/* SI Modal */}
+      {addSIModalData !== null && (
+        <AddSIModal
+          initialData={addSIModalData}
+          onAdd={handleAddSI}
+          onClose={() => setAddSIModalData(null)}
         />
       )}
     </div>
