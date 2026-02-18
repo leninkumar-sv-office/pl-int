@@ -83,85 +83,98 @@ export default function App() {
   const [addSIModalData, setAddSIModalData] = useState(null);
   const siAlertedRef = useRef(new Set());
 
-  // Read ALL cached data from backend in one parallel batch
-  const loadData = useCallback(async () => {
-    try {
-      const [
-        pR, sR, tR, ssR, tickR, zsR,
-        mfSumR, mfDashR, sipR,
-        fdSumR, fdDashR, rdSumR, rdDashR, insSumR, insDashR, ppfSumR, ppfDashR,
-        siSumR, siDashR,
-      ] = await Promise.allSettled([
-        getPortfolio(),
-        getDashboardSummary(),
-        getTransactions(),
-        getStockSummary(),
-        getMarketTicker(),
-        getZerodhaStatus(),
-        getMFSummary(),
-        getMFDashboard(),
-        getSIPConfigs(),
-        getFDSummary(), getFDDashboard(),
-        getRDSummary(), getRDDashboard(),
-        getInsuranceSummary(), getInsuranceDashboard(),
-        getPPFSummary(), getPPFDashboard(),
-        getSISummary(), getSIDashboard(),
-      ]);
+  // ── Independent per-group loaders ─────────────────────
+  // Each group fires its API calls and updates state as soon as it resolves,
+  // without waiting for other groups. Stocks (slow) no longer block FD/RD/PPF/SI etc.
 
-      // Core stock data
-      if (pR.status === 'fulfilled') setPortfolio(pR.value);
-      if (sR.status === 'fulfilled') setSummary(sR.value);
-      if (tR.status === 'fulfilled') setTransactions(tR.value);
-      if (ssR.status === 'fulfilled') setStockSummary(ssR.value);
-      // Market & status
-      if (tickR.status === 'fulfilled') setMarketTicker(tickR.value);
-      if (zsR.status === 'fulfilled') setZerodhaStatus(zsR.value);
-      // Mutual funds
-      if (mfSumR.status === 'fulfilled') setMfSummary(mfSumR.value);
-      if (mfDashR.status === 'fulfilled') setMfDashboard(mfDashR.value);
-      if (sipR.status === 'fulfilled') setSipConfigs(sipR.value);
-      // FD / RD / Insurance / PPF
-      if (fdSumR.status === 'fulfilled') setFdSummary(fdSumR.value);
-      if (fdDashR.status === 'fulfilled') setFdDashboard(fdDashR.value);
-      if (rdSumR.status === 'fulfilled') setRdSummary(rdSumR.value);
-      if (rdDashR.status === 'fulfilled') setRdDashboard(rdDashR.value);
-      if (insSumR.status === 'fulfilled') setInsurancePolicies(insSumR.value);
-      if (insDashR.status === 'fulfilled') setInsuranceDashboard(insDashR.value);
-      if (ppfSumR.status === 'fulfilled') setPpfAccounts(ppfSumR.value);
-      if (ppfDashR.status === 'fulfilled') setPpfDashboard(ppfDashR.value);
-      // Standing Instructions
-      if (siSumR.status === 'fulfilled') {
-        setSiSummary(siSumR.value);
-        // Fire expiry alert toasts for active SIs approaching expiry
-        for (const si of siSumR.value) {
-          if (si.status === 'Active' && si.days_to_expiry > 0 && si.days_to_expiry <= si.alert_days && !siAlertedRef.current.has(si.id)) {
-            siAlertedRef.current.add(si.id);
-            toast(`SI "${si.beneficiary}" at ${si.bank} expires in ${si.days_to_expiry} days`, { icon: '\u26A0\uFE0F', duration: 6000 });
-          }
-        }
-      }
-      if (siDashR.status === 'fulfilled') setSiDashboard(siDashR.value);
-
-      // Toast only for core stock endpoints
-      const core = [
-        { name: 'Portfolio', r: pR }, { name: 'Summary', r: sR },
-        { name: 'Transactions', r: tR }, { name: 'Stocks', r: ssR },
-      ];
-      const failed = core.filter(x => x.r.status === 'rejected');
-      if (failed.length === core.length) {
-        toast.error(`Failed to load data: ${failed[0].r.reason?.message || 'Server unreachable'}`);
-      } else if (failed.length > 0) {
-        toast.error(`Failed to load: ${failed.map(x => x.name).join(', ')}`);
-      }
-    } catch (err) {
-      console.error('Failed to load data:', err);
-      toast.error(`Failed to load data: ${err.message || err}`);
-    } finally {
-      setLoading(false);
+  const loadStocks = useCallback(async () => {
+    const [pR, sR, tR, ssR] = await Promise.allSettled([
+      getPortfolio(), getDashboardSummary(), getTransactions(), getStockSummary(),
+    ]);
+    if (pR.status === 'fulfilled') setPortfolio(pR.value);
+    if (sR.status === 'fulfilled') setSummary(sR.value);
+    if (tR.status === 'fulfilled') setTransactions(tR.value);
+    if (ssR.status === 'fulfilled') setStockSummary(ssR.value);
+    const core = [
+      { name: 'Portfolio', r: pR }, { name: 'Summary', r: sR },
+      { name: 'Transactions', r: tR }, { name: 'Stocks', r: ssR },
+    ];
+    const failed = core.filter(x => x.r.status === 'rejected');
+    if (failed.length === core.length) {
+      toast.error(`Failed to load data: ${failed[0].r.reason?.message || 'Server unreachable'}`);
+    } else if (failed.length > 0) {
+      toast.error(`Failed to load: ${failed.map(x => x.name).join(', ')}`);
     }
   }, []);
 
-  // Trigger ALL live refreshes in parallel, then reload all data
+  const loadGlobal = useCallback(async () => {
+    const [tickR, zsR] = await Promise.allSettled([getMarketTicker(), getZerodhaStatus()]);
+    if (tickR.status === 'fulfilled') setMarketTicker(tickR.value);
+    if (zsR.status === 'fulfilled') setZerodhaStatus(zsR.value);
+  }, []);
+
+  const loadMutualFunds = useCallback(async () => {
+    const [mfSumR, mfDashR, sipR] = await Promise.allSettled([
+      getMFSummary(), getMFDashboard(), getSIPConfigs(),
+    ]);
+    if (mfSumR.status === 'fulfilled') setMfSummary(mfSumR.value);
+    if (mfDashR.status === 'fulfilled') setMfDashboard(mfDashR.value);
+    if (sipR.status === 'fulfilled') setSipConfigs(sipR.value);
+  }, []);
+
+  const loadFD = useCallback(async () => {
+    const [sumR, dashR] = await Promise.allSettled([getFDSummary(), getFDDashboard()]);
+    if (sumR.status === 'fulfilled') setFdSummary(sumR.value);
+    if (dashR.status === 'fulfilled') setFdDashboard(dashR.value);
+  }, []);
+
+  const loadRD = useCallback(async () => {
+    const [sumR, dashR] = await Promise.allSettled([getRDSummary(), getRDDashboard()]);
+    if (sumR.status === 'fulfilled') setRdSummary(sumR.value);
+    if (dashR.status === 'fulfilled') setRdDashboard(dashR.value);
+  }, []);
+
+  const loadInsurance = useCallback(async () => {
+    const [sumR, dashR] = await Promise.allSettled([getInsuranceSummary(), getInsuranceDashboard()]);
+    if (sumR.status === 'fulfilled') setInsurancePolicies(sumR.value);
+    if (dashR.status === 'fulfilled') setInsuranceDashboard(dashR.value);
+  }, []);
+
+  const loadPPF = useCallback(async () => {
+    const [sumR, dashR] = await Promise.allSettled([getPPFSummary(), getPPFDashboard()]);
+    if (sumR.status === 'fulfilled') setPpfAccounts(sumR.value);
+    if (dashR.status === 'fulfilled') setPpfDashboard(dashR.value);
+  }, []);
+
+  const loadSI = useCallback(async () => {
+    const [sumR, dashR] = await Promise.allSettled([getSISummary(), getSIDashboard()]);
+    if (sumR.status === 'fulfilled') {
+      setSiSummary(sumR.value);
+      for (const si of sumR.value) {
+        if (si.status === 'Active' && si.days_to_expiry > 0 && si.days_to_expiry <= si.alert_days && !siAlertedRef.current.has(si.id)) {
+          siAlertedRef.current.add(si.id);
+          toast(`SI "${si.beneficiary}" at ${si.bank} expires in ${si.days_to_expiry} days`, { icon: '\u26A0\uFE0F', duration: 6000 });
+        }
+      }
+    }
+    if (dashR.status === 'fulfilled') setSiDashboard(dashR.value);
+  }, []);
+
+  // Fire ALL groups concurrently — each updates state independently as it resolves
+  const loadData = useCallback(async () => {
+    try {
+      await Promise.allSettled([
+        loadStocks(), loadGlobal(), loadMutualFunds(),
+        loadFD(), loadRD(), loadInsurance(), loadPPF(), loadSI(),
+      ]);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadStocks, loadGlobal, loadMutualFunds, loadFD, loadRD, loadInsurance, loadPPF, loadSI]);
+
+  // Trigger ALL live refreshes in parallel, then reload only affected groups
   const liveRefresh = useCallback(async () => {
     try {
       await Promise.all([
@@ -172,8 +185,9 @@ export default function App() {
     } catch (err) {
       console.error('Live refresh error:', err);
     }
-    await loadData();
-  }, [loadData]);
+    // Only reload groups affected by price/ticker/NAV refresh
+    await Promise.allSettled([loadStocks(), loadGlobal(), loadMutualFunds()]);
+  }, [loadStocks, loadGlobal, loadMutualFunds]);
 
   // On mount: read cached data first, THEN trigger live refresh after data loads
   useEffect(() => {
@@ -212,7 +226,7 @@ export default function App() {
       await addStock(data);
       toast.success(`Added ${data.quantity} shares of ${data.symbol}`);
       setAddModalData(null);
-      loadData();
+      loadStocks();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to add stock');
     }
@@ -226,7 +240,7 @@ export default function App() {
         : `Loss: ${formatINR(Math.abs(result.realized_pl))}`;
       toast.success(`Sold! ${plText}`);
       setSellTarget(null);
-      loadData();
+      loadStocks();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to sell stock');
     }
@@ -241,7 +255,7 @@ export default function App() {
   const handleBulkSellClose = (result) => {
     setBulkSellItems(null);
     setBulkSellDoneKey(k => k + 1); // signal StockSummaryTable to clear selection
-    loadData();
+    loadStocks();
     if (!result) return; // manual close via Cancel
     if (result.failed === 0) {
       toast.success(`Sold ${result.succeeded} lot${result.succeeded !== 1 ? 's' : ''} successfully`);
@@ -257,7 +271,7 @@ export default function App() {
       const result = await addDividend(data);
       toast.success(result.message);
       setDividendTarget(null);
-      loadData();
+      loadStocks();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to record dividend');
     }
@@ -405,7 +419,7 @@ export default function App() {
       };
       setImportResult(resultData);
       setImportPreview(null);
-      loadData();
+      loadStocks();
     } catch (err) {
       toast.dismiss('import-progress');
       const msg = err.response?.data?.detail || 'Failed to import contract note';
@@ -419,7 +433,7 @@ export default function App() {
       await addMFHolding(data);
       toast.success(`Added ${data.units} units of ${data.fund_name}`);
       setAddMFModalData(null);
-      loadData();
+      loadMutualFunds();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to add MF holding');
     }
@@ -433,7 +447,7 @@ export default function App() {
         : `Loss: ${formatINR(Math.abs(result.realized_pl))}`;
       toast.success(`Redeemed! ${plText}`);
       setRedeemTarget(null);
-      loadData();
+      loadMutualFunds();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to redeem MF');
     }
@@ -444,7 +458,7 @@ export default function App() {
       await addSIPConfig(config);
       toast.success(`SIP configured for ${config.fund_name}`);
       setSipTarget(null);
-      loadData();
+      loadMutualFunds();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save SIP config');
     }
@@ -455,7 +469,7 @@ export default function App() {
       await deleteSIPConfig(fundCode);
       toast.success('SIP removed');
       setSipTarget(null);
-      loadData();
+      loadMutualFunds();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete SIP');
     }
@@ -465,7 +479,7 @@ export default function App() {
     try {
       const result = await executeSIP(fundCode);
       toast.success(result.message || 'SIP executed');
-      loadData();
+      loadMutualFunds();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to execute SIP');
     }
@@ -482,7 +496,7 @@ export default function App() {
         toast.success(`Added FD at ${data.bank}`);
       }
       setAddFDModalData(null);
-      loadData();
+      loadFD();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save FD');
     }
@@ -492,7 +506,7 @@ export default function App() {
     try {
       await deleteFD(fdId);
       toast.success('FD deleted');
-      loadData();
+      loadFD();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete FD');
     }
@@ -513,7 +527,7 @@ export default function App() {
         toast.success(`Added RD at ${data.bank}`);
       }
       setAddRDModalData(null);
-      loadData();
+      loadRD();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save RD');
     }
@@ -523,7 +537,7 @@ export default function App() {
     try {
       await deleteRD(rdId);
       toast.success('RD deleted');
-      loadData();
+      loadRD();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete RD');
     }
@@ -540,7 +554,7 @@ export default function App() {
         toast.success(`Added policy: ${data.policy_name}`);
       }
       setAddInsuranceModalData(null);
-      loadData();
+      loadInsurance();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save policy');
     }
@@ -550,7 +564,7 @@ export default function App() {
     try {
       await deleteInsurance(policyId);
       toast.success('Policy deleted');
-      loadData();
+      loadInsurance();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete policy');
     }
@@ -571,7 +585,7 @@ export default function App() {
         toast.success(`Added PPF account: ${data.account_name}`);
       }
       setAddPPFModalData(null);
-      loadData();
+      loadPPF();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save PPF');
     }
@@ -581,7 +595,7 @@ export default function App() {
     try {
       await deletePPF(ppfId);
       toast.success('PPF account deleted');
-      loadData();
+      loadPPF();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete PPF');
     }
@@ -598,7 +612,7 @@ export default function App() {
         toast.success(`Added SI: ${data.beneficiary} at ${data.bank}`);
       }
       setAddSIModalData(null);
-      loadData();
+      loadSI();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save SI');
     }
@@ -608,7 +622,7 @@ export default function App() {
     try {
       await deleteSI(siId);
       toast.success('SI deleted');
-      loadData();
+      loadSI();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to delete SI');
     }
