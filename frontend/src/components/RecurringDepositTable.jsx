@@ -164,56 +164,56 @@ function RDDetail({ rd, onEdit, onDelete, onAddInstallment }) {
         borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{rd.name || `${rd.bank} RD`}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{rd.bank}</div>
         </div>
         {rd.account_number && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account No</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account No</div>
             <div style={{ fontSize: '15px', fontWeight: 600, fontFamily: 'monospace' }}>{rd.account_number}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Amount</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Amount</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(rd.monthly_amount)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{rd.interest_rate}%</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compounding</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compounding</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{compoundLabel(rd.compounding_frequency)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Installments Paid</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Installments Paid</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{rd.installments_paid || 0} / {rd.installments_total || rd.tenure_months}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(rd.total_deposited)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Accrued</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Accrued</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(rd.total_interest_accrued || 0)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(rd.maturity_amount)}</div>
         </div>
         {rd.days_to_maturity > 0 && rd.status === 'Active' && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: rd.days_to_maturity <= 90 ? 'var(--yellow)' : 'var(--text)' }}>{rd.days_to_maturity}d</div>
           </div>
         )}
         {rd.remarks && (
           <div style={{ flex: '1 1 100%' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{rd.remarks}</div>
           </div>
         )}
@@ -273,7 +273,7 @@ function RDDetail({ rd, onEdit, onDelete, onAddInstallment }) {
           <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
             {totalInvested > 0 && (
               <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
-                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Invested</div>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Invested</div>
                 <div style={{ fontSize: '14px', fontWeight: 600 }}>{formatINR(totalInvested)}</div>
               </div>
             )}
@@ -482,25 +482,25 @@ export default function RecurringDepositTable({ deposits, loading, rdDashboard, 
       {rdDashboard && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(rdDashboard.total_deposited)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(rdDashboard.total_maturity_value)}</div>
           </div>
           {rdDashboard.total_interest_accrued > 0 && (
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Accrued</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Accrued</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(rdDashboard.total_interest_accrued)}</div>
             </div>
           )}
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Commitment</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Commitment</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(rdDashboard.monthly_commitment)}</div>
           </div>
           <div style={{ flex: '1 1 80px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active RDs</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active RDs</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{rdDashboard.active_count}</div>
           </div>
         </div>

@@ -154,76 +154,76 @@ function FDDetail({ fd, onEdit, onDelete }) {
         borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{fd.name}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{fd.bank}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Type</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Type</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: tc.bg, color: tc.color }}>{fd.type || 'FD'}</span>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Principal / Invested</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Principal / Invested</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(fd.total_invested || fd.principal)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{fd.interest_rate}%</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Payout</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Payout</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{fd.interest_payout || 'Maturity'}</div>
         </div>
         {fd.sip_amount > 0 && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SIP Amount</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SIP Amount</div>
             <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(fd.sip_amount)}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(fd.start_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(fd.maturity_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Amt</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Amt</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(fd.maturity_amount)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(fd.interest_earned)}</div>
         </div>
         {fd.interest_projected > 0 && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Projected</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Projected</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(fd.interest_projected)}</div>
           </div>
         )}
         {fd.tds > 0 && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TDS</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TDS</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--red)' }}>{formatINR(fd.tds)}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>{fd.status}</span>
         </div>
         {fd.days_to_maturity > 0 && fd.status === 'Active' && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: fd.days_to_maturity <= 90 ? 'var(--yellow)' : 'var(--text)' }}>{fd.days_to_maturity}d</div>
           </div>
         )}
         {fd.remarks && (
           <div style={{ flex: '1 1 100%' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{fd.remarks}</div>
           </div>
         )}
@@ -279,7 +279,7 @@ function FDDetail({ fd, onEdit, onDelete }) {
           <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
             {totalInvested > 0 && (
               <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
-                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Invested</div>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Invested</div>
                 <div style={{ fontSize: '14px', fontWeight: 600 }}>{formatINR(totalInvested)}</div>
               </div>
             )}
@@ -443,30 +443,30 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
       {fdDashboard && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Invested</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Invested</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(fdDashboard.total_invested)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(fdDashboard.total_maturity_value)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(fdDashboard.total_interest)}</div>
           </div>
           {fdDashboard.total_interest_projected > 0 && (
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Projected</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Projected</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(fdDashboard.total_interest_projected)}</div>
             </div>
           )}
           <div style={{ flex: '1 1 80px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{fdDashboard.active_count}</div>
           </div>
           {fdDashboard.maturing_soon > 0 && (
             <div style={{ flex: '1 1 80px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturing Soon</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturing Soon</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--yellow)' }}>{fdDashboard.maturing_soon}</div>
             </div>
           )}

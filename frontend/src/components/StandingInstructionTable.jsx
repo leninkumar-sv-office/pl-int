@@ -81,50 +81,50 @@ function SIDetail({ si, onEdit, onDelete }) {
         borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{si.bank}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Beneficiary</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Beneficiary</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{si.beneficiary}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount ({si.frequency})</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount ({si.frequency})</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(si.amount)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Purpose</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Purpose</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: pc.bg, color: pc.color }}>{si.purpose}</span>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mandate Type</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mandate Type</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{si.mandate_type}</div>
         </div>
         {si.account_number && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account</div>
             <div style={{ fontSize: '15px', fontWeight: 600, fontFamily: 'monospace' }}>{si.account_number}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(si.start_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiry</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiry</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(si.expiry_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alert Before</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alert Before</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{si.alert_days} days</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>{si.status}</span>
         </div>
         {si.days_to_expiry !== undefined && si.status === 'Active' && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: si.days_to_expiry <= 7 ? 'var(--red)' : si.days_to_expiry <= si.alert_days ? 'var(--yellow)' : 'var(--text)' }}>
               {si.days_to_expiry > 0 ? `${si.days_to_expiry}d` : 'Expired'}
             </div>
@@ -132,7 +132,7 @@ function SIDetail({ si, onEdit, onDelete }) {
         )}
         {si.remarks && (
           <div style={{ flex: '1 1 100%' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{si.remarks}</div>
           </div>
         )}
@@ -235,16 +235,16 @@ export default function StandingInstructionTable({ instructions, loading, siDash
       {siDashboard && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Outflow</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Outflow</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(siDashboard.total_monthly_outflow)}</div>
           </div>
           <div style={{ flex: '1 1 80px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Mandates</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Mandates</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{siDashboard.active_count}</div>
           </div>
           {siDashboard.expiring_soon > 0 && (
             <div style={{ flex: '1 1 80px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiring Soon</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiring Soon</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--yellow)' }}>{siDashboard.expiring_soon}</div>
             </div>
           )}

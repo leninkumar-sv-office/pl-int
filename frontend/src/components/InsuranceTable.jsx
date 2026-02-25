@@ -79,46 +79,46 @@ function InsuranceDetail({ policy, onEdit, onDelete }) {
         borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Policy Name</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Policy Name</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{policy.policy_name}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Provider</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Provider</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{policy.provider}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Type</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Type</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: tc.bg, color: tc.color }}>{policy.type}</span>
         </div>
         {policy.policy_number && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Policy Number</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Policy Number</div>
             <div style={{ fontSize: '15px', fontWeight: 600, fontFamily: 'monospace' }}>{policy.policy_number}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Premium ({policy.payment_frequency})</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Premium ({policy.payment_frequency})</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(policy.premium)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Coverage</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Coverage</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(policy.coverage_amount)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(policy.start_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiry</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiry</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(policy.expiry_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>{policy.status}</span>
         </div>
         {policy.days_to_expiry !== undefined && policy.status === 'Active' && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: policy.days_to_expiry <= 90 ? 'var(--yellow)' : policy.days_to_expiry <= 0 ? 'var(--red)' : 'var(--text)' }}>
               {policy.days_to_expiry > 0 ? `${policy.days_to_expiry}d` : 'Expired'}
             </div>
@@ -126,7 +126,7 @@ function InsuranceDetail({ policy, onEdit, onDelete }) {
         )}
         {policy.remarks && (
           <div style={{ flex: '1 1 100%' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{policy.remarks}</div>
           </div>
         )}
@@ -223,20 +223,20 @@ export default function InsuranceTable({ policies, loading, insuranceDashboard, 
       {insuranceDashboard && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annual Premium</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annual Premium</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(insuranceDashboard.total_annual_premium)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Coverage</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Coverage</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(insuranceDashboard.total_coverage)}</div>
           </div>
           <div style={{ flex: '1 1 80px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Policies</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active Policies</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{insuranceDashboard.active_count}</div>
           </div>
           {insuranceDashboard.expiring_soon > 0 && (
             <div style={{ flex: '1 1 80px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiring Soon</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expiring Soon</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--yellow)' }}>{insuranceDashboard.expiring_soon}</div>
             </div>
           )}

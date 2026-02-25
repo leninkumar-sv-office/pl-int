@@ -136,64 +136,64 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
         borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Name</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Name</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.account_name}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bank</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.bank}</div>
         </div>
         {ppf.account_number && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account No</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account No</div>
             <div style={{ fontSize: '15px', fontWeight: 600, fontFamily: 'monospace' }}>{ppf.account_number}</div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.interest_rate}%</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tenure</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tenure</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.tenure_years || 15} years</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(ppf.start_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(ppf.maturity_date)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Years Completed</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Years Completed</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.years_completed || 0} / {ppf.tenure_years || 15}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.total_interest_earned)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Balance</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Balance</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.current_balance)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>{ppf.status}</span>
         </div>
         {ppf.days_to_maturity > 0 && ppf.status === 'Active' && (
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days to Maturity</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days to Maturity</div>
             <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.days_to_maturity}d</div>
           </div>
         )}
         {ppf.remarks && (
           <div style={{ flex: '1 1 100%' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{ppf.remarks}</div>
           </div>
         )}
@@ -248,7 +248,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
           {/* Summary boxes */}
           <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
             <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
-              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Deposited</div>
+              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Deposited</div>
               <div style={{ fontSize: '14px', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</div>
             </div>
             <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
@@ -439,19 +439,19 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
       {ppfDashboard && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(ppfDashboard.total_deposited)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Interest</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Interest</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppfDashboard.total_interest)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Balance</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Balance</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(ppfDashboard.current_balance)}</div>
           </div>
           <div style={{ flex: '1 1 80px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{ppfDashboard.active_count}</div>
           </div>
         </div>

@@ -841,15 +841,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         return (
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invested</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invested</div>
               <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(sumInvested)}</div>
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Value</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Value</div>
               <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(sumCurrentVal)}</div>
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized P&L</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unrealized P&L</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: sumUPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {sumUPL >= 0 ? '+' : ''}{formatINR(sumUPL)}
                 <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4 }}>
@@ -858,21 +858,21 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </div>
             </div>
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Realized P&L</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Realized P&L</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: sumRPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {sumRPL >= 0 ? '+' : ''}{formatINR(sumRPL)}
               </div>
             </div>
             {sumDiv > 0 && (
               <div style={{ flex: '1 1 100px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dividends</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dividends</div>
                 <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>
                   +{formatINR(sumDiv)}
                 </div>
               </div>
             )}
             <div style={{ flex: '1 1 80px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stocks</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stocks</div>
               <div style={{ fontSize: '16px', fontWeight: 600 }}>
                 {totalHeldStocks}
                 <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: 4, color: 'var(--text-muted)' }}>
