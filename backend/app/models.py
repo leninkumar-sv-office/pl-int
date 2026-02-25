@@ -452,6 +452,43 @@ class AddPPFContributionRequest(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════
+#  NPS (NATIONAL PENSION SYSTEM) MODELS
+# ═══════════════════════════════════════════════════════════
+
+class AddNPSRequest(BaseModel):
+    """Request to add an NPS account."""
+    account_name: str = Field(default="NPS Account", description="Account display name")
+    pran: str = Field(default="", description="Permanent Retirement Account Number")
+    tier: str = Field(default="Tier I", description="Tier I or Tier II")
+    fund_manager: str = Field(default="", description="Pension Fund Manager name")
+    scheme_preference: str = Field(default="Auto Choice", description="Auto Choice / Active Choice / Aggressive / Moderate / Conservative")
+    start_date: str = Field(..., description="Account opening date YYYY-MM-DD")
+    current_value: float = Field(default=0, ge=0, description="Current corpus value")
+    status: str = Field(default="Active", description="Active / Frozen / Closed")
+    remarks: str = ""
+
+
+class UpdateNPSRequest(BaseModel):
+    """Request to update an NPS account."""
+    account_name: Optional[str] = None
+    pran: Optional[str] = None
+    tier: Optional[str] = None
+    fund_manager: Optional[str] = None
+    scheme_preference: Optional[str] = None
+    start_date: Optional[str] = None
+    current_value: Optional[float] = None
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class AddNPSContributionRequest(BaseModel):
+    """Request to add an NPS contribution."""
+    date: str = Field(..., description="Contribution date YYYY-MM-DD")
+    amount: float = Field(..., gt=0, description="Contribution amount")
+    remarks: str = ""
+
+
+# ═══════════════════════════════════════════════════════════
 #  STANDING INSTRUCTION (SI) MODELS
 # ═══════════════════════════════════════════════════════════
 

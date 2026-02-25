@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -24,6 +24,8 @@ import InsuranceTable from './components/InsuranceTable';
 import AddInsuranceModal from './components/AddInsuranceModal';
 import PPFTable from './components/PPFTable';
 import AddPPFModal from './components/AddPPFModal';
+import NPSTable from './components/NPSTable';
+import AddNPSModal from './components/AddNPSModal';
 import StandingInstructionTable from './components/StandingInstructionTable';
 import AddSIModal from './components/AddSIModal';
 
@@ -76,6 +78,12 @@ export default function App() {
   const [ppfDashboard, setPpfDashboard] = useState(null);
   const [addPPFModalData, setAddPPFModalData] = useState(null);
   const [ppfModalMode, setPpfModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
+
+  // NPS states
+  const [npsAccounts, setNpsAccounts] = useState([]);
+  const [npsDashboard, setNpsDashboard] = useState(null);
+  const [addNPSModalData, setAddNPSModalData] = useState(null);
+  const [npsModalMode, setNpsModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
 
   // SI states
   const [siSummary, setSiSummary] = useState([]);
@@ -146,6 +154,12 @@ export default function App() {
     if (dashR.status === 'fulfilled') setPpfDashboard(dashR.value);
   }, []);
 
+  const loadNPS = useCallback(async () => {
+    const [sumR, dashR] = await Promise.allSettled([getNPSSummary(), getNPSDashboard()]);
+    if (sumR.status === 'fulfilled') setNpsAccounts(sumR.value);
+    if (dashR.status === 'fulfilled') setNpsDashboard(dashR.value);
+  }, []);
+
   const loadSI = useCallback(async () => {
     const [sumR, dashR] = await Promise.allSettled([getSISummary(), getSIDashboard()]);
     if (sumR.status === 'fulfilled') {
@@ -165,14 +179,14 @@ export default function App() {
     try {
       await Promise.allSettled([
         loadStocks(), loadGlobal(), loadMutualFunds(),
-        loadFD(), loadRD(), loadInsurance(), loadPPF(), loadSI(),
+        loadFD(), loadRD(), loadInsurance(), loadPPF(), loadNPS(), loadSI(),
       ]);
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
     }
-  }, [loadStocks, loadGlobal, loadMutualFunds, loadFD, loadRD, loadInsurance, loadPPF, loadSI]);
+  }, [loadStocks, loadGlobal, loadMutualFunds, loadFD, loadRD, loadInsurance, loadPPF, loadNPS, loadSI]);
 
   // Trigger ALL live refreshes in parallel, then reload only affected groups
   const liveRefresh = useCallback(async () => {
@@ -601,6 +615,37 @@ export default function App() {
     }
   };
 
+  // ── NPS handlers ────────────────────────────────
+  const handleAddNPS = async (data) => {
+    try {
+      if (data.nps_id) {
+        // Adding contribution
+        await addNPSContribution(data.nps_id, { date: data.date, amount: data.amount, remarks: data.remarks });
+        toast.success('Contribution added');
+      } else if (data.id) {
+        await updateNPS(data.id, data);
+        toast.success('NPS account updated');
+      } else {
+        await addNPS(data);
+        toast.success(`Added NPS account: ${data.account_name}`);
+      }
+      setAddNPSModalData(null);
+      loadNPS();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save NPS');
+    }
+  };
+
+  const handleDeleteNPS = async (npsId) => {
+    try {
+      await deleteNPS(npsId);
+      toast.success('NPS account deleted');
+      loadNPS();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete NPS');
+    }
+  };
+
   // ── Standing Instruction handlers ────────────────
   const handleAddSI = async (data) => {
     try {
@@ -914,6 +959,10 @@ export default function App() {
             <button className="btn btn-primary" onClick={() => { setPpfModalMode('add'); setAddPPFModalData({}); }}>
               + Add PPF
             </button>
+          ) : activeTab === 'nps' ? (
+            <button className="btn btn-primary" onClick={() => { setNpsModalMode('add'); setAddNPSModalData({}); }}>
+              + Add NPS
+            </button>
           ) : activeTab === 'standingInstructions' ? (
             <button className="btn btn-primary" onClick={() => setAddSIModalData({})}>
               + Add SI
@@ -946,14 +995,17 @@ export default function App() {
         <button className={`tab ${activeTab === 'recurringdeposits' ? 'active' : ''}`} onClick={() => setActiveTab('recurringdeposits')}>
           Recurring Deposits
         </button>
-        <button className={`tab ${activeTab === 'insurance' ? 'active' : ''}`} onClick={() => setActiveTab('insurance')}>
-          Insurance
-        </button>
         <button className={`tab ${activeTab === 'ppf' ? 'active' : ''}`} onClick={() => setActiveTab('ppf')}>
           PPF
         </button>
+        <button className={`tab ${activeTab === 'nps' ? 'active' : ''}`} onClick={() => setActiveTab('nps')}>
+          NPS
+        </button>
         <button className={`tab ${activeTab === 'standingInstructions' ? 'active' : ''}`} onClick={() => setActiveTab('standingInstructions')}>
           Standing Instructions
+        </button>
+        <button className={`tab ${activeTab === 'insurance' ? 'active' : ''}`} onClick={() => setActiveTab('insurance')}>
+          Insurance
         </button>
         <button className={`tab ${activeTab === 'charts' ? 'active' : ''}`} onClick={() => setActiveTab('charts')}>
           Charts
@@ -1035,6 +1087,18 @@ export default function App() {
           onEditPPF={(ppf) => { setPpfModalMode('edit'); setAddPPFModalData(ppf); }}
           onDeletePPF={handleDeletePPF}
           onAddContribution={(ppf) => { setPpfModalMode('contribution'); setAddPPFModalData(ppf); }}
+        />
+      )}
+
+      {activeTab === 'nps' && (
+        <NPSTable
+          accounts={npsAccounts}
+          loading={loading}
+          npsDashboard={npsDashboard}
+          onAddNPS={() => { setNpsModalMode('add'); setAddNPSModalData({}); }}
+          onEditNPS={(nps) => { setNpsModalMode('edit'); setAddNPSModalData(nps); }}
+          onDeleteNPS={handleDeleteNPS}
+          onAddContribution={(nps) => { setNpsModalMode('contribution'); setAddNPSModalData(nps); }}
         />
       )}
 
@@ -1155,6 +1219,16 @@ export default function App() {
           mode={ppfModalMode}
           onSubmit={handleAddPPF}
           onClose={() => setAddPPFModalData(null)}
+        />
+      )}
+
+      {/* NPS Modal (add / edit / contribution) */}
+      {addNPSModalData !== null && (
+        <AddNPSModal
+          initialData={addNPSModalData}
+          mode={npsModalMode}
+          onSubmit={handleAddNPS}
+          onClose={() => setAddNPSModalData(null)}
         />
       )}
 

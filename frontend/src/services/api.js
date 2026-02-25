@@ -337,6 +337,38 @@ export async function addPPFContribution(ppfId, payload) {
   return data;
 }
 
+// ── NPS (National Pension System) ──────────────────────────
+
+export async function getNPSSummary() {
+  const { data } = await api.get('/nps/summary');
+  return data;
+}
+
+export async function getNPSDashboard() {
+  const { data } = await api.get('/nps/dashboard');
+  return data;
+}
+
+export async function addNPS(payload) {
+  const { data } = await api.post('/nps/add', payload);
+  return data;
+}
+
+export async function updateNPS(npsId, payload) {
+  const { data } = await api.put(`/nps/${npsId}`, payload);
+  return data;
+}
+
+export async function deleteNPS(npsId) {
+  const { data } = await api.delete(`/nps/${npsId}`);
+  return data;
+}
+
+export async function addNPSContribution(npsId, payload) {
+  const { data } = await api.post(`/nps/${npsId}/contribution`, payload);
+  return data;
+}
+
 // ── Standing Instructions ──────────────────────────────
 
 export async function getSISummary() {

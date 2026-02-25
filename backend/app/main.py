@@ -23,6 +23,7 @@ from .models import (
     AddRDRequest, UpdateRDRequest, AddRDInstallmentRequest,
     AddInsuranceRequest, UpdateInsuranceRequest,
     AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest,
+    AddNPSRequest, UpdateNPSRequest, AddNPSContributionRequest,
     AddSIRequest, UpdateSIRequest,
 )
 from .xlsx_database import xlsx_db as db
@@ -1938,6 +1939,65 @@ def add_ppf_contribution_endpoint(ppf_id: str, req: AddPPFContributionRequest):
     """Add a contribution to a PPF account."""
     try:
         return ppf_add_contribution(ppf_id, req.dict())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  NPS (NATIONAL PENSION SYSTEM)
+# ══════════════════════════════════════════════════════════
+
+from .nps_database import get_all as nps_get_all, get_dashboard as nps_get_dashboard, add as nps_add, update as nps_update, delete as nps_delete, add_contribution as nps_add_contribution
+
+
+@app.get("/api/nps/summary")
+def get_nps_summary():
+    """List all NPS accounts."""
+    return nps_get_all()
+
+
+@app.get("/api/nps/dashboard")
+def get_nps_dashboard():
+    """Aggregate NPS totals for dashboard."""
+    return nps_get_dashboard()
+
+
+@app.post("/api/nps/add")
+def add_nps_endpoint(req: AddNPSRequest):
+    """Add a new NPS account."""
+    try:
+        return nps_add(req.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/nps/{nps_id}")
+def update_nps_endpoint(nps_id: str, req: UpdateNPSRequest):
+    """Update an existing NPS account."""
+    try:
+        return nps_update(nps_id, req.dict(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/nps/{nps_id}")
+def delete_nps_endpoint(nps_id: str):
+    """Delete an NPS account."""
+    try:
+        return nps_delete(nps_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/nps/{nps_id}/contribution")
+def add_nps_contribution_endpoint(nps_id: str, req: AddNPSContributionRequest):
+    """Add a contribution to an NPS account."""
+    try:
+        return nps_add_contribution(nps_id, req.dict())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
