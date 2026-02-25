@@ -41,7 +41,7 @@ export default function MarketTicker({ tickers, loading }) {
         ...styles.item,
         borderRight: isLast ? 'none' : '1px solid var(--border)',
       }}>
-        <span style={styles.label}>{t.label}</span>
+        <span style={styles.label}>{t.label}{t.unit ? <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '10px', marginLeft: '2px' }}>{t.unit.replace('₹', '')}</span> : null}</span>
         {hasData ? (
           <>
             <span style={{ ...styles.price, color: isUp ? 'var(--green)' : 'var(--red)' }}>

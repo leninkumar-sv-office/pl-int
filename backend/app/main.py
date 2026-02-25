@@ -1317,8 +1317,8 @@ def get_dashboard_summary():
 MARKET_TICKER_SYMBOLS = [
     {"key": "SENSEX",    "yahoo": "%5EBSESN",    "label": "Sensex",     "type": "index",     "kite": True},
     {"key": "NIFTY50",   "yahoo": "%5ENSEI",     "label": "Nifty 50",   "type": "index",     "kite": True},
-    {"key": "GOLD",      "yahoo": "GC%3DF",      "label": "Gold",       "type": "commodity", "unit": "₹/10g",   "kite": True},
-    {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "₹/kg",    "kite": True},
+    {"key": "GOLD",      "yahoo": "GC%3DF",      "label": "Gold",       "type": "commodity", "unit": "₹/g",    "kite": True, "divisor": 10},
+    {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "₹/g",    "kite": True, "divisor": 1000},
     {"key": "SGX",       "yahoo": "%5ESTI",         "label": "SGX STI",    "type": "index",                        "kite": False},
     {"key": "NIKKEI",    "yahoo": "%5EN225",      "label": "Nikkei",     "type": "index",                        "kite": False},
     {"key": "SGDINR",    "yahoo": "SGDINR%3DX",   "label": "SGD/INR",   "type": "forex",                        "kite": False},
@@ -1421,13 +1421,16 @@ def _refresh_tickers_once():
     for meta in MARKET_TICKER_SYMBOLS:
         key = meta["key"]
 
+        divisor = meta.get("divisor", 1)
+
         # Try Zerodha
         zt = zerodha_tickers.get(key)
         if zt and zt.get("price", 0) > 0:
             result = {
                 "key": key, "label": meta["label"],
                 "type": meta.get("type", "index"), "unit": meta.get("unit", ""),
-                "price": zt["price"], "change": zt.get("change", 0),
+                "price": round(zt["price"] / divisor, 2),
+                "change": round(zt.get("change", 0) / divisor, 2),
                 "change_pct": zt.get("change_pct", 0),
                 "source": "zerodha",
             }
@@ -1439,6 +1442,9 @@ def _refresh_tickers_once():
             import random as _rnd
             yg_result = stock_service.fetch_market_ticker(meta)
             if yg_result.get("price", 0) > 0:
+                if divisor != 1:
+                    yg_result["price"] = round(yg_result["price"] / divisor, 2)
+                    yg_result["change"] = round(yg_result.get("change", 0) / divisor, 2)
                 yg_result["source"] = "yahoo/google"
                 results.append(yg_result)
                 time.sleep(_rnd.uniform(0.3, 0.8))
