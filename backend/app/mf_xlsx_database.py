@@ -900,6 +900,36 @@ class MFXlsxPortfolio:
             ws = wb["Trading History"]
             header_row = self._find_header_row(ws)
 
+            # ── Duplicate check: same date + units + NAV ──
+            try:
+                dt_check = datetime.strptime(buy_date, "%Y-%m-%d")
+            except ValueError:
+                dt_check = None
+
+            if dt_check:
+                for row in range(header_row + 1, ws.max_row + 1):
+                    action = ws.cell(row, 3).value
+                    if action != "Buy":
+                        continue
+                    row_date = ws.cell(row, 1).value
+                    row_units = ws.cell(row, 4).value
+                    row_nav = ws.cell(row, 5).value
+                    # Normalize date comparison
+                    if isinstance(row_date, datetime):
+                        row_date = row_date.date()
+                    elif isinstance(row_date, str):
+                        try:
+                            row_date = datetime.strptime(row_date.strip(), "%Y-%m-%d").date()
+                        except ValueError:
+                            continue
+                    if (row_date == dt_check.date()
+                            and abs(float(row_units or 0) - units) < 1e-4
+                            and abs(float(row_nav or 0) - nav) < 1e-2):
+                        wb.close()
+                        raise ValueError(
+                            f"Duplicate: {units:.4f} units @ NAV {nav:.4f} on {buy_date} already exists for {fund_name}"
+                        )
+
             # Insert Buy row at top (below header)
             insert_at = header_row + 1
             ws.insert_rows(insert_at)

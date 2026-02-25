@@ -6,7 +6,7 @@ const formatPrice = (price, type) => {
     return '₹' + price.toFixed(2);
   }
   if (type === 'commodity') {
-    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return '₹' + price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   // index
   return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
