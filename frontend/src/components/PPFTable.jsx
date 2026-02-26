@@ -17,24 +17,50 @@ const statusColor = (s) => {
   switch (s) {
     case 'Active': return { bg: 'var(--green-bg)', color: 'var(--green)' };
     case 'Matured': return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+    case 'Closed': return { bg: 'var(--red-bg)', color: 'var(--red)' };
     default: return { bg: 'var(--yellow-bg)', color: 'var(--yellow)' };
   }
+};
+
+const sipFreqLabel = (freq) => {
+  const f = (freq || 'monthly').toLowerCase();
+  if (f.includes('month')) return 'Monthly';
+  if (f.includes('quarter')) return 'Quarterly';
+  if (f.includes('year') || f.includes('annual')) return 'Yearly';
+  return freq || '-';
+};
+
+const isOneTime = (ppf) => ppf.sip_end_date && ppf.sip_end_date === ppf.start_date;
+
+const paymentTypeLabel = (ppf) => {
+  if (isOneTime(ppf)) return 'One-time';
+  if (ppf.sip_amount > 0) return `SIP - ${sipFreqLabel(ppf.sip_frequency)}`;
+  return '-';
+};
+
+const paymentTypeStyle = (ppf) => {
+  if (isOneTime(ppf)) return { bg: 'rgba(168,85,247,0.12)', color: '#a855f7' };
+  if (ppf.sip_amount > 0) return { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' };
+  return { bg: 'var(--bg-input)', color: 'var(--text-muted)' };
 };
 
 /* ── Main table column definitions ─────────────────────── */
 const COL_DEFS = [
   { id: 'bank',           label: 'Bank' },
+  { id: 'type',           label: 'Type' },
+  { id: 'sipAmount',      label: 'Amount' },
   { id: 'rate',           label: 'Rate %' },
+  { id: 'tenure',         label: 'Tenure' },
   { id: 'startDate',      label: 'Start Date' },
   { id: 'maturityDate',   label: 'Maturity Date' },
-  { id: 'yearsCompleted', label: 'Years' },
+  { id: 'installments',   label: 'Installments' },
   { id: 'totalDeposited', label: 'Total Deposited' },
-  { id: 'totalInterest',  label: 'Interest Earned' },
-  { id: 'currentBalance', label: 'Current Balance' },
+  { id: 'interestAccrued',label: 'Interest Accrued' },
+  { id: 'maturityAmt',    label: 'Maturity Value' },
   { id: 'status',         label: 'Status' },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
-const LS_KEY = 'ppfVisibleCols_v1';
+const LS_KEY = 'ppfVisibleCols_v3';
 
 function loadVisibleCols() {
   try {
@@ -44,7 +70,26 @@ function loadVisibleCols() {
   return new Set(ALL_COL_IDS);
 }
 
-/* ── Yearly schedule sub-table styles ─────────────────── */
+/* ── Installment sub-table column definitions ──────────── */
+const INST_COL_DEFS = [
+  { id: 'month',       label: '#' },
+  { id: 'date',        label: 'Date' },
+  { id: 'invested',    label: 'Amount Invested' },
+  { id: 'earned',      label: 'Interest Earned' },
+  { id: 'projected',   label: 'Interest Projected' },
+  { id: 'cumulative',  label: 'Cumulative Interest' },
+];
+const INST_COL_LS_KEY = 'ppfInstHiddenCols';
+
+function loadInstHiddenCols() {
+  try {
+    const saved = localStorage.getItem(INST_COL_LS_KEY);
+    if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
+  } catch (_) {}
+  return new Set();
+}
+
+/* ── Sub-table styles ─────────────────────────────────── */
 const heldTh = {
   padding: '7px 10px',
   textAlign: 'left',
@@ -61,42 +106,22 @@ const heldTd = {
   verticalAlign: 'middle',
 };
 
-/* ── Yearly schedule column definitions ───────────────── */
-const SCHED_COL_DEFS = [
-  { id: 'year',     label: 'Year' },
-  { id: 'fy',       label: 'Financial Year' },
-  { id: 'opening',  label: 'Opening Balance' },
-  { id: 'deposit',  label: 'Deposit' },
-  { id: 'interest', label: 'Interest Earned' },
-  { id: 'closing',  label: 'Closing Balance' },
-];
-const SCHED_COL_LS_KEY = 'ppfSchedHiddenCols';
-
-function loadSchedHiddenCols() {
-  try {
-    const saved = localStorage.getItem(SCHED_COL_LS_KEY);
-    if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
-  } catch (_) {}
-  return new Set();
-}
-
 /* ── PPF Detail Row ──────────────────────────────── */
-function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
+function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
   const sc = statusColor(ppf.status);
-  const schedule = ppf.yearly_schedule || [];
-  const contributions = ppf.contributions || [];
+  const installments = ppf.installments || [];
 
-  // Schedule column visibility
-  const [hiddenSchedCols, setHiddenSchedCols] = useState(loadSchedHiddenCols);
+  // Installment column visibility
+  const [hiddenInstCols, setHiddenInstCols] = useState(loadInstHiddenCols);
   const [showColPicker, setShowColPicker] = useState(false);
   const colPickerRef = useRef(null);
-  const sCol = (id) => !hiddenSchedCols.has(id);
+  const iCol = (id) => !hiddenInstCols.has(id);
 
-  const toggleSchedCol = (id) => {
-    setHiddenSchedCols(prev => {
+  const toggleInstCol = (id) => {
+    setHiddenInstCols(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      try { localStorage.setItem(SCHED_COL_LS_KEY, JSON.stringify([...next])); } catch (_) {}
+      try { localStorage.setItem(INST_COL_LS_KEY, JSON.stringify([...next])); } catch (_) {}
       return next;
     });
   };
@@ -108,8 +133,13 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [showColPicker]);
 
-  const pastYears = schedule.filter(y => y.is_past);
-  const futureYears = schedule.filter(y => !y.is_past);
+  const pastInstallments = installments.filter(i => i.is_past);
+  const futureInstallments = installments.filter(i => !i.is_past);
+  const compoundMonths = installments.filter(i => i.is_compound_month);
+  const totalInvested = installments.reduce((s, i) => s + (i.amount_invested || 0), 0);
+  const totalIntEarned = installments.reduce((s, i) => s + (i.interest_earned || 0), 0);
+  const totalIntProjected = installments.reduce((s, i) => s + (i.interest_projected || 0), 0);
+  const maxCumulativeInterest = Math.max(0, ...installments.map(i => i.cumulative_interest || 0));
 
   return (
     <div style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '20px 24px' }}>
@@ -121,6 +151,12 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
         )}
         {onEdit && (
           <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(ppf); }}>Edit</button>
+        )}
+        {onRedeem && ppf.status === 'Matured' && (
+          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue)', borderColor: 'var(--blue)' }}
+            onClick={(e) => { e.stopPropagation(); onRedeem(ppf); }}>
+            Redeem
+          </button>
         )}
         {onDelete && (
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
@@ -150,47 +186,49 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
           </div>
         )}
         <div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type</div>
+          {(() => { const pts = paymentTypeStyle(ppf); return (
+            <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: pts.bg, color: pts.color, marginTop: '2px' }}>{paymentTypeLabel(ppf)}</span>
+          ); })()}
+        </div>
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{isOneTime(ppf) ? 'Lump Sum' : 'SIP Amount'}</div>
+          <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(ppf.sip_amount)}</div>
+        </div>
+        <div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Rate</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.interest_rate}%</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tenure</div>
-          <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.tenure_years || 15} years</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compounding</div>
+          <div style={{ fontSize: '15px', fontWeight: 600 }}>Annually</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start</div>
-          <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(ppf.start_date)}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity</div>
-          <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatDate(ppf.maturity_date)}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Years Completed</div>
-          <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.years_completed || 0} / {ppf.tenure_years || 15}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Installments Paid</div>
+          <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.installments_paid || 0} / {ppf.installments_total || ppf.tenure_months}</div>
         </div>
         <div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.total_interest_earned)}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Accrued</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.total_interest_accrued || 0)}</div>
         </div>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Balance</div>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.current_balance)}</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.maturity_amount)}</div>
         </div>
+        {ppf.days_to_maturity > 0 && ppf.status === 'Active' && (
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days Left</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: ppf.days_to_maturity <= 90 ? 'var(--yellow)' : 'var(--text)' }}>{ppf.days_to_maturity}d</div>
+          </div>
+        )}
         <div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
           <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: sc.bg, color: sc.color }}>{ppf.status}</span>
         </div>
-        {ppf.days_to_maturity > 0 && ppf.status === 'Active' && (
-          <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Days to Maturity</div>
-            <div style={{ fontSize: '15px', fontWeight: 600 }}>{ppf.days_to_maturity}d</div>
-          </div>
-        )}
         {ppf.remarks && (
           <div style={{ flex: '1 1 100%' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remarks</div>
@@ -199,22 +237,26 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
         )}
       </div>
 
-      {/* Yearly Schedule sub-table */}
-      {schedule.length > 0 && (
+      {/* Installment Schedule sub-table */}
+      {installments.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
           <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span>Yearly Schedule ({schedule.length})</span>
+            <span>Installment Schedule ({installments.length})</span>
             <span style={{ display: 'flex', gap: '8px', fontSize: '10px', fontWeight: 500 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#22c55e', display: 'inline-block' }} />
-                <span style={{ color: 'var(--text-muted)' }}>Past ({pastYears.length})</span>
+                <span style={{ color: 'var(--text-muted)' }}>Past ({pastInstallments.length})</span>
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#3b82f6', display: 'inline-block' }} />
-                <span style={{ color: 'var(--text-muted)' }}>Future ({futureYears.length})</span>
+                <span style={{ color: 'var(--text-muted)' }}>Future ({futureInstallments.length})</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#f59e0b', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-muted)' }}>Compounding ({compoundMonths.length})</span>
               </span>
             </span>
-            {/* Column picker */}
+            {/* Sub-table column picker */}
             <div style={{ position: 'relative' }} ref={colPickerRef}>
               <button
                 onClick={(e) => { e.stopPropagation(); setShowColPicker(v => !v); }}
@@ -231,12 +273,12 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
                 <div style={{
                   position: 'absolute', right: 0, top: '100%', marginTop: '4px', background: 'var(--bg-card)',
                   border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 0',
-                  zIndex: 100, minWidth: '170px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  zIndex: 100, minWidth: '180px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                 }}>
-                  {SCHED_COL_DEFS.map(c => (
+                  {INST_COL_DEFS.map(c => (
                     <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 12px', fontSize: '12px', color: 'var(--text)', cursor: 'pointer', userSelect: 'none' }}
                       onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={sCol(c.id)} onChange={() => toggleSchedCol(c.id)} style={{ accentColor: 'var(--blue)' }} />
+                      <input type="checkbox" checked={iCol(c.id)} onChange={() => toggleInstCol(c.id)} style={{ accentColor: 'var(--blue)' }} />
                       {c.label}
                     </label>
                   ))}
@@ -247,21 +289,33 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
 
           {/* Summary boxes */}
           <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
-            <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
-              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Deposited</div>
-              <div style={{ fontSize: '14px', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</div>
-            </div>
-            <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
-              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Interest</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.total_interest_earned)}</div>
-            </div>
-            <div style={{ padding: '6px 12px', background: 'rgba(59,130,246,0.06)', borderRadius: 6, border: '1px solid rgba(59,130,246,0.15)' }}>
-              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--blue)', fontWeight: 600, letterSpacing: '0.4px' }}>Current Balance</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(ppf.current_balance)}</div>
-            </div>
+            {totalInvested > 0 && (
+              <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Total Invested</div>
+                <div style={{ fontSize: '14px', fontWeight: 600 }}>{formatINR(totalInvested)}</div>
+              </div>
+            )}
+            {totalIntEarned > 0 && (
+              <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.4px' }}>Interest Earned</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(totalIntEarned)}</div>
+              </div>
+            )}
+            {totalIntProjected > 0 && (
+              <div style={{ padding: '6px 12px', background: 'rgba(59,130,246,0.06)', borderRadius: 6, border: '1px solid rgba(59,130,246,0.15)' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--blue)', fontWeight: 600, letterSpacing: '0.4px' }}>Interest to Earn</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(totalIntProjected)}</div>
+              </div>
+            )}
+            {maxCumulativeInterest > 0 && (
+              <div style={{ padding: '6px 12px', background: 'rgba(245,158,11,0.06)', borderRadius: 6, border: '1px solid rgba(245,158,11,0.15)' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#f59e0b', fontWeight: 600, letterSpacing: '0.4px' }}>Cumulative Interest</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#f59e0b' }}>{formatINR(maxCumulativeInterest)}</div>
+              </div>
+            )}
             <div style={{ padding: '6px 12px', background: 'rgba(168,85,247,0.06)', borderRadius: 6, border: '1px solid rgba(168,85,247,0.15)' }}>
               <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--purple, #a855f7)', fontWeight: 600, letterSpacing: '0.4px' }}>Max Yearly (80C)</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--purple, #a855f7)' }}>₹1,50,000</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--purple, #a855f7)' }}>{'\u20B9'}1,50,000</div>
             </div>
           </div>
 
@@ -272,22 +326,22 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
             <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  {sCol('year')     && <th style={heldTh}>Year</th>}
-                  {sCol('fy')       && <th style={heldTh}>Financial Year</th>}
-                  {sCol('opening')  && <th style={{ ...heldTh, textAlign: 'right' }}>Opening</th>}
-                  {sCol('deposit')  && <th style={{ ...heldTh, textAlign: 'right' }}>Deposit</th>}
-                  {sCol('interest') && <th style={{ ...heldTh, textAlign: 'right' }}>Interest</th>}
-                  {sCol('closing')  && <th style={{ ...heldTh, textAlign: 'right' }}>Closing</th>}
+                  {iCol('month')      && <th style={heldTh}>#</th>}
+                  {iCol('date')       && <th style={heldTh}>Date</th>}
+                  {iCol('invested')   && <th style={{ ...heldTh, textAlign: 'right' }}>Invested</th>}
+                  {iCol('earned')     && <th style={{ ...heldTh, textAlign: 'right' }}>Int Earned</th>}
+                  {iCol('projected')  && <th style={{ ...heldTh, textAlign: 'right' }}>Int Projected</th>}
+                  {iCol('cumulative') && <th style={{ ...heldTh, textAlign: 'right' }}>Cumulative Int</th>}
                 </tr>
               </thead>
               <tbody>
-                {schedule.map((yr, i) => {
-                  const isPast = yr.is_past;
-                  const hasDeposit = yr.deposit > 0;
-                  const pastBg = 'rgba(34,197,94,0.06)';
-                  const futureBg = 'rgba(59,130,246,0.04)';
-                  const pastBorder = '#22c55e';
-                  const futureBorder = '#3b82f6';
+                {installments.map((inst, i) => {
+                  const isPast = inst.is_past;
+                  const isCompound = inst.is_compound_month;
+                  const pastBg = isCompound ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.06)';
+                  const futureBg = isCompound ? 'rgba(245,158,11,0.06)' : 'rgba(59,130,246,0.04)';
+                  const pastBorder = isCompound ? '#f59e0b' : '#22c55e';
+                  const futureBorder = isCompound ? '#f59e0b' : '#3b82f6';
                   return (
                     <tr key={i} style={{
                       borderBottom: '1px solid var(--border)',
@@ -295,52 +349,30 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
                       borderLeft: `3px solid ${isPast ? pastBorder : futureBorder}`,
                       opacity: isPast ? 1 : 0.7,
                     }}>
-                      {sCol('year')     && <td style={{ ...heldTd, fontWeight: 600, color: 'var(--text-muted)' }}>{yr.year}</td>}
-                      {sCol('fy')       && <td style={{ ...heldTd, fontWeight: 600 }}>FY {yr.financial_year}</td>}
-                      {sCol('opening')  && <td style={{ ...heldTd, textAlign: 'right' }}>{formatINR(yr.opening_balance)}</td>}
-                      {sCol('deposit')  && <td style={{ ...heldTd, textAlign: 'right', fontWeight: hasDeposit ? 600 : 400, color: hasDeposit ? 'var(--text)' : 'var(--text-muted)' }}>
-                        {hasDeposit ? formatINR(yr.deposit) : '-'}
+                      {iCol('month') && <td style={{ ...heldTd, color: 'var(--text-muted)', fontWeight: 600 }}>
+                        {inst.month}
+                        {isCompound && (
+                          <span style={{ marginLeft: '4px', fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: '3px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', letterSpacing: '0.3px' }}>
+                            Y
+                          </span>
+                        )}
                       </td>}
-                      {sCol('interest') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: yr.interest_earned > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
-                        {yr.interest_earned > 0 ? formatINR(yr.interest_earned) : '-'}
+                      {iCol('date')     && <td style={heldTd}>{formatDate(inst.date)}</td>}
+                      {iCol('invested') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: inst.amount_invested > 0 ? 600 : 400, color: inst.amount_invested > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
+                        {inst.amount_invested > 0 ? formatINR(inst.amount_invested) : '-'}
                       </td>}
-                      {sCol('closing')  && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600 }}>{formatINR(yr.closing_balance)}</td>}
+                      {iCol('earned') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: inst.interest_earned > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+                        {inst.interest_earned > 0 ? formatINR(inst.interest_earned) : '-'}
+                      </td>}
+                      {iCol('projected') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: inst.interest_projected > 0 ? 'var(--blue)' : 'var(--text-muted)' }}>
+                        {inst.interest_projected > 0 ? formatINR(inst.interest_projected) : '-'}
+                      </td>}
+                      {iCol('cumulative') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: isCompound ? 700 : 400, color: inst.cumulative_interest > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
+                        {inst.cumulative_interest > 0 ? formatINR(inst.cumulative_interest) : '-'}
+                      </td>}
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Contributions list */}
-      {contributions.length > 0 && (
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)' }}>
-            Contributions ({contributions.length})
-          </div>
-          <div style={{
-            border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  <th style={heldTh}>#</th>
-                  <th style={heldTh}>Date</th>
-                  <th style={{ ...heldTh, textAlign: 'right' }}>Amount</th>
-                  <th style={heldTh}>Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contributions.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((c, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td style={{ ...heldTd, color: 'var(--text-muted)' }}>{contributions.length - i}</td>
-                    <td style={heldTd}>{formatDate(c.date)}</td>
-                    <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600 }}>{formatINR(c.amount)}</td>
-                    <td style={{ ...heldTd, color: 'var(--text-dim)' }}>{c.remarks || '-'}</td>
-                  </tr>
-                ))}
               </tbody>
             </table>
           </div>
@@ -351,7 +383,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution }) {
 }
 
 /* ── Main Table ───────────────────────────────────── */
-export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution }) {
+export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution, onRedeemPPF }) {
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState('account_name');
   const [sortDir, setSortDir] = useState('asc');
@@ -402,13 +434,16 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
     switch (sortKey) {
       case 'account_name':   va = a.account_name; vb = b.account_name; break;
       case 'bank':           va = a.bank; vb = b.bank; break;
+      case 'type':           va = isOneTime(a) ? 0 : 1; vb = isOneTime(b) ? 0 : 1; break;
+      case 'sipAmount':      va = a.sip_amount || 0; vb = b.sip_amount || 0; break;
       case 'rate':           va = a.interest_rate; vb = b.interest_rate; break;
+      case 'tenure':         va = a.tenure_years || 0; vb = b.tenure_years || 0; break;
       case 'startDate':      va = a.start_date; vb = b.start_date; break;
       case 'maturityDate':   va = a.maturity_date; vb = b.maturity_date; break;
-      case 'yearsCompleted': va = a.years_completed || 0; vb = b.years_completed || 0; break;
+      case 'installments':   va = a.installments_paid || 0; vb = b.installments_paid || 0; break;
       case 'totalDeposited': va = a.total_deposited; vb = b.total_deposited; break;
-      case 'totalInterest':  va = a.total_interest_earned || 0; vb = b.total_interest_earned || 0; break;
-      case 'currentBalance': va = a.current_balance || 0; vb = b.current_balance || 0; break;
+      case 'interestAccrued':va = a.total_interest_accrued || 0; vb = b.total_interest_accrued || 0; break;
+      case 'maturityAmt':    va = a.maturity_amount || 0; vb = b.maturity_amount || 0; break;
       case 'status':         va = a.status; vb = b.status; break;
       default:               va = a.account_name; vb = b.account_name;
     }
@@ -501,13 +536,16 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
               <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }}
                 onClick={() => handleSort('account_name')}>Account<SortIcon field="account_name" /></th>
               {col('bank') && <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('bank')}>Bank<SortIcon field="bank" /></th>}
+              {col('type') && <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('type')}>Type<SortIcon field="type" /></th>}
+              {col('sipAmount') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('sipAmount')}>Amount<SortIcon field="sipAmount" /></th>}
               {col('rate') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('rate')}>Rate %<SortIcon field="rate" /></th>}
+              {col('tenure') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('tenure')}>Tenure<SortIcon field="tenure" /></th>}
               {col('startDate') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('startDate')}>Start<SortIcon field="startDate" /></th>}
               {col('maturityDate') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('maturityDate')}>Maturity<SortIcon field="maturityDate" /></th>}
-              {col('yearsCompleted') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('yearsCompleted')}>Years<SortIcon field="yearsCompleted" /></th>}
+              {col('installments') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('installments')}>Paid<SortIcon field="installments" /></th>}
               {col('totalDeposited') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('totalDeposited')}>Deposited<SortIcon field="totalDeposited" /></th>}
-              {col('totalInterest') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('totalInterest')}>Interest<SortIcon field="totalInterest" /></th>}
-              {col('currentBalance') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('currentBalance')}>Balance<SortIcon field="currentBalance" /></th>}
+              {col('interestAccrued') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('interestAccrued')}>Interest<SortIcon field="interestAccrued" /></th>}
+              {col('maturityAmt') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('maturityAmt')}>Maturity<SortIcon field="maturityAmt" /></th>}
               {col('status') && <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('status')}>Status<SortIcon field="status" /></th>}
             </tr>
           </thead>
@@ -529,27 +567,39 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                     <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
                       {isExpanded ? '\u25BC' : '\u25B6'}
                     </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--text)' }}>
-                      {ppf.account_name}
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                        {ppf.account_name}
+                        {ppf.days_to_maturity > 0 && ppf.days_to_maturity <= 90 && ppf.status === 'Active' && (
+                          <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--yellow)', fontWeight: 400 }}>({ppf.days_to_maturity}d left)</span>
+                        )}
+                      </div>
                       {ppf.account_number && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', fontWeight: 400 }}>{ppf.account_number}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{ppf.account_number}</div>
                       )}
                     </td>
                     {col('bank') && <td style={{ padding: '10px 12px', color: 'var(--text-dim)' }}>{ppf.bank}</td>}
+                    {col('type') && <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      {(() => { const pts = paymentTypeStyle(ppf); return (
+                        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: pts.bg, color: pts.color }}>{paymentTypeLabel(ppf)}</span>
+                      ); })()}
+                    </td>}
+                    {col('sipAmount') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.sip_amount)}</td>}
                     {col('rate') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.interest_rate}%</td>}
+                    {col('tenure') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.tenure_years}y</td>}
                     {col('startDate') && <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>{formatDate(ppf.start_date)}</td>}
                     {col('maturityDate') && <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>{formatDate(ppf.maturity_date)}</td>}
-                    {col('yearsCompleted') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.years_completed || 0}/{ppf.tenure_years || 15}</td>}
+                    {col('installments') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.installments_paid || 0}/{ppf.installments_total || ppf.tenure_months}</td>}
                     {col('totalDeposited') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</td>}
-                    {col('totalInterest') && <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{formatINR(ppf.total_interest_earned)}</td>}
-                    {col('currentBalance') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(ppf.current_balance)}</td>}
+                    {col('interestAccrued') && <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{formatINR(ppf.total_interest_accrued || 0)}</td>}
+                    {col('maturityAmt') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.maturity_amount)}</td>}
                     {col('status') && <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: sc.bg, color: sc.color }}>{ppf.status}</span>
                     </td>}
                   </tr>
                   {isExpanded && (
                     <tr><td colSpan={TOTAL_COLS} style={{ padding: 0 }}>
-                      <PPFDetail ppf={ppf} onEdit={onEditPPF} onDelete={onDeletePPF} onAddContribution={onAddContribution} />
+                      <PPFDetail ppf={ppf} onEdit={onEditPPF} onDelete={onDeletePPF} onAddContribution={onAddContribution} onRedeem={onRedeemPPF} />
                     </td></tr>
                   )}
                 </React.Fragment>

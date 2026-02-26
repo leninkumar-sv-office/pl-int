@@ -1087,6 +1087,12 @@ export default function App() {
           onEditPPF={(ppf) => { setPpfModalMode('edit'); setAddPPFModalData(ppf); }}
           onDeletePPF={handleDeletePPF}
           onAddContribution={(ppf) => { setPpfModalMode('contribution'); setAddPPFModalData(ppf); }}
+          onRedeemPPF={(ppf) => {
+            if (window.confirm(`Redeem PPF "${ppf.account_name}"?\nMaturity Value: ₹${Number(ppf.maturity_amount).toLocaleString('en-IN')}\n\nThis will delete the account.`)) {
+              handleDeletePPF(ppf.id);
+              toast.success(`PPF "${ppf.account_name}" redeemed successfully`);
+            }
+          }}
         />
       )}
 

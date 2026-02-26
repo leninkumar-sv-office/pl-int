@@ -25,6 +25,18 @@ export default function AddPPFModal({ onSubmit, onClose, initialData, mode = 'ad
       interest_rate: initialData?.interest_rate || 7.1,
       start_date: initialData?.start_date || new Date().toISOString().split('T')[0],
       tenure_years: initialData?.tenure_years || 15,
+      payment_type: initialData?.payment_type || (
+        // Detect from existing data: if sip_end_date === start_date, it was one-time
+        (initialData?.sip_amount > 0 && initialData?.sip_end_date && initialData?.sip_end_date === initialData?.start_date)
+          ? 'one_time' : (initialData?.sip_amount > 0 ? 'sip' : 'one_time')
+      ),
+      amount_added: initialData?.amount_added || (
+        // For one-time, pre-fill from sip_amount if sip_end_date === start_date
+        (initialData?.sip_amount > 0 && initialData?.sip_end_date === initialData?.start_date) ? initialData.sip_amount : ''
+      ),
+      sip_amount: initialData?.sip_amount || '',
+      sip_frequency: initialData?.sip_frequency || 'monthly',
+      sip_end_date: (initialData?.sip_end_date === initialData?.start_date) ? '' : (initialData?.sip_end_date || ''),
       remarks: initialData?.remarks || '',
     };
   });
@@ -73,6 +85,9 @@ export default function AddPPFModal({ onSubmit, onClose, initialData, mode = 'ad
         ...form,
         interest_rate: parseFloat(form.interest_rate),
         tenure_years: parseInt(form.tenure_years),
+        amount_added: form.payment_type === 'one_time' ? (parseFloat(form.amount_added) || 0) : 0,
+        sip_amount: form.payment_type === 'sip' ? (parseFloat(form.sip_amount) || 0) : 0,
+        sip_end_date: form.payment_type === 'sip' ? (form.sip_end_date || null) : null,
       };
       if (isEdit) payload.id = initialData.id;
       await onSubmit(payload);
@@ -143,6 +158,53 @@ export default function AddPPFModal({ onSubmit, onClose, initialData, mode = 'ad
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Min 15 years, extendable in 5-yr blocks</span>
                 </div>
               </div>
+
+              <div className="form-group">
+                <label>Payment Type</label>
+                <div style={{ display: 'flex', gap: '0', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                  {[{ val: 'one_time', lbl: 'One-time' }, { val: 'sip', lbl: 'SIP (Recurring)' }].map(opt => (
+                    <button key={opt.val} type="button" onClick={() => setForm(prev => ({ ...prev, payment_type: opt.val }))}
+                      style={{
+                        flex: 1, padding: '8px 12px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                        background: form.payment_type === opt.val ? 'var(--blue)' : 'var(--bg-input)',
+                        color: form.payment_type === opt.val ? '#fff' : 'var(--text-dim)',
+                        transition: 'all 0.15s',
+                      }}>
+                      {opt.lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {form.payment_type === 'one_time' ? (
+                <div className="form-group">
+                  <label>Amount ({'\u20B9'})</label>
+                  <input name="amount_added" type="number" step="1" min="0" max="150000" value={form.amount_added} onChange={handleChange} placeholder="Deposit amount (optional)" />
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Creates an opening contribution on the start date</span>
+                </div>
+              ) : (
+                <>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>SIP Amount ({'\u20B9'}) *</label>
+                      <input name="sip_amount" type="number" step="100" min="500" value={form.sip_amount} onChange={handleChange} placeholder="e.g. 12500" />
+                    </div>
+                    <div className="form-group">
+                      <label>Frequency</label>
+                      <select name="sip_frequency" value={form.sip_frequency} onChange={handleChange}>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>SIP End Date (optional)</label>
+                    <input name="sip_end_date" type="date" value={form.sip_end_date} onChange={handleChange} />
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Leave empty for ongoing until maturity</span>
+                  </div>
+                </>
+              )}
 
               <div className="form-group">
                 <label>Remarks</label>

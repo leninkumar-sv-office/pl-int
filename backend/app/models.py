@@ -430,6 +430,11 @@ class AddPPFRequest(BaseModel):
     interest_rate: float = Field(default=7.1, description="Annual interest rate (%)")
     start_date: str = Field(..., description="Account opening date YYYY-MM-DD")
     tenure_years: int = Field(default=15, description="Lock-in period in years")
+    payment_type: str = Field(default="one_time", description="one_time or sip")
+    amount_added: float = Field(default=0, ge=0, description="Initial deposit amount (one-time)")
+    sip_amount: float = Field(default=0, ge=0, description="SIP amount per period")
+    sip_frequency: str = Field(default="monthly", description="monthly / quarterly / yearly")
+    sip_end_date: Optional[str] = Field(default=None, description="SIP end date (null = until maturity)")
     remarks: str = ""
 
 
@@ -441,6 +446,10 @@ class UpdatePPFRequest(BaseModel):
     interest_rate: Optional[float] = None
     start_date: Optional[str] = None
     tenure_years: Optional[int] = None
+    payment_type: Optional[str] = None
+    sip_amount: Optional[float] = None
+    sip_frequency: Optional[str] = None
+    sip_end_date: Optional[str] = None
     remarks: Optional[str] = None
 
 
