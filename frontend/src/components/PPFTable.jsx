@@ -57,6 +57,7 @@ const COL_DEFS = [
   { id: 'totalDeposited', label: 'Total Deposited' },
   { id: 'interestAccrued',label: 'Interest Accrued' },
   { id: 'maturityAmt',    label: 'Maturity Value' },
+  { id: 'withdrawable',   label: 'Withdrawable' },
   { id: 'status',         label: 'Status' },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
@@ -78,6 +79,7 @@ const INST_COL_DEFS = [
   { id: 'earned',      label: 'Interest Earned' },
   { id: 'projected',   label: 'Interest Projected' },
   { id: 'cumulative',  label: 'Cumulative Interest' },
+  { id: 'cumAmount',   label: 'Cumulative Amount' },
 ];
 const INST_COL_LS_KEY = 'ppfInstHiddenCols';
 
@@ -155,7 +157,13 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
         {onRedeem && ppf.status === 'Matured' && (
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue)', borderColor: 'var(--blue)' }}
             onClick={(e) => { e.stopPropagation(); onRedeem(ppf); }}>
-            Redeem
+            Redeem ({formatINR(ppf.withdrawable_amount)})
+          </button>
+        )}
+        {ppf.withdrawal_status === 'partial' && ppf.withdrawable_amount > 0 && (
+          <button className="btn btn-ghost btn-sm" style={{ color: '#f59e0b', borderColor: '#f59e0b' }}
+            onClick={(e) => { e.stopPropagation(); window.alert(`Partial withdrawal available: ${formatINR(ppf.withdrawable_amount)}\n\n${ppf.withdrawal_note}\n\nVisit your bank/post office to initiate withdrawal.`); }}>
+            Withdraw ({formatINR(ppf.withdrawable_amount)})
           </button>
         )}
         {onDelete && (
@@ -236,6 +244,33 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
           </div>
         )}
       </div>
+
+      {/* Withdrawal Eligibility */}
+      {ppf.withdrawal_status && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', padding: '12px 16px',
+          borderRadius: 'var(--radius-sm)', border: '1px solid',
+          ...(ppf.withdrawal_status === 'full' ? {
+            background: 'rgba(0,210,106,0.06)', borderColor: 'rgba(0,210,106,0.2)',
+          } : ppf.withdrawal_status === 'partial' ? {
+            background: 'rgba(245,158,11,0.06)', borderColor: 'rgba(245,158,11,0.2)',
+          } : {
+            background: 'rgba(255,255,255,0.02)', borderColor: 'var(--border)',
+          }),
+        }}>
+          <div style={{ fontSize: '20px' }}>
+            {ppf.withdrawal_status === 'full' ? '\u2705' : ppf.withdrawal_status === 'partial' ? '\u26A0\uFE0F' : '\uD83D\uDD12'}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '2px' }}>{ppf.withdrawal_note}</div>
+            {ppf.withdrawable_amount > 0 && (
+              <div style={{ fontSize: '16px', fontWeight: 700, color: ppf.withdrawal_status === 'full' ? 'var(--green)' : '#f59e0b' }}>
+                Withdrawable: {formatINR(ppf.withdrawable_amount)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Installment Schedule sub-table */}
       {installments.length > 0 && (
@@ -332,6 +367,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                   {iCol('earned')     && <th style={{ ...heldTh, textAlign: 'right' }}>Int Earned</th>}
                   {iCol('projected')  && <th style={{ ...heldTh, textAlign: 'right' }}>Int Projected</th>}
                   {iCol('cumulative') && <th style={{ ...heldTh, textAlign: 'right' }}>Cumulative Int</th>}
+                  {iCol('cumAmount')  && <th style={{ ...heldTh, textAlign: 'right' }}>Cumulative Amt</th>}
                 </tr>
               </thead>
               <tbody>
@@ -369,6 +405,9 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                       </td>}
                       {iCol('cumulative') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: isCompound ? 700 : 400, color: inst.cumulative_interest > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
                         {inst.cumulative_interest > 0 ? formatINR(inst.cumulative_interest) : '-'}
+                      </td>}
+                      {iCol('cumAmount') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: 'var(--text)' }}>
+                        {formatINR(inst.cumulative_amount)}
                       </td>}
                     </tr>
                   );
@@ -444,6 +483,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
       case 'totalDeposited': va = a.total_deposited; vb = b.total_deposited; break;
       case 'interestAccrued':va = a.total_interest_accrued || 0; vb = b.total_interest_accrued || 0; break;
       case 'maturityAmt':    va = a.maturity_amount || 0; vb = b.maturity_amount || 0; break;
+      case 'withdrawable':   va = a.withdrawable_amount || 0; vb = b.withdrawable_amount || 0; break;
       case 'status':         va = a.status; vb = b.status; break;
       default:               va = a.account_name; vb = b.account_name;
     }
@@ -546,6 +586,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
               {col('totalDeposited') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('totalDeposited')}>Deposited<SortIcon field="totalDeposited" /></th>}
               {col('interestAccrued') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('interestAccrued')}>Interest<SortIcon field="interestAccrued" /></th>}
               {col('maturityAmt') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('maturityAmt')}>Maturity<SortIcon field="maturityAmt" /></th>}
+              {col('withdrawable') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('withdrawable')}>Withdrawable<SortIcon field="withdrawable" /></th>}
               {col('status') && <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('status')}>Status<SortIcon field="status" /></th>}
             </tr>
           </thead>
@@ -593,6 +634,13 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                     {col('totalDeposited') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</td>}
                     {col('interestAccrued') && <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{formatINR(ppf.total_interest_accrued || 0)}</td>}
                     {col('maturityAmt') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.maturity_amount)}</td>}
+                    {col('withdrawable') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      {ppf.withdrawable_amount > 0 ? (
+                        <span style={{ fontWeight: 600, color: ppf.withdrawal_status === 'full' ? 'var(--green)' : '#f59e0b' }}>{formatINR(ppf.withdrawable_amount)}</span>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Locked</span>
+                      )}
+                    </td>}
                     {col('status') && <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: sc.bg, color: sc.color }}>{ppf.status}</span>
                     </td>}

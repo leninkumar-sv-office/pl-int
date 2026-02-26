@@ -201,6 +201,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
             "interest_earned": round(interest, 2) if is_past else 0.0,
             "interest_projected": round(interest, 2) if not is_past else 0.0,
             "cumulative_interest": round(cumulative_interest, 2),
+            "cumulative_amount": round(running_balance, 2),
             "is_compound_month": is_compound_month,
             "is_past": is_past,
         })
@@ -509,6 +510,50 @@ def get_all() -> list:
             item["years_completed"] = max(0, (today - start).days // 365)
         except (ValueError, KeyError):
             item["years_completed"] = 0
+
+        # -- Withdrawal eligibility --
+        yc = item["years_completed"]
+        installments = item.get("installments", [])
+
+        if yc >= item.get("tenure_years", 15):
+            # Matured: full balance withdrawable
+            # Current balance = deposits + interest earned so far
+            past_insts = [i for i in installments if i["is_past"]]
+            current_balance = (
+                sum(i["amount_invested"] for i in past_insts)
+                + sum(i["interest_earned"] for i in past_insts)
+            )
+            item["withdrawable_amount"] = round(current_balance, 2)
+            item["withdrawal_status"] = "full"
+            item["withdrawal_note"] = "Fully withdrawable — lock-in complete"
+        elif yc >= 7:
+            # Partial withdrawal from 7th FY: up to 50% of balance
+            # at end of 4th preceding financial year
+            preceding_year = yc - 4
+            # Balance at end of preceding_year = sum of invested + interest
+            # for first (preceding_year * 12) months
+            months_cutoff = preceding_year * 12
+            balance_at_cutoff = 0.0
+            for inst in installments[:months_cutoff]:
+                balance_at_cutoff += inst.get("amount_invested", 0)
+                balance_at_cutoff += inst.get("interest_earned", 0)
+            withdrawable = round(balance_at_cutoff * 0.5, 2)
+            item["withdrawable_amount"] = withdrawable
+            item["withdrawal_status"] = "partial"
+            item["withdrawal_note"] = (
+                f"Partial withdrawal eligible — up to 50% of balance "
+                f"at end of year {preceding_year}"
+            )
+        else:
+            # Locked
+            unlock_year = 7
+            unlock_date = datetime.strptime(item["start_date"], "%Y-%m-%d").date() + relativedelta(years=unlock_year)
+            item["withdrawable_amount"] = 0
+            item["withdrawal_status"] = "locked"
+            item["withdrawal_note"] = (
+                f"Locked — partial withdrawal from year 7 "
+                f"({unlock_date.strftime('%b %Y')})"
+            )
 
     return items
 
