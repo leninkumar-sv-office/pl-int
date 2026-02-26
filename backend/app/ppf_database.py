@@ -165,6 +165,9 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     total_interest_projected = 0.0
     cumulative_interest = 0.0
 
+    lockin_months = int(maturity_years) * 12   # typically 180 (15 years)
+    partial_months = 7 * 12                     # partial withdrawal from year 7 (month 84)
+
     for m in range(1, tenure_months + 1):
         inst_date = start_dt + relativedelta(months=m - 1)
         is_past = inst_date <= today
@@ -194,6 +197,14 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         else:
             total_interest_projected += interest
 
+        # Lock-in status for this month
+        if m > lockin_months:
+            lock_status = "free"
+        elif m > partial_months:
+            lock_status = "partial"
+        else:
+            lock_status = "locked"
+
         installments.append({
             "month": m,
             "date": inst_date.strftime("%Y-%m-%d"),
@@ -204,6 +215,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
             "cumulative_amount": round(running_balance, 2),
             "is_compound_month": is_compound_month,
             "is_past": is_past,
+            "lock_status": lock_status,
         })
 
     # -- Totals --

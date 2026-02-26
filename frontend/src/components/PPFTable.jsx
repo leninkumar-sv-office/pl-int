@@ -138,6 +138,8 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
   const pastInstallments = installments.filter(i => i.is_past);
   const futureInstallments = installments.filter(i => !i.is_past);
   const compoundMonths = installments.filter(i => i.is_compound_month);
+  const freeMonths = installments.filter(i => i.lock_status === 'free');
+  const partialMonths = installments.filter(i => i.lock_status === 'partial');
   const totalInvested = installments.reduce((s, i) => s + (i.amount_invested || 0), 0);
   const totalIntEarned = installments.reduce((s, i) => s + (i.interest_earned || 0), 0);
   const totalIntProjected = installments.reduce((s, i) => s + (i.interest_projected || 0), 0);
@@ -290,6 +292,18 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                 <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#f59e0b', display: 'inline-block' }} />
                 <span style={{ color: 'var(--text-muted)' }}>Compounding ({compoundMonths.length})</span>
               </span>
+              {partialMonths.length > 0 && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#a855f7', display: 'inline-block' }} />
+                  <span style={{ color: 'var(--text-muted)' }}>Partial Withdraw ({partialMonths.length})</span>
+                </span>
+              )}
+              {freeMonths.length > 0 && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#06b6d4', display: 'inline-block' }} />
+                  <span style={{ color: 'var(--text-muted)' }}>Free ({freeMonths.length})</span>
+                </span>
+              )}
             </span>
             {/* Sub-table column picker */}
             <div style={{ position: 'relative' }} ref={colPickerRef}>
@@ -374,15 +388,29 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                 {installments.map((inst, i) => {
                   const isPast = inst.is_past;
                   const isCompound = inst.is_compound_month;
-                  const pastBg = isCompound ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.06)';
-                  const futureBg = isCompound ? 'rgba(245,158,11,0.06)' : 'rgba(59,130,246,0.04)';
-                  const pastBorder = isCompound ? '#f59e0b' : '#22c55e';
-                  const futureBorder = isCompound ? '#f59e0b' : '#3b82f6';
+                  const lockStatus = inst.lock_status || 'locked';
+
+                  // Background priority: compound > lock status > past/future
+                  let bg, borderColor;
+                  if (isCompound) {
+                    bg = isPast ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.06)';
+                    borderColor = '#f59e0b';
+                  } else if (lockStatus === 'free') {
+                    bg = isPast ? 'rgba(6,182,212,0.10)' : 'rgba(6,182,212,0.05)';
+                    borderColor = '#06b6d4';
+                  } else if (lockStatus === 'partial') {
+                    bg = isPast ? 'rgba(168,85,247,0.08)' : 'rgba(168,85,247,0.04)';
+                    borderColor = '#a855f7';
+                  } else {
+                    bg = isPast ? 'rgba(34,197,94,0.06)' : 'rgba(59,130,246,0.04)';
+                    borderColor = isPast ? '#22c55e' : '#3b82f6';
+                  }
+
                   return (
                     <tr key={i} style={{
                       borderBottom: '1px solid var(--border)',
-                      background: isPast ? pastBg : futureBg,
-                      borderLeft: `3px solid ${isPast ? pastBorder : futureBorder}`,
+                      background: bg,
+                      borderLeft: `3px solid ${borderColor}`,
                       opacity: isPast ? 1 : 0.7,
                     }}>
                       {iCol('month') && <td style={{ ...heldTd, color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -406,7 +434,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                       {iCol('cumulative') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: isCompound ? 700 : 400, color: inst.cumulative_interest > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
                         {inst.cumulative_interest > 0 ? formatINR(inst.cumulative_interest) : '-'}
                       </td>}
-                      {iCol('cumAmount') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: 'var(--text)' }}>
+                      {iCol('cumAmount') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: lockStatus === 'free' ? '#06b6d4' : lockStatus === 'partial' ? '#a855f7' : 'var(--text)' }}>
                         {formatINR(inst.cumulative_amount)}
                       </td>}
                     </tr>
