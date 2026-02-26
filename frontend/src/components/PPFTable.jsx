@@ -119,6 +119,28 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
   const colPickerRef = useRef(null);
   const iCol = (id) => !hiddenInstCols.has(id);
 
+  // Withdraw modal state
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmt, setWithdrawAmt] = useState('');
+  const [withdrawError, setWithdrawError] = useState('');
+  const withdrawMax = ppf.withdrawable_amount || 0;
+  const isFullRedeem = ppf.withdrawal_status === 'full';
+
+  const openWithdraw = () => {
+    setWithdrawAmt(String(withdrawMax));
+    setWithdrawError('');
+    setWithdrawOpen(true);
+  };
+  const handleWithdrawSubmit = () => {
+    const amt = parseFloat(withdrawAmt);
+    if (isNaN(amt) || amt <= 0) { setWithdrawError('Enter a valid amount'); return; }
+    if (amt > withdrawMax) { setWithdrawError(`Exceeds maximum: ${formatINR(withdrawMax)}`); return; }
+    setWithdrawOpen(false);
+    if (isFullRedeem && amt >= withdrawMax && onRedeem) {
+      onRedeem(ppf);
+    }
+  };
+
   const toggleInstCol = (id) => {
     setHiddenInstCols(prev => {
       const next = new Set(prev);
@@ -147,6 +169,63 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
 
   return (
     <div style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '20px 24px' }}>
+      {/* Withdraw Modal */}
+      {withdrawOpen && (
+        <div className="modal-overlay" onClick={() => setWithdrawOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <h2 style={{ marginBottom: '16px' }}>
+              {isFullRedeem ? 'Redeem PPF' : 'Withdraw from PPF'}
+            </h2>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>{ppf.account_name}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '16px' }}>{ppf.withdrawal_note}</div>
+
+            <div style={{
+              display: 'flex', gap: '16px', marginBottom: '16px', padding: '12px', background: 'var(--bg-input)',
+              borderRadius: 'var(--radius-sm)',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Max Withdrawable</div>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: isFullRedeem ? 'var(--green)' : '#f59e0b' }}>{formatINR(withdrawMax)}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, letterSpacing: '0.4px' }}>Current Balance</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>{formatINR(ppf.maturity_amount)}</div>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Amount ({'\u20B9'})</label>
+              <input
+                type="number" step="1" min="1" max={withdrawMax}
+                value={withdrawAmt}
+                onChange={(e) => { setWithdrawAmt(e.target.value); setWithdrawError(''); }}
+                autoFocus
+                style={{ width: '100%' }}
+              />
+              {withdrawError && <div style={{ color: 'var(--red)', fontSize: '12px', marginTop: '4px' }}>{withdrawError}</div>}
+            </div>
+
+            {/* Quick amount buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              {[0.25, 0.5, 0.75, 1].map(pct => (
+                <button key={pct} type="button" className="btn btn-ghost btn-sm"
+                  style={{ fontSize: '12px', padding: '4px 10px' }}
+                  onClick={() => { setWithdrawAmt(String(Math.round(withdrawMax * pct))); setWithdrawError(''); }}>
+                  {pct === 1 ? 'Max' : `${pct * 100}%`}
+                </button>
+              ))}
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setWithdrawOpen(false)}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={handleWithdrawSubmit}>
+                {isFullRedeem ? 'Redeem' : 'Withdraw'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
         <span style={{ fontSize: '13px', color: 'var(--text-dim)', marginRight: '4px' }}>Actions:</span>
@@ -158,14 +237,14 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
         )}
         {onRedeem && ppf.status === 'Matured' && (
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue)', borderColor: 'var(--blue)' }}
-            onClick={(e) => { e.stopPropagation(); onRedeem(ppf); }}>
-            Redeem ({formatINR(ppf.withdrawable_amount)})
+            onClick={(e) => { e.stopPropagation(); openWithdraw(); }}>
+            Redeem (max {formatINR(ppf.withdrawable_amount)})
           </button>
         )}
         {ppf.withdrawal_status === 'partial' && ppf.withdrawable_amount > 0 && (
           <button className="btn btn-ghost btn-sm" style={{ color: '#f59e0b', borderColor: '#f59e0b' }}
-            onClick={(e) => { e.stopPropagation(); window.alert(`Partial withdrawal available: ${formatINR(ppf.withdrawable_amount)}\n\n${ppf.withdrawal_note}\n\nVisit your bank/post office to initiate withdrawal.`); }}>
-            Withdraw ({formatINR(ppf.withdrawable_amount)})
+            onClick={(e) => { e.stopPropagation(); openWithdraw(); }}>
+            Withdraw (max {formatINR(ppf.withdrawable_amount)})
           </button>
         )}
         {onDelete && (
