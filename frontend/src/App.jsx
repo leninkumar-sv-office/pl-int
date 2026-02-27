@@ -593,7 +593,7 @@ export default function App() {
         toast.success('Contribution added');
       } else if (data.id) {
         await updatePPF(data.id, data);
-        toast.success('PPF account updated');
+        toast.success(data.new_sip_phase ? 'New SIP phase added' : 'PPF account updated');
       } else {
         await addPPF(data);
         toast.success(`Added PPF account: ${data.account_name}`);

@@ -438,6 +438,14 @@ class AddPPFRequest(BaseModel):
     remarks: str = ""
 
 
+class PPFSIPPhase(BaseModel):
+    """A single SIP phase for PPF multi-phase support."""
+    amount: float = Field(..., gt=0, description="SIP amount per period")
+    frequency: str = Field(default="monthly", description="monthly / quarterly / yearly")
+    start: str = Field(..., description="Phase start date YYYY-MM-DD")
+    end: Optional[str] = Field(default=None, description="Phase end date (null = until maturity or next phase)")
+
+
 class UpdatePPFRequest(BaseModel):
     """Request to update a PPF account."""
     account_name: Optional[str] = None
@@ -447,9 +455,11 @@ class UpdatePPFRequest(BaseModel):
     start_date: Optional[str] = None
     tenure_years: Optional[int] = None
     payment_type: Optional[str] = None
+    amount_added: Optional[float] = None
     sip_amount: Optional[float] = None
     sip_frequency: Optional[str] = None
     sip_end_date: Optional[str] = None
+    new_sip_phase: Optional[PPFSIPPhase] = Field(default=None, description="New SIP phase to append")
     remarks: Optional[str] = None
 
 

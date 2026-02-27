@@ -11,9 +11,14 @@ xlsx layout (matches FD/RD format):
     Row 1: [_, start_date(B), _, _, total_invested(E), _, _, maturity_years(H), _, _, bank(K)]
     Row 2: [_, end_date(B), _, _, interest_earned(E), _, _, "Annually"(H), _, _, sip_frequency(K)]
     Row 3: [_, rate_decimal(B), _, _, maturity_amount(E), _, _, sip_amount(H), _, _, account_number(K)]
-    Row 4: [_, sip_end_date(B), _, _, remarks(E)]
+    Row 4: [_, sip_end_date(B), _, _, remarks(E), _, _, _, _, _, sip_phases_json(K)]
     Row 5: headers [S.No, _, #, Date, Amount Invested, Interest Earned, Interest to be Earned]
     Row 6+: monthly data rows
+
+SIP phases (K4):
+    JSON array storing multiple SIP configurations over time.
+    Each phase: {"amount": float, "frequency": str, "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"|null}
+    If K4 is empty/missing, a single phase is derived from H3/K2/B4 for backward compatibility.
 
 Interest logic (PPF annual compounding):
     - PPF rate is annual (e.g. 7.1%)
@@ -113,6 +118,51 @@ def _get_financial_year(dt: date) -> str:
 #  XLSX PARSER -- Python-computed installments
 # ===================================================================
 
+def _parse_sip_phases_json(raw_val) -> list | None:
+    """Try to parse SIP phases JSON from cell K4. Returns list of phase dicts or None."""
+    if raw_val is None:
+        return None
+    s = str(raw_val).strip()
+    if not s or not s.startswith("["):
+        return None
+    try:
+        phases = json.loads(s)
+        if isinstance(phases, list) and len(phases) > 0:
+            return phases
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
+def _build_single_phase(sip_amount: float, sip_frequency: str,
+                        start_dt: date, sip_end_dt: date | None) -> list:
+    """Build a single-phase list from legacy single-SIP metadata."""
+    if sip_amount <= 0:
+        return []
+    return [{
+        "amount": sip_amount,
+        "frequency": sip_frequency,
+        "start": start_dt.strftime("%Y-%m-%d"),
+        "end": sip_end_dt.strftime("%Y-%m-%d") if sip_end_dt else None,
+    }]
+
+
+def _get_active_phase(phases: list, inst_date: date) -> dict | None:
+    """Find the active SIP phase for a given date.
+    A phase is active if inst_date >= phase.start and (phase.end is None or inst_date <= phase.end).
+    If multiple phases overlap, the last one wins (most recently added).
+    """
+    active = None
+    for phase in phases:
+        p_start = datetime.strptime(phase["start"], "%Y-%m-%d").date()
+        p_end = None
+        if phase.get("end"):
+            p_end = datetime.strptime(phase["end"], "%Y-%m-%d").date()
+        if inst_date >= p_start and (p_end is None or inst_date <= p_end):
+            active = phase
+    return active
+
+
 def _parse_ppf_xlsx(filepath: Path) -> dict:
     """Parse a single PPF xlsx file.
 
@@ -137,6 +187,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
     sip_end_date_raw = ws.cell(4, 2).value                        # B4: sip end date
     remarks = _to_str(ws.cell(4, 5).value)                        # E4: remarks
+    sip_phases_raw = ws.cell(4, 11).value                         # K4: SIP phases JSON
 
     wb.close()
 
@@ -154,9 +205,12 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     sip_end_dt = _to_date(sip_end_date_raw)
     sip_end_str = sip_end_dt.strftime("%Y-%m-%d") if sip_end_dt else None
 
-    sip_interval = _sip_freq_to_months(sip_frequency)
+    # -- SIP phases: read from K4, or build from single SIP metadata --
+    sip_phases = _parse_sip_phases_json(sip_phases_raw)
+    if sip_phases is None:
+        sip_phases = _build_single_phase(sip_amount, sip_frequency, start_dt, sip_end_dt)
 
-    # -- Generate monthly installments --
+    # -- Generate monthly installments using phases --
     today = date.today()
     installments = []
     running_balance = 0.0
@@ -168,18 +222,28 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     lockin_months = int(maturity_years) * 12   # typically 180 (15 years)
     partial_months = 7 * 12                     # partial withdrawal from year 7 (month 84)
 
+    # Track SIP alignment per phase (each phase has its own month counter for frequency alignment)
+    # We track months_since_phase_start for each phase to align sip_interval correctly
+    phase_month_counters = {}  # phase_index -> months since this phase started contributing
+
     for m in range(1, tenure_months + 1):
         inst_date = start_dt + relativedelta(months=m - 1)
         is_past = inst_date <= today
 
-        # SIP deposit: occurs on months aligned to sip_interval (month 1, 1+interval, ...)
+        # Find active phase for this month
         invested = 0.0
-        sip_active = sip_amount > 0
-        if sip_end_dt and inst_date > sip_end_dt:
-            sip_active = False
+        active_phase = _get_active_phase(sip_phases, inst_date)
+        if active_phase:
+            phase_idx = sip_phases.index(active_phase)
+            phase_amount = float(active_phase.get("amount", 0))
+            phase_freq = active_phase.get("frequency", "monthly")
+            phase_interval = _sip_freq_to_months(phase_freq)
+            phase_start = datetime.strptime(active_phase["start"], "%Y-%m-%d").date()
 
-        if sip_active and ((m - 1) % sip_interval == 0):
-            invested = sip_amount
+            # Calculate months since this phase started (0-indexed)
+            months_since_start = (inst_date.year - phase_start.year) * 12 + (inst_date.month - phase_start.month)
+            if months_since_start >= 0 and (months_since_start % phase_interval == 0):
+                invested = phase_amount
 
         running_balance += invested
         total_deposited += invested
@@ -236,6 +300,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         "sip_amount": round(sip_amount, 2),
         "sip_frequency": sip_frequency,
         "sip_end_date": sip_end_str,
+        "sip_phases": sip_phases,
         "tenure_years": int(maturity_years),
         "tenure_months": tenure_months,
         "start_date": start_dt.strftime("%Y-%m-%d"),
@@ -280,12 +345,17 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
                      rate_pct: float, maturity_years: int,
                      start_date: str, sip_frequency: str = "monthly",
                      sip_end_date: str = None, account_number: str = "",
-                     remarks: str = "", overwrite: bool = False):
+                     remarks: str = "", overwrite: bool = False,
+                     sip_phases: list = None):
     """Create an xlsx file following the FD template structure for PPF.
 
     If overwrite=False (default for new entries) and a file with the same name
     already exists, a numeric suffix is appended to avoid clobbering.
     If overwrite=True (used by update/contribution), the existing file is replaced.
+
+    sip_phases: optional list of phase dicts. If provided, used for installment
+    computation and stored in K4. H3/K2/B4 still store the first phase for
+    backward compatibility.
     """
     PPF_DIR.mkdir(parents=True, exist_ok=True)
     filepath = PPF_DIR / f"{name}.xlsx"
@@ -307,14 +377,26 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
     start_dt = datetime.strptime(start_date, "%Y-%m-%d")
     end_dt = start_dt + relativedelta(months=tenure_months)
 
-    sip_interval = _sip_freq_to_months(sip_frequency)
-
     sip_end_dt = None
     if sip_end_date:
         try:
             sip_end_dt = datetime.strptime(sip_end_date, "%Y-%m-%d")
         except (ValueError, TypeError):
             pass
+
+    # Build phases for computation
+    if sip_phases and len(sip_phases) > 0:
+        phases = sip_phases
+    else:
+        # Single phase from parameters
+        phases = []
+        if sip_amount > 0:
+            phases.append({
+                "amount": sip_amount,
+                "frequency": sip_frequency,
+                "start": start_date,
+                "end": sip_end_date,
+            })
 
     # -- Compute installments for xlsx data rows --
     running_balance = 0.0
@@ -326,11 +408,16 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
         inst_date = start_dt + relativedelta(months=m - 1)
 
         invested = 0.0
-        sip_active = sip_amount > 0
-        if sip_end_dt and inst_date > sip_end_dt:
-            sip_active = False
-        if sip_active and ((m - 1) % sip_interval == 0):
-            invested = sip_amount
+        active_phase = _get_active_phase(phases, inst_date.date() if isinstance(inst_date, datetime) else inst_date)
+        if active_phase:
+            phase_amount = float(active_phase.get("amount", 0))
+            phase_freq = active_phase.get("frequency", "monthly")
+            phase_interval = _sip_freq_to_months(phase_freq)
+            phase_start = datetime.strptime(active_phase["start"], "%Y-%m-%d").date()
+            inst_d = inst_date.date() if isinstance(inst_date, datetime) else inst_date
+            months_since_start = (inst_d.year - phase_start.year) * 12 + (inst_d.month - phase_start.month)
+            if months_since_start >= 0 and (months_since_start % phase_interval == 0):
+                invested = phase_amount
 
         running_balance += invested
         total_deposited += invested
@@ -364,10 +451,12 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
     ws.cell(3, 8, sip_amount)                   # H3
     ws.cell(3, 11, account_number)              # K3
 
-    # -- Row 4: sip_end_date, remarks (extra PPF fields) --
+    # -- Row 4: sip_end_date, remarks, sip_phases --
     if sip_end_dt:
         ws.cell(4, 2, sip_end_dt)              # B4
     ws.cell(4, 5, remarks)                      # E4
+    if phases and len(phases) > 0:
+        ws.cell(4, 11, json.dumps(phases))     # K4: SIP phases JSON
 
     # -- Row 5: Headers --
     headers = ['S.No', '', '#', 'Date', 'Amount Invested', 'Interest Earned', 'Interest to be Earned']
@@ -425,6 +514,15 @@ def _migrate_json_to_xlsx():
                 sip_amount = round(total_contrib / years_elapsed / 12, 2)  # monthly equivalent
                 sip_frequency = "monthly"
 
+            sip_phases_val = None
+            if sip_amount > 0:
+                sip_phases_val = [{
+                    "amount": sip_amount,
+                    "frequency": sip_frequency,
+                    "start": start_date,
+                    "end": sip_end_date,
+                }]
+
             _create_ppf_xlsx(
                 name=name,
                 bank=bank,
@@ -437,6 +535,7 @@ def _migrate_json_to_xlsx():
                 account_number=account_number,
                 remarks=remarks_val,
                 overwrite=True,
+                sip_phases=sip_phases_val,
             )
             print(f"[PPF] Migrated '{name}' to xlsx")
 
@@ -607,6 +706,16 @@ def add(data: dict) -> dict:
 
     name = account_name
 
+    # Build initial phase
+    sip_phases = None
+    if sip_amount > 0:
+        sip_phases = [{
+            "amount": sip_amount,
+            "frequency": sip_frequency,
+            "start": start_date,
+            "end": sip_end_date,
+        }]
+
     filepath = _create_ppf_xlsx(
         name=name,
         bank=bank,
@@ -618,6 +727,7 @@ def add(data: dict) -> dict:
         sip_end_date=sip_end_date,
         account_number=account_number,
         remarks=remarks_val,
+        sip_phases=sip_phases,
     )
 
     # Return the freshly parsed result
@@ -625,7 +735,12 @@ def add(data: dict) -> dict:
 
 
 def update(ppf_id: str, data: dict) -> dict:
-    """Update an existing PPF account -- rewrites xlsx file."""
+    """Update an existing PPF account -- rewrites xlsx file.
+
+    If data contains 'new_sip_phase', the existing phases are preserved
+    and a new phase is appended. The last existing phase gets its end date
+    set to the new phase's start date.
+    """
     with _lock:
         filepath = _find_xlsx(ppf_id)
         if filepath is None:
@@ -647,16 +762,62 @@ def update(ppf_id: str, data: dict) -> dict:
         account_number = data.get("account_number", current["account_number"])
         remarks_val = data.get("remarks", current["remarks"])
 
-        # Handle payment_type toggle from edit form
-        payment_type = data.get("payment_type")
-        if payment_type == "one_time":
-            initial_amount = data.get("amount_added", 0) or 0
-            if initial_amount > 0:
-                sip_amount = initial_amount
-                sip_frequency = "yearly"
-                sip_end_date = start_date  # single deposit on start date
-        elif payment_type == "sip":
-            sip_end_date = data.get("sip_end_date") or None
+        # Get existing phases
+        existing_phases = current.get("sip_phases", [])
+
+        # Check if we're adding a new SIP phase
+        new_phase = data.get("new_sip_phase")
+        if new_phase:
+            # Append new phase to existing phases
+            new_phase_start = new_phase.get("start")
+            new_phase_amount = float(new_phase.get("amount", 0))
+            new_phase_freq = new_phase.get("frequency", "monthly")
+            new_phase_end = new_phase.get("end")
+
+            if new_phase_amount > 0 and new_phase_start:
+                # End the last existing phase at the new phase's start
+                if existing_phases:
+                    existing_phases[-1]["end"] = new_phase_start
+
+                existing_phases.append({
+                    "amount": new_phase_amount,
+                    "frequency": new_phase_freq,
+                    "start": new_phase_start,
+                    "end": new_phase_end,
+                })
+
+                # Update H3/K2/B4 to reflect latest phase for backward compat
+                sip_amount = new_phase_amount
+                sip_frequency = new_phase_freq
+                sip_end_date = new_phase_end
+
+            sip_phases = existing_phases
+        else:
+            # Handle payment_type toggle from edit form
+            payment_type = data.get("payment_type")
+            if payment_type == "one_time":
+                initial_amount = data.get("amount_added", 0) or 0
+                if initial_amount > 0:
+                    sip_amount = initial_amount
+                    sip_frequency = "yearly"
+                    sip_end_date = start_date  # single deposit on start date
+                sip_phases = [{
+                    "amount": sip_amount,
+                    "frequency": sip_frequency,
+                    "start": start_date,
+                    "end": sip_end_date,
+                }] if sip_amount > 0 else []
+            elif payment_type == "sip":
+                sip_end_date = data.get("sip_end_date") or None
+                sip_phases = [{
+                    "amount": sip_amount,
+                    "frequency": sip_frequency,
+                    "start": start_date,
+                    "end": sip_end_date,
+                }] if sip_amount > 0 else []
+            else:
+                # No payment_type change — preserve existing phases
+                sip_phases = existing_phases
 
         # If name changed, delete old file
         new_name = account_name
@@ -675,6 +836,7 @@ def update(ppf_id: str, data: dict) -> dict:
             account_number=account_number,
             remarks=remarks_val,
             overwrite=True,
+            sip_phases=sip_phases,
         )
 
         new_filepath = PPF_DIR / f"{new_name}.xlsx"
@@ -758,6 +920,7 @@ def add_contribution(ppf_id: str, contribution: dict) -> dict:
             account_number=account["account_number"],
             remarks=new_remarks,
             overwrite=True,
+            sip_phases=account.get("sip_phases"),
         )
 
         return _parse_ppf_xlsx(filepath)
