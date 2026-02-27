@@ -185,9 +185,33 @@ def _get_active_phase(phases: list, inst_date: date) -> dict | None:
     return active
 
 
+def _parse_contributions_json(raw_val) -> list:
+    """Try to parse contributions JSON from cell H4 (legacy format).
+    Returns list of contribution dicts or empty list.
+    Handles broken JSON like {"amount": , ...} gracefully."""
+    if raw_val is None:
+        return []
+    s = str(raw_val).strip()
+    if not s or not s.startswith("["):
+        return []
+    # Fix broken JSON: "amount": , -> "amount": 0,
+    import re
+    s = re.sub(r':\s*,', ': 0,', s)
+    s = re.sub(r':\s*}', ': 0}', s)
+    try:
+        items = json.loads(s)
+        if isinstance(items, list):
+            return [c for c in items if isinstance(c, dict) and "date" in c]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return []
+
+
 def _scan_data_rows(ws, tenure_months: int) -> list:
     """Scan xlsx data rows (row 6+) for withdrawals (col 8) and
-    one-time contributions (col 9). Returns a contributions list."""
+    one-time contributions (col 9).  Also falls back to H4 (legacy
+    contributions JSON) if cols 8-9 have no data.
+    Returns a contributions list."""
     contributions = []
     for r in range(6, 6 + tenure_months):
         row_date = _to_date(ws.cell(r, 4).value)  # column 4: date
@@ -207,6 +231,13 @@ def _scan_data_rows(ws, tenure_months: int) -> list:
                 "amount": extra,
                 "remarks": "Contribution",
             })
+
+    # Fallback: if cols 8-9 had no data, try legacy H4 contributions JSON
+    if not contributions:
+        h4_contributions = _parse_contributions_json(ws.cell(4, 8).value)
+        if h4_contributions:
+            contributions = h4_contributions
+
     return contributions
 
 
@@ -305,7 +336,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         is_past = inst_date <= today
 
         # SIP deposit for this month
-        invested = 0.0
+        sip_deposit = 0.0
         if active_phase:
             phase_amount = float(active_phase.get("amount", 0))
             phase_freq = active_phase.get("frequency", "monthly")
@@ -314,19 +345,23 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
             # Align frequency to phase start date
             months_since_start = (inst_date.year - phase_start.year) * 12 + (inst_date.month - phase_start.month)
             if months_since_start >= 0 and (months_since_start % phase_interval == 0):
-                invested = phase_amount
+                sip_deposit = phase_amount
 
-        # Add one-time contributions for this month
+        # One-time contributions/withdrawals for this month
+        extra = 0.0
         contrib_key = (inst_date.year, inst_date.month)
         if contrib_key in contrib_by_month:
-            invested += contrib_by_month[contrib_key]
+            extra = contrib_by_month[contrib_key]
 
-        running_balance += invested
-        cumulative_deposited += invested
-        if invested >= 0:
-            total_deposited += invested
-        else:
-            total_withdrawn += abs(invested)
+        # Track deposits and withdrawals separately (don't net them)
+        month_deposited = sip_deposit + max(extra, 0)
+        month_withdrawn = abs(min(extra, 0))
+        net = month_deposited - month_withdrawn
+
+        running_balance += net
+        cumulative_deposited += net
+        total_deposited += month_deposited
+        total_withdrawn += month_withdrawn
 
         # Annual compounding: interest credited every 12 months from start
         is_compound_month = (m % 12 == 0)
@@ -349,14 +384,11 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         else:
             lock_status = "locked"
 
-        deposit = max(invested, 0)
-        withdrawn = abs(min(invested, 0))
-
         installments.append({
             "month": m,
             "date": inst_date.strftime("%Y-%m-%d"),
-            "amount_invested": round(deposit, 2),
-            "amount_withdrawn": round(withdrawn, 2),
+            "amount_invested": round(month_deposited, 2),
+            "amount_withdrawn": round(month_withdrawn, 2),
             "cumulative_deposited": round(cumulative_deposited, 2),
             "interest_earned": round(interest, 2) if is_past else 0.0,
             "interest_projected": round(interest, 2) if not is_past else 0.0,
@@ -734,6 +766,46 @@ def _migrate_old_xlsx():
             print(f"[PPF] Error migrating {f.name}: {e}")
 
 
+def _migrate_h4_to_cols():
+    """One-time migration: if any xlsx has contributions in H4 (legacy JSON)
+    but NOT in col 8/9 data rows, re-save the file so the data moves to cols 8-9."""
+    if not PPF_DIR.exists():
+        return
+    for f in sorted(PPF_DIR.glob("*.xlsx")):
+        if f.name.startswith("~$"):
+            continue
+        try:
+            wb = openpyxl.load_workbook(str(f), data_only=True)
+            ws = wb["Index"]
+            h4_val = ws.cell(4, 8).value
+            wb.close()
+            if not h4_val:
+                continue
+            # H4 has data — parse the file and re-save to migrate
+            account = _parse_ppf_xlsx(f)
+            contribs = account.get("contributions", [])
+            if not contribs:
+                continue
+            print(f"[PPF] Migrating H4 contributions to cols 8-9: {f.name}")
+            _create_ppf_xlsx(
+                name=account["name"],
+                bank=account["bank"],
+                sip_amount=account["sip_amount"],
+                rate_pct=account["interest_rate"],
+                maturity_years=account["tenure_years"],
+                start_date=account["start_date"],
+                sip_frequency=account["sip_frequency"],
+                sip_end_date=account.get("sip_end_date"),
+                account_number=account["account_number"],
+                remarks=account.get("remarks", ""),
+                overwrite=True,
+                sip_phases=account.get("sip_phases"),
+                contributions=contribs,
+            )
+        except Exception as e:
+            print(f"[PPF] Error migrating H4 for {f.name}: {e}")
+
+
 # ===================================================================
 #  PUBLIC API
 # ===================================================================
@@ -743,6 +815,7 @@ def get_all() -> list:
     with _lock:
         _migrate_json_to_xlsx()
         _migrate_old_xlsx()
+        _migrate_h4_to_cols()
         items = _parse_all_xlsx()
 
     for item in items:
