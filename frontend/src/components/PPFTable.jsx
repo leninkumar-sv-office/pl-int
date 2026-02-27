@@ -719,18 +719,38 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
           </div>
           {ppfDashboard.total_withdrawn > 0 && (
             <div style={{ flex: '1 1 120px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Withdrawn</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Withdrawn</div>
               <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--red)' }}>-{formatINR(ppfDashboard.total_withdrawn)}</div>
             </div>
           )}
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Interest</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Net Invested</div>
+            <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(ppfDashboard.net_invested)}</div>
+          </div>
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Earned</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppfDashboard.total_interest)}</div>
           </div>
           <div style={{ flex: '1 1 120px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Balance</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--blue)' }}>{formatINR(ppfDashboard.current_balance)}</div>
           </div>
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Maturity Value</div>
+            <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppfDashboard.maturity_value)}</div>
+          </div>
+          {ppfDashboard.total_locked > 0 && (
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Locked</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: '#f59e0b' }}>{formatINR(ppfDashboard.total_locked)}</div>
+            </div>
+          )}
+          {ppfDashboard.total_withdrawable > 0 && (
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Withdrawable</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppfDashboard.total_withdrawable)}</div>
+            </div>
+          )}
           <div style={{ flex: '1 1 80px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Active</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{ppfDashboard.active_count}</div>

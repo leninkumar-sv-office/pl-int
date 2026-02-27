@@ -49,7 +49,7 @@
   },
   "RAILTEL.NSE": {
     "price": 313.65,
-    "name": "Railtel Corporation of India Ltd",
+    "name": "RAILTEL",
     "week_52_high": 478.95,
     "week_52_low": 265.5,
     "day_change": 1.05,
@@ -97,7 +97,7 @@
   },
   "PIIND.BSE": {
     "price": 3117.45,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4329,
     "week_52_low": 2952.05,
     "day_change": -13.9,
@@ -145,7 +145,7 @@
   },
   "PIIND.NSE": {
     "price": 3117.3,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4330,
     "week_52_low": 2951.1,
     "day_change": -16.9,
@@ -205,7 +205,7 @@
   },
   "RELIANCE.BSE": {
     "price": 1394.3,
-    "name": "Reliance Industries Ltd",
+    "name": "RELIANCE",
     "week_52_high": 1611.2,
     "week_52_low": 1115.55,
     "day_change": -11.15,
@@ -313,7 +313,7 @@
   },
   "RITES.BSE": {
     "price": 214.4,
-    "name": "Rites Ltd",
+    "name": "RITES",
     "week_52_high": 316.15,
     "week_52_low": 192.3,
     "day_change": -1.35,
@@ -337,7 +337,7 @@
   },
   "RELIANCE.NSE": {
     "price": 1393.9,
-    "name": "Reliance Industries Ltd",
+    "name": "RELIANCE",
     "week_52_high": 1611.8,
     "week_52_low": 1114.85,
     "day_change": -12.9,
@@ -445,7 +445,7 @@
   },
   "RITES.NSE": {
     "price": 213.91,
-    "name": "Rites Ltd",
+    "name": "RITES",
     "week_52_high": 316,
     "week_52_low": 192.4,
     "day_change": -1.72,
@@ -469,7 +469,7 @@
   },
   "SUNTV.NSE": {
     "price": 647.65,
-    "name": "Sun TV Network Ltd",
+    "name": "SUNTV",
     "week_52_high": 691.4,
     "week_52_low": 480.2,
     "day_change": 36.25,
@@ -529,7 +529,7 @@
   },
   "RALLIS.BSE": {
     "price": 274.45,
-    "name": "Rallis India Ltd",
+    "name": "RALLIS",
     "week_52_high": 385.6,
     "week_52_low": 196,
     "day_change": -0.8,
@@ -661,7 +661,7 @@
   },
   "RALLIS.NSE": {
     "price": 276.25,
-    "name": "Rallis India Ltd",
+    "name": "RALLIS",
     "week_52_high": 385.9,
     "week_52_low": 196,
     "day_change": 0.9,
@@ -721,7 +721,7 @@
   },
   "SBIN.NSE": {
     "price": 1201.7,
-    "name": "State Bank of India",
+    "name": "SBIN",
     "week_52_high": 1234.7,
     "week_52_low": 680,
     "day_change": -7.8,
@@ -769,7 +769,7 @@
   },
   "RVNL.BSE": {
     "price": 316.55,
-    "name": "Rail Vikas Nigam",
+    "name": "RVNL",
     "week_52_high": 448,
     "week_52_low": 295.25,
     "day_change": -1.8,
@@ -853,7 +853,7 @@
   },
   "RVNL.NSE": {
     "price": 316.35,
-    "name": "Rail Vikas Nigam",
+    "name": "RVNL",
     "week_52_high": 447.8,
     "week_52_low": 301.2,
     "day_change": -1.95,
@@ -949,7 +949,7 @@
   },
   "OIL.NSE": {
     "price": 483.9,
-    "name": "Oil India Ltd",
+    "name": "OIL",
     "week_52_high": 524,
     "week_52_low": 325,
     "day_change": 10.45,
@@ -1141,7 +1141,7 @@
   },
   "RAILTEL.BSE": {
     "price": 313.8,
-    "name": "Railtel Corporation of India Ltd",
+    "name": "RAILTEL",
     "week_52_high": 478.8,
     "week_52_low": 265.3,
     "day_change": 1.1,

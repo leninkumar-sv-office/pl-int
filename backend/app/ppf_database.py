@@ -315,6 +315,9 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
     lockin_months = int(maturity_years) * 12   # typically 180 (15 years)
     partial_months = 7 * 12                     # partial withdrawal from year 7 (month 84)
+    current_balance = 0.0        # balance as of today (only past months)
+    last_compound_balance = 0.0  # balance at last compound month (for accrued interest)
+    months_since_compound = 0    # months elapsed since last compound
 
     for m in range(1, tenure_months + 1):
         # Base date from account start (month counter for compounding)
@@ -360,8 +363,9 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
         running_balance += net
         cumulative_deposited += net
-        total_deposited += month_deposited
-        total_withdrawn += month_withdrawn
+        if is_past:
+            total_deposited += month_deposited
+            total_withdrawn += month_withdrawn
 
         # Annual compounding: interest credited every 12 months from start
         is_compound_month = (m % 12 == 0)
@@ -373,6 +377,12 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
         if is_past:
             total_interest_earned += interest
+            current_balance = running_balance
+            if is_compound_month:
+                last_compound_balance = running_balance
+                months_since_compound = 0
+            else:
+                months_since_compound += 1
         else:
             total_interest_projected += interest
 
@@ -399,6 +409,10 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
             "lock_status": lock_status,
         })
 
+    # -- Accrued interest (pro-rated for partial year since last compound) --
+    accrued_interest = round(current_balance * rate_for_calc * months_since_compound / 12, 2)
+    current_balance = round(current_balance + accrued_interest, 2)
+
     # -- Totals --
     maturity_amount = round(running_balance, 2)
     status = "Matured" if end_dt <= today else "Active"
@@ -424,6 +438,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         "start_date": start_dt.strftime("%Y-%m-%d"),
         "maturity_date": end_dt.strftime("%Y-%m-%d"),
         "maturity_amount": maturity_amount,
+        "current_balance": round(current_balance, 2),
         "total_deposited": round(total_deposited, 2),
         "total_withdrawn": round(total_withdrawn, 2),
         "total_interest_accrued": round(total_interest_earned, 2),
@@ -829,11 +844,23 @@ def get_dashboard() -> dict:
     items = get_all()
     active = [i for i in items if i.get("status") == "Active"]
 
+    total_deposited = round(sum(i.get("total_deposited", 0) for i in active), 2)
+    total_withdrawn = round(sum(i.get("total_withdrawn", 0) for i in active), 2)
+    total_interest = round(sum(i.get("total_interest_accrued", 0) for i in active), 2)
+    current_balance = round(sum(i.get("current_balance", 0) for i in active), 2)
+    maturity_value = round(sum(i.get("maturity_amount", 0) for i in items), 2)
+    total_withdrawable = round(sum(i.get("withdrawable_amount", 0) for i in active), 2)
+    total_locked = round(current_balance - total_withdrawable, 2)
+
     return {
-        "total_deposited": round(sum(i.get("total_deposited", 0) for i in active), 2),
-        "total_withdrawn": round(sum(i.get("total_withdrawn", 0) for i in active), 2),
-        "total_interest": round(sum(i.get("total_interest_accrued", 0) for i in active), 2),
-        "current_balance": round(sum(i.get("maturity_amount", 0) for i in active), 2),
+        "total_deposited": total_deposited,
+        "total_withdrawn": total_withdrawn,
+        "net_invested": round(total_deposited - total_withdrawn, 2),
+        "total_interest": total_interest,
+        "current_balance": current_balance,
+        "maturity_value": maturity_value,
+        "total_withdrawable": total_withdrawable,
+        "total_locked": total_locked,
         "active_count": len(active),
         "total_count": len(items),
     }
