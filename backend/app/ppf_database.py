@@ -11,7 +11,7 @@ xlsx layout (matches FD/RD format):
     Row 1: [_, start_date(B), _, _, total_invested(E), _, _, maturity_years(H), _, _, bank(K)]
     Row 2: [_, end_date(B), _, _, interest_earned(E), _, _, "Annually"(H), _, _, sip_frequency(K)]
     Row 3: [_, rate_decimal(B), _, _, maturity_amount(E), _, _, sip_amount(H), _, _, account_number(K)]
-    Row 4: [_, sip_end_date(B), _, _, remarks(E), _, _, _, _, _, sip_phases_json(K)]
+    Row 4: [_, sip_end_date(B), _, _, remarks(E), _, _, contributions_json(H), _, _, sip_phases_json(K)]
     Row 5: headers [S.No, _, #, Date, Amount Invested, Interest Earned, Interest to be Earned]
     Row 6+: monthly data rows
 
@@ -19,6 +19,11 @@ SIP phases (K4):
     JSON array storing multiple SIP configurations over time.
     Each phase: {"amount": float, "frequency": str, "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"|null}
     If K4 is empty/missing, a single phase is derived from H3/K2/B4 for backward compatibility.
+
+One-time contributions (H4):
+    JSON array storing ad-hoc lump-sum deposits made between SIP installments.
+    Each: {"date": "YYYY-MM-DD", "amount": float, "remarks": str}
+    These are injected into the installment schedule at the matching month.
 
 Interest logic (PPF annual compounding):
     - PPF rate is annual (e.g. 7.1%)
@@ -32,6 +37,7 @@ import json
 import hashlib
 import threading
 import uuid
+import calendar
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from pathlib import Path
@@ -118,6 +124,22 @@ def _get_financial_year(dt: date) -> str:
 #  XLSX PARSER -- Python-computed installments
 # ===================================================================
 
+def _parse_json_array(raw_val) -> list | None:
+    """Try to parse a JSON array from a cell value. Returns list or None."""
+    if raw_val is None:
+        return None
+    s = str(raw_val).strip()
+    if not s or not s.startswith("["):
+        return None
+    try:
+        arr = json.loads(s)
+        if isinstance(arr, list) and len(arr) > 0:
+            return arr
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
 def _parse_sip_phases_json(raw_val) -> list | None:
     """Try to parse SIP phases JSON from cell K4. Returns list of phase dicts or None."""
     if raw_val is None:
@@ -187,6 +209,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
     sip_end_date_raw = ws.cell(4, 2).value                        # B4: sip end date
     remarks = _to_str(ws.cell(4, 5).value)                        # E4: remarks
+    contributions_raw = ws.cell(4, 8).value                       # H4: contributions JSON
     sip_phases_raw = ws.cell(4, 11).value                         # K4: SIP phases JSON
 
     wb.close()
@@ -210,11 +233,25 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     if sip_phases is None:
         sip_phases = _build_single_phase(sip_amount, sip_frequency, start_dt, sip_end_dt)
 
-    # -- Generate monthly installments using phases --
+    # -- One-time contributions: read from H4 --
+    contributions = _parse_json_array(contributions_raw) or []
+
+    # Build a lookup: (year, month) -> total contribution amount for that month
+    contrib_by_month = {}
+    for c in contributions:
+        try:
+            c_date = datetime.strptime(c["date"], "%Y-%m-%d").date()
+            key = (c_date.year, c_date.month)
+            contrib_by_month[key] = contrib_by_month.get(key, 0) + float(c.get("amount", 0))
+        except (ValueError, KeyError, TypeError):
+            pass
+
+    # -- Generate monthly installments using phases + contributions --
     today = date.today()
     installments = []
     running_balance = 0.0
     total_deposited = 0.0
+    total_withdrawn = 0.0
     total_interest_earned = 0.0
     total_interest_projected = 0.0
     cumulative_interest = 0.0
@@ -222,31 +259,47 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     lockin_months = int(maturity_years) * 12   # typically 180 (15 years)
     partial_months = 7 * 12                     # partial withdrawal from year 7 (month 84)
 
-    # Track SIP alignment per phase (each phase has its own month counter for frequency alignment)
-    # We track months_since_phase_start for each phase to align sip_interval correctly
-    phase_month_counters = {}  # phase_index -> months since this phase started contributing
-
     for m in range(1, tenure_months + 1):
-        inst_date = start_dt + relativedelta(months=m - 1)
+        # Base date from account start (month counter for compounding)
+        base_date = start_dt + relativedelta(months=m - 1)
+
+        # Find active phase and adjust day-of-month to match phase start
+        active_phase = _get_active_phase(sip_phases, base_date)
+        if active_phase:
+            phase_start = datetime.strptime(active_phase["start"], "%Y-%m-%d").date()
+            try:
+                inst_date = base_date.replace(day=phase_start.day)
+            except ValueError:
+                # Day doesn't exist in this month (e.g. 31st in Feb) -- clamp to last day
+                last_day = calendar.monthrange(base_date.year, base_date.month)[1]
+                inst_date = base_date.replace(day=last_day)
+        else:
+            inst_date = base_date
+
         is_past = inst_date <= today
 
-        # Find active phase for this month
+        # SIP deposit for this month
         invested = 0.0
-        active_phase = _get_active_phase(sip_phases, inst_date)
         if active_phase:
-            phase_idx = sip_phases.index(active_phase)
             phase_amount = float(active_phase.get("amount", 0))
             phase_freq = active_phase.get("frequency", "monthly")
             phase_interval = _sip_freq_to_months(phase_freq)
-            phase_start = datetime.strptime(active_phase["start"], "%Y-%m-%d").date()
 
-            # Calculate months since this phase started (0-indexed)
+            # Align frequency to phase start date
             months_since_start = (inst_date.year - phase_start.year) * 12 + (inst_date.month - phase_start.month)
             if months_since_start >= 0 and (months_since_start % phase_interval == 0):
                 invested = phase_amount
 
+        # Add one-time contributions for this month
+        contrib_key = (inst_date.year, inst_date.month)
+        if contrib_key in contrib_by_month:
+            invested += contrib_by_month[contrib_key]
+
         running_balance += invested
-        total_deposited += invested
+        if invested >= 0:
+            total_deposited += invested
+        else:
+            total_withdrawn += abs(invested)
 
         # Annual compounding: interest credited every 12 months from start
         is_compound_month = (m % 12 == 0)
@@ -301,12 +354,14 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         "sip_frequency": sip_frequency,
         "sip_end_date": sip_end_str,
         "sip_phases": sip_phases,
+        "contributions": contributions,
         "tenure_years": int(maturity_years),
         "tenure_months": tenure_months,
         "start_date": start_dt.strftime("%Y-%m-%d"),
         "maturity_date": end_dt.strftime("%Y-%m-%d"),
         "maturity_amount": maturity_amount,
         "total_deposited": round(total_deposited, 2),
+        "total_withdrawn": round(total_withdrawn, 2),
         "total_interest_accrued": round(total_interest_earned, 2),
         "interest_earned": round(total_interest_earned, 2),
         "interest_projected": round(total_interest_projected, 2),
@@ -346,16 +401,15 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
                      start_date: str, sip_frequency: str = "monthly",
                      sip_end_date: str = None, account_number: str = "",
                      remarks: str = "", overwrite: bool = False,
-                     sip_phases: list = None):
+                     sip_phases: list = None, contributions: list = None):
     """Create an xlsx file following the FD template structure for PPF.
 
     If overwrite=False (default for new entries) and a file with the same name
     already exists, a numeric suffix is appended to avoid clobbering.
     If overwrite=True (used by update/contribution), the existing file is replaced.
 
-    sip_phases: optional list of phase dicts. If provided, used for installment
-    computation and stored in K4. H3/K2/B4 still store the first phase for
-    backward compatibility.
+    sip_phases: optional list of phase dicts stored in K4.
+    contributions: optional list of one-time contribution dicts stored in H4.
     """
     PPF_DIR.mkdir(parents=True, exist_ok=True)
     filepath = PPF_DIR / f"{name}.xlsx"
@@ -398,6 +452,17 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
                 "end": sip_end_date,
             })
 
+    # Build contribution lookup: (year, month) -> total amount
+    contrib_by_month = {}
+    if contributions:
+        for c in contributions:
+            try:
+                c_date = datetime.strptime(c["date"], "%Y-%m-%d").date()
+                key = (c_date.year, c_date.month)
+                contrib_by_month[key] = contrib_by_month.get(key, 0) + float(c.get("amount", 0))
+            except (ValueError, KeyError, TypeError):
+                pass
+
     # -- Compute installments for xlsx data rows --
     running_balance = 0.0
     total_deposited = 0.0
@@ -405,22 +470,38 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
     row_data = []
 
     for m in range(1, tenure_months + 1):
-        inst_date = start_dt + relativedelta(months=m - 1)
+        base_date = start_dt + relativedelta(months=m - 1)
+        inst_d = base_date.date() if isinstance(base_date, datetime) else base_date
+
+        # Adjust day-of-month to match active phase's start date
+        active_phase = _get_active_phase(phases, inst_d)
+        if active_phase:
+            phase_start = datetime.strptime(active_phase["start"], "%Y-%m-%d").date()
+            try:
+                inst_d = inst_d.replace(day=phase_start.day)
+            except ValueError:
+                # Clamp to last day of month (e.g. 31st in Feb -> 28/29)
+                last_day = calendar.monthrange(inst_d.year, inst_d.month)[1]
+                inst_d = inst_d.replace(day=last_day)
+        inst_date = datetime(inst_d.year, inst_d.month, inst_d.day)
 
         invested = 0.0
-        active_phase = _get_active_phase(phases, inst_date.date() if isinstance(inst_date, datetime) else inst_date)
         if active_phase:
             phase_amount = float(active_phase.get("amount", 0))
             phase_freq = active_phase.get("frequency", "monthly")
             phase_interval = _sip_freq_to_months(phase_freq)
-            phase_start = datetime.strptime(active_phase["start"], "%Y-%m-%d").date()
-            inst_d = inst_date.date() if isinstance(inst_date, datetime) else inst_date
             months_since_start = (inst_d.year - phase_start.year) * 12 + (inst_d.month - phase_start.month)
             if months_since_start >= 0 and (months_since_start % phase_interval == 0):
                 invested = phase_amount
 
+        # Add one-time contributions for this month
+        contrib_key = (inst_d.year, inst_d.month)
+        if contrib_key in contrib_by_month:
+            invested += contrib_by_month[contrib_key]
+
         running_balance += invested
-        total_deposited += invested
+        if invested >= 0:
+            total_deposited += invested
 
         is_compound_month = (m % 12 == 0)
         interest = 0.0
@@ -451,10 +532,12 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
     ws.cell(3, 8, sip_amount)                   # H3
     ws.cell(3, 11, account_number)              # K3
 
-    # -- Row 4: sip_end_date, remarks, sip_phases --
+    # -- Row 4: sip_end_date, remarks, contributions, sip_phases --
     if sip_end_dt:
         ws.cell(4, 2, sip_end_dt)              # B4
     ws.cell(4, 5, remarks)                      # E4
+    if contributions and len(contributions) > 0:
+        ws.cell(4, 8, json.dumps(contributions))  # H4: contributions JSON
     if phases and len(phases) > 0:
         ws.cell(4, 11, json.dumps(phases))     # K4: SIP phases JSON
 
@@ -614,57 +697,8 @@ def get_all() -> list:
         _migrate_old_xlsx()
         items = _parse_all_xlsx()
 
-    today = date.today()
     for item in items:
-        try:
-            start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
-            item["years_completed"] = max(0, (today - start).days // 365)
-        except (ValueError, KeyError):
-            item["years_completed"] = 0
-
-        # -- Withdrawal eligibility --
-        yc = item["years_completed"]
-        installments = item.get("installments", [])
-
-        if yc >= item.get("tenure_years", 15):
-            # Matured: full balance withdrawable
-            # Current balance = deposits + interest earned so far
-            past_insts = [i for i in installments if i["is_past"]]
-            current_balance = (
-                sum(i["amount_invested"] for i in past_insts)
-                + sum(i["interest_earned"] for i in past_insts)
-            )
-            item["withdrawable_amount"] = round(current_balance, 2)
-            item["withdrawal_status"] = "full"
-            item["withdrawal_note"] = "Fully withdrawable — lock-in complete"
-        elif yc >= 7:
-            # Partial withdrawal from 7th FY: up to 50% of balance
-            # at end of 4th preceding financial year
-            preceding_year = yc - 4
-            # Balance at end of preceding_year = sum of invested + interest
-            # for first (preceding_year * 12) months
-            months_cutoff = preceding_year * 12
-            balance_at_cutoff = 0.0
-            for inst in installments[:months_cutoff]:
-                balance_at_cutoff += inst.get("amount_invested", 0)
-                balance_at_cutoff += inst.get("interest_earned", 0)
-            withdrawable = round(balance_at_cutoff * 0.5, 2)
-            item["withdrawable_amount"] = withdrawable
-            item["withdrawal_status"] = "partial"
-            item["withdrawal_note"] = (
-                f"Partial withdrawal eligible — up to 50% of balance "
-                f"at end of year {preceding_year}"
-            )
-        else:
-            # Locked
-            unlock_year = 7
-            unlock_date = datetime.strptime(item["start_date"], "%Y-%m-%d").date() + relativedelta(years=unlock_year)
-            item["withdrawable_amount"] = 0
-            item["withdrawal_status"] = "locked"
-            item["withdrawal_note"] = (
-                f"Locked — partial withdrawal from year 7 "
-                f"({unlock_date.strftime('%b %Y')})"
-            )
+        _enrich_withdrawal(item)
 
     return items
 
@@ -676,6 +710,7 @@ def get_dashboard() -> dict:
 
     return {
         "total_deposited": round(sum(i.get("total_deposited", 0) for i in active), 2),
+        "total_withdrawn": round(sum(i.get("total_withdrawn", 0) for i in active), 2),
         "total_interest": round(sum(i.get("total_interest_accrued", 0) for i in active), 2),
         "current_balance": round(sum(i.get("maturity_amount", 0) for i in active), 2),
         "active_count": len(active),
@@ -819,6 +854,9 @@ def update(ppf_id: str, data: dict) -> dict:
                 # No payment_type change — preserve existing phases
                 sip_phases = existing_phases
 
+        # Preserve existing contributions
+        existing_contributions = current.get("contributions", []) or []
+
         # If name changed, delete old file
         new_name = account_name
         if new_name != old_name:
@@ -837,6 +875,7 @@ def update(ppf_id: str, data: dict) -> dict:
             remarks=remarks_val,
             overwrite=True,
             sip_phases=sip_phases,
+            contributions=existing_contributions,
         )
 
         new_filepath = PPF_DIR / f"{new_name}.xlsx"
@@ -856,10 +895,10 @@ def delete(ppf_id: str) -> dict:
 
 
 def add_contribution(ppf_id: str, contribution: dict) -> dict:
-    """Add a contribution to a PPF account.
+    """Add a one-time contribution to a PPF account.
 
-    For the new format, this adjusts the SIP amount or adds a lump-sum
-    by rewriting the xlsx. The contribution is validated against yearly limits.
+    The contribution is stored in the H4 JSON array and reflected in the
+    installment schedule at the matching month. Validated against yearly limits.
     """
     with _lock:
         filepath = _find_xlsx(ppf_id)
@@ -870,6 +909,7 @@ def add_contribution(ppf_id: str, contribution: dict) -> dict:
 
         amount = contribution.get("amount", 0)
         contrib_date = contribution.get("date", datetime.now().strftime("%Y-%m-%d"))
+        contrib_remarks = contribution.get("remarks", "")
 
         try:
             c_date = datetime.strptime(contrib_date, "%Y-%m-%d").date()
@@ -878,17 +918,13 @@ def add_contribution(ppf_id: str, contribution: dict) -> dict:
 
         # Validate yearly limit by checking projected deposits for this FY
         fy = _get_financial_year(c_date)
-        sip_amount = account["sip_amount"]
-        sip_freq = account["sip_frequency"]
-        sip_interval = _sip_freq_to_months(sip_freq)
 
         # Calculate deposits already scheduled for this FY
-        start_dt = datetime.strptime(account["start_date"], "%Y-%m-%d").date()
         fy_start_year = c_date.year if c_date.month >= 4 else c_date.year - 1
         fy_start = date(fy_start_year, 4, 1)
         fy_end = date(fy_start_year + 1, 3, 31)
 
-        # Sum up SIP deposits in this FY from installment schedule
+        # Sum up all deposits (SIP + existing contributions) in this FY
         fy_deposits = sum(
             i["amount_invested"] for i in account["installments"]
             if fy_start.strftime("%Y-%m-%d") <= i["date"] <= fy_end.strftime("%Y-%m-%d")
@@ -900,27 +936,138 @@ def add_contribution(ppf_id: str, contribution: dict) -> dict:
                 f"Already deposited/projected Rs.{fy_deposits:,.0f} in FY {fy}"
             )
 
-        # Store contribution in remarks for record keeping
-        existing_remarks = account.get("remarks", "")
-        contrib_note = f"[{contrib_date}: +{amount}]"
-        if existing_remarks:
-            new_remarks = f"{existing_remarks} {contrib_note}"
-        else:
-            new_remarks = contrib_note
+        # Append to contributions list (stored in H4)
+        existing_contributions = account.get("contributions", []) or []
+        existing_contributions.append({
+            "date": contrib_date,
+            "amount": amount,
+            "remarks": contrib_remarks,
+        })
 
         _create_ppf_xlsx(
             name=account["name"],
             bank=account["bank"],
-            sip_amount=sip_amount,
+            sip_amount=account["sip_amount"],
             rate_pct=account["interest_rate"],
             maturity_years=account["tenure_years"],
             start_date=account["start_date"],
-            sip_frequency=sip_freq,
+            sip_frequency=account["sip_frequency"],
             sip_end_date=account.get("sip_end_date"),
             account_number=account["account_number"],
-            remarks=new_remarks,
+            remarks=account.get("remarks", ""),
             overwrite=True,
             sip_phases=account.get("sip_phases"),
+            contributions=existing_contributions,
+        )
+
+        return _parse_ppf_xlsx(filepath)
+
+
+def _enrich_withdrawal(item: dict):
+    """Compute withdrawal eligibility fields for a parsed PPF account.
+
+    Subtracts previously withdrawn amounts so the same money can't be
+    withdrawn twice.
+    """
+    today = date.today()
+    try:
+        start = datetime.strptime(item["start_date"], "%Y-%m-%d").date()
+        yc = max(0, (today - start).days // 365)
+    except (ValueError, KeyError):
+        yc = 0
+    item["years_completed"] = yc
+    installments = item.get("installments", [])
+
+    # Total already withdrawn (stored as negative contributions)
+    already_withdrawn = item.get("total_withdrawn", 0)
+
+    if yc >= item.get("tenure_years", 15):
+        past_insts = [i for i in installments if i["is_past"]]
+        current_balance = (
+            sum(i["amount_invested"] for i in past_insts)
+            + sum(i["interest_earned"] for i in past_insts)
+        )
+        item["withdrawable_amount"] = round(max(0, current_balance), 2)
+        item["withdrawal_status"] = "full"
+        item["withdrawal_note"] = "Fully withdrawable — lock-in complete"
+    elif yc >= 7:
+        preceding_year = yc - 4
+        months_cutoff = preceding_year * 12
+        balance_at_cutoff = 0.0
+        for inst in installments[:months_cutoff]:
+            balance_at_cutoff += inst.get("amount_invested", 0)
+            balance_at_cutoff += inst.get("interest_earned", 0)
+        withdrawable = round(max(0, balance_at_cutoff * 0.5 - already_withdrawn), 2)
+        item["withdrawable_amount"] = withdrawable
+        item["withdrawal_status"] = "partial"
+        item["withdrawal_note"] = (
+            f"Partial withdrawal eligible — up to 50% of balance "
+            f"at end of year {preceding_year}"
+            + (f" (already withdrawn {already_withdrawn:,.0f})" if already_withdrawn > 0 else "")
+        )
+    else:
+        unlock_date = datetime.strptime(item["start_date"], "%Y-%m-%d").date() + relativedelta(years=7)
+        item["withdrawable_amount"] = 0
+        item["withdrawal_status"] = "locked"
+        item["withdrawal_note"] = (
+            f"Locked — partial withdrawal from year 7 "
+            f"({unlock_date.strftime('%b %Y')})"
+        )
+
+
+def withdraw(ppf_id: str, data: dict) -> dict:
+    """Withdraw from a PPF account.
+
+    Records the withdrawal as a negative contribution in H4 so it is
+    reflected in the installment schedule and running balance.
+    """
+    with _lock:
+        filepath = _find_xlsx(ppf_id)
+        if filepath is None:
+            raise ValueError(f"PPF account {ppf_id} not found")
+
+        account = _parse_ppf_xlsx(filepath)
+        _enrich_withdrawal(account)
+
+        amount = float(data.get("amount", 0))
+        withdraw_date = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+
+        if amount <= 0:
+            raise ValueError("Withdrawal amount must be positive")
+
+        # Validate against withdrawable amount
+        withdrawable = account.get("withdrawable_amount", 0)
+        status = account.get("withdrawal_status", "locked")
+
+        if status == "locked":
+            raise ValueError("Account is still in lock-in period")
+        if amount > withdrawable:
+            raise ValueError(
+                f"Amount exceeds withdrawable limit of Rs.{withdrawable:,.0f}"
+            )
+
+        # Store as negative contribution
+        existing_contributions = account.get("contributions", []) or []
+        existing_contributions.append({
+            "date": withdraw_date,
+            "amount": -amount,  # negative = withdrawal
+            "remarks": data.get("remarks", "Withdrawal"),
+        })
+
+        _create_ppf_xlsx(
+            name=account["name"],
+            bank=account["bank"],
+            sip_amount=account["sip_amount"],
+            rate_pct=account["interest_rate"],
+            maturity_years=account["tenure_years"],
+            start_date=account["start_date"],
+            sip_frequency=account["sip_frequency"],
+            sip_end_date=account.get("sip_end_date"),
+            account_number=account["account_number"],
+            remarks=account.get("remarks", ""),
+            overwrite=True,
+            sip_phases=account.get("sip_phases"),
+            contributions=existing_contributions,
         )
 
         return _parse_ppf_xlsx(filepath)

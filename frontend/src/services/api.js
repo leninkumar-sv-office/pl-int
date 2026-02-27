@@ -337,6 +337,11 @@ export async function addPPFContribution(ppfId, payload) {
   return data;
 }
 
+export async function withdrawPPF(ppfId, payload) {
+  const { data } = await api.post(`/ppf/${ppfId}/withdraw`, payload);
+  return data;
+}
+
 // ── NPS (National Pension System) ──────────────────────────
 
 export async function getNPSSummary() {

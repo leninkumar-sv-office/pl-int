@@ -470,6 +470,13 @@ class AddPPFContributionRequest(BaseModel):
     remarks: str = ""
 
 
+class PPFWithdrawRequest(BaseModel):
+    """Request to withdraw from a PPF account."""
+    amount: float = Field(..., gt=0, description="Withdrawal amount")
+    date: Optional[str] = Field(default=None, description="Withdrawal date YYYY-MM-DD (defaults to today)")
+    remarks: str = ""
+
+
 # ═══════════════════════════════════════════════════════════
 #  NPS (NATIONAL PENSION SYSTEM) MODELS
 # ═══════════════════════════════════════════════════════════

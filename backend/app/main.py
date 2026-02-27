@@ -22,7 +22,7 @@ from .models import (
     AddFDRequest, UpdateFDRequest,
     AddRDRequest, UpdateRDRequest, AddRDInstallmentRequest,
     AddInsuranceRequest, UpdateInsuranceRequest,
-    AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest,
+    AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest, PPFWithdrawRequest,
     AddNPSRequest, UpdateNPSRequest, AddNPSContributionRequest,
     AddSIRequest, UpdateSIRequest,
 )
@@ -1890,7 +1890,7 @@ def delete_insurance_endpoint(policy_id: str):
 #  PPF (PUBLIC PROVIDENT FUND)
 # ══════════════════════════════════════════════════════════
 
-from .ppf_database import get_all as ppf_get_all, get_dashboard as ppf_get_dashboard, add as ppf_add, update as ppf_update, delete as ppf_delete, add_contribution as ppf_add_contribution
+from .ppf_database import get_all as ppf_get_all, get_dashboard as ppf_get_dashboard, add as ppf_add, update as ppf_update, delete as ppf_delete, add_contribution as ppf_add_contribution, withdraw as ppf_withdraw
 
 
 @app.get("/api/ppf/summary")
@@ -1939,6 +1939,20 @@ def add_ppf_contribution_endpoint(ppf_id: str, req: AddPPFContributionRequest):
     """Add a contribution to a PPF account."""
     try:
         return ppf_add_contribution(ppf_id, req.dict())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/ppf/{ppf_id}/withdraw")
+def withdraw_ppf_endpoint(ppf_id: str, req: PPFWithdrawRequest):
+    """Withdraw from a PPF account."""
+    try:
+        data = req.dict()
+        if not data.get("date"):
+            data["date"] = datetime.now().strftime("%Y-%m-%d")
+        return ppf_withdraw(ppf_id, data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

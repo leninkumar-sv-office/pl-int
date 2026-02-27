@@ -109,7 +109,7 @@ const heldTd = {
 };
 
 /* ── PPF Detail Row ──────────────────────────────── */
-function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
+function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRedeem }) {
   const sc = statusColor(ppf.status);
   const installments = ppf.installments || [];
 
@@ -122,12 +122,14 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
   // Withdraw modal state
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmt, setWithdrawAmt] = useState('');
+  const [withdrawDate, setWithdrawDate] = useState('');
   const [withdrawError, setWithdrawError] = useState('');
   const withdrawMax = ppf.withdrawable_amount || 0;
   const isFullRedeem = ppf.withdrawal_status === 'full';
 
   const openWithdraw = () => {
     setWithdrawAmt(String(withdrawMax));
+    setWithdrawDate(new Date().toISOString().slice(0, 10));
     setWithdrawError('');
     setWithdrawOpen(true);
   };
@@ -135,9 +137,10 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
     const amt = parseFloat(withdrawAmt);
     if (isNaN(amt) || amt <= 0) { setWithdrawError('Enter a valid amount'); return; }
     if (amt > withdrawMax) { setWithdrawError(`Exceeds maximum: ${formatINR(withdrawMax)}`); return; }
+    if (!withdrawDate) { setWithdrawError('Select a date'); return; }
     setWithdrawOpen(false);
-    if (isFullRedeem && amt >= withdrawMax && onRedeem) {
-      onRedeem(ppf);
+    if (onWithdraw) {
+      onWithdraw(ppf.id, amt, withdrawDate);
     }
   };
 
@@ -162,7 +165,8 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
   const compoundMonths = installments.filter(i => i.is_compound_month);
   const freeMonths = installments.filter(i => i.lock_status === 'free');
   const partialMonths = installments.filter(i => i.lock_status === 'partial');
-  const totalInvested = installments.reduce((s, i) => s + (i.amount_invested || 0), 0);
+  const totalInvested = installments.reduce((s, i) => s + Math.max(0, i.amount_invested || 0), 0);
+  const totalWithdrawn = installments.reduce((s, i) => s + Math.abs(Math.min(0, i.amount_invested || 0)), 0);
   const totalIntEarned = installments.reduce((s, i) => s + (i.interest_earned || 0), 0);
   const totalIntProjected = installments.reduce((s, i) => s + (i.interest_projected || 0), 0);
   const maxCumulativeInterest = Math.max(0, ...installments.map(i => i.cumulative_interest || 0));
@@ -317,6 +321,12 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</div>
         </div>
+        {ppf.total_withdrawn > 0 && (
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Withdrawn</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--red)' }}>-{formatINR(ppf.total_withdrawn)}</div>
+          </div>
+        )}
         <div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Interest Accrued</div>
           <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.total_interest_accrued || 0)}</div>
@@ -477,6 +487,12 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                 <div style={{ fontSize: '14px', fontWeight: 600 }}>{formatINR(totalInvested)}</div>
               </div>
             )}
+            {totalWithdrawn > 0 && (
+              <div style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.06)', borderRadius: 6, border: '1px solid rgba(239,68,68,0.15)' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--red)', fontWeight: 600, letterSpacing: '0.4px' }}>Withdrawn</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--red)' }}>-{formatINR(totalWithdrawn)}</div>
+              </div>
+            )}
             {totalIntEarned > 0 && (
               <div style={{ padding: '6px 12px', background: 'rgba(0,210,106,0.06)', borderRadius: 6, border: '1px solid rgba(0,210,106,0.15)' }}>
                 <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--green)', fontWeight: 600, letterSpacing: '0.4px' }}>Interest Earned</div>
@@ -555,8 +571,8 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
                         )}
                       </td>}
                       {iCol('date')     && <td style={heldTd}>{formatDate(inst.date)}</td>}
-                      {iCol('invested') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: inst.amount_invested > 0 ? 600 : 400, color: inst.amount_invested > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
-                        {inst.amount_invested > 0 ? formatINR(inst.amount_invested) : '-'}
+                      {iCol('invested') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: inst.amount_invested !== 0 ? 600 : 400, color: inst.amount_invested > 0 ? 'var(--text)' : inst.amount_invested < 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                        {inst.amount_invested > 0 ? formatINR(inst.amount_invested) : inst.amount_invested < 0 ? `-${formatINR(Math.abs(inst.amount_invested))}` : '-'}
                       </td>}
                       {iCol('earned') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: inst.interest_earned > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
                         {inst.interest_earned > 0 ? formatINR(inst.interest_earned) : '-'}
@@ -583,7 +599,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onRedeem }) {
 }
 
 /* ── Main Table ───────────────────────────────────── */
-export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution, onRedeemPPF }) {
+export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution, onWithdrawPPF, onRedeemPPF }) {
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState('account_name');
   const [sortDir, setSortDir] = useState('asc');
@@ -678,6 +694,12 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Deposited</div>
             <div style={{ fontSize: '16px', fontWeight: 600 }}>{formatINR(ppfDashboard.total_deposited)}</div>
           </div>
+          {ppfDashboard.total_withdrawn > 0 && (
+            <div style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Withdrawn</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--red)' }}>-{formatINR(ppfDashboard.total_withdrawn)}</div>
+            </div>
+          )}
           <div style={{ flex: '1 1 120px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Interest</div>
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppfDashboard.total_interest)}</div>
@@ -808,7 +830,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                   </tr>
                   {isExpanded && (
                     <tr><td colSpan={TOTAL_COLS} style={{ padding: 0 }}>
-                      <PPFDetail ppf={ppf} onEdit={onEditPPF} onDelete={onDeletePPF} onAddContribution={onAddContribution} onRedeem={onRedeemPPF} />
+                      <PPFDetail ppf={ppf} onEdit={onEditPPF} onDelete={onDeletePPF} onAddContribution={onAddContribution} onWithdraw={onWithdrawPPF} onRedeem={onRedeemPPF} />
                     </td></tr>
                   )}
                 </React.Fragment>

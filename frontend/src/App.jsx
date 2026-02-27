@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -615,6 +615,16 @@ export default function App() {
     }
   };
 
+  const handleWithdrawPPF = async (ppfId, amount) => {
+    try {
+      await withdrawPPF(ppfId, { amount, date: new Date().toISOString().split('T')[0] });
+      toast.success(`Withdrew ₹${Number(amount).toLocaleString('en-IN')} from PPF`);
+      loadPPF();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to withdraw from PPF');
+    }
+  };
+
   // ── NPS handlers ────────────────────────────────
   const handleAddNPS = async (data) => {
     try {
@@ -1087,6 +1097,7 @@ export default function App() {
           onEditPPF={(ppf) => { setPpfModalMode('edit'); setAddPPFModalData(ppf); }}
           onDeletePPF={handleDeletePPF}
           onAddContribution={(ppf) => { setPpfModalMode('contribution'); setAddPPFModalData(ppf); }}
+          onWithdrawPPF={handleWithdrawPPF}
           onRedeemPPF={(ppf) => {
             if (window.confirm(`Redeem PPF "${ppf.account_name}"?\nMaturity Value: ₹${Number(ppf.maturity_amount).toLocaleString('en-IN')}\n\nThis will delete the account.`)) {
               handleDeletePPF(ppf.id);
