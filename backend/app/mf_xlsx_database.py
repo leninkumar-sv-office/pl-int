@@ -923,8 +923,8 @@ class MFXlsxPortfolio:
                         except ValueError:
                             continue
                     if (row_date == dt_check.date()
-                            and abs(float(row_units or 0) - units) < 1e-4
-                            and abs(float(row_nav or 0) - nav) < 1e-2):
+                            and abs(_safe_float(row_units) - units) < 1e-4
+                            and abs(_safe_float(row_nav) - nav) < 1e-2):
                         wb.close()
                         raise ValueError(
                             f"Duplicate: {units:.4f} units @ NAV {nav:.4f} on {buy_date} already exists for {fund_name}"
