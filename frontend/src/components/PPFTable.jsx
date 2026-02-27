@@ -55,9 +55,10 @@ const COL_DEFS = [
   { id: 'maturityDate',   label: 'Maturity Date' },
   { id: 'installments',   label: 'Installments' },
   { id: 'totalDeposited', label: 'Total Deposited' },
+  { id: 'totalWithdrawn', label: 'Withdrawn' },
+  { id: 'withdrawable',   label: 'Withdrawable' },
   { id: 'interestAccrued',label: 'Interest Accrued' },
   { id: 'maturityAmt',    label: 'Maturity Value' },
-  { id: 'withdrawable',   label: 'Withdrawable' },
   { id: 'status',         label: 'Status' },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
@@ -622,7 +623,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
 /* ── Main Table ───────────────────────────────────── */
 export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution, onWithdrawPPF, onRedeemPPF }) {
   const [expandedId, setExpandedId] = useState(null);
-  const [sortKey, setSortKey] = useState('account_name');
+  const [sortKey, setSortKey] = useState('startDate');
   const [sortDir, setSortDir] = useState('asc');
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
@@ -679,6 +680,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
       case 'maturityDate':   va = a.maturity_date; vb = b.maturity_date; break;
       case 'installments':   va = a.installments_paid || 0; vb = b.installments_paid || 0; break;
       case 'totalDeposited': va = a.total_deposited; vb = b.total_deposited; break;
+      case 'totalWithdrawn': va = a.total_withdrawn || 0; vb = b.total_withdrawn || 0; break;
       case 'interestAccrued':va = a.total_interest_accrued || 0; vb = b.total_interest_accrued || 0; break;
       case 'maturityAmt':    va = a.maturity_amount || 0; vb = b.maturity_amount || 0; break;
       case 'withdrawable':   va = a.withdrawable_amount || 0; vb = b.withdrawable_amount || 0; break;
@@ -788,6 +790,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
               {col('maturityDate') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('maturityDate')}>Maturity<SortIcon field="maturityDate" /></th>}
               {col('installments') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('installments')}>Paid<SortIcon field="installments" /></th>}
               {col('totalDeposited') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('totalDeposited')}>Deposited<SortIcon field="totalDeposited" /></th>}
+              {col('totalWithdrawn') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('totalWithdrawn')}>Withdrawn<SortIcon field="totalWithdrawn" /></th>}
               {col('interestAccrued') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('interestAccrued')}>Interest<SortIcon field="interestAccrued" /></th>}
               {col('maturityAmt') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('maturityAmt')}>Maturity<SortIcon field="maturityAmt" /></th>}
               {col('withdrawable') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('withdrawable')}>Withdrawable<SortIcon field="withdrawable" /></th>}
@@ -836,6 +839,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                     {col('maturityDate') && <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>{formatDate(ppf.maturity_date)}</td>}
                     {col('installments') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.installments_paid || 0}/{ppf.installments_total || ppf.tenure_months}</td>}
                     {col('totalDeposited') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.total_deposited)}</td>}
+                    {col('totalWithdrawn') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: ppf.total_withdrawn > 0 ? 'var(--red)' : 'var(--text-dim)' }}>{ppf.total_withdrawn > 0 ? formatINR(ppf.total_withdrawn) : '-'}</td>}
                     {col('interestAccrued') && <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--green)', fontWeight: 600 }}>{formatINR(ppf.total_interest_accrued || 0)}</td>}
                     {col('maturityAmt') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>{formatINR(ppf.maturity_amount)}</td>}
                     {col('withdrawable') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>
