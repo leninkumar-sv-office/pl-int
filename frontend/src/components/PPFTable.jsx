@@ -73,13 +73,15 @@ function loadVisibleCols() {
 
 /* ── Installment sub-table column definitions ──────────── */
 const INST_COL_DEFS = [
-  { id: 'month',       label: '#' },
-  { id: 'date',        label: 'Date' },
-  { id: 'invested',    label: 'Amount Invested' },
-  { id: 'earned',      label: 'Interest Earned' },
-  { id: 'projected',   label: 'Interest Projected' },
-  { id: 'cumulative',  label: 'Cumulative Interest' },
-  { id: 'cumAmount',   label: 'Cumulative Amount' },
+  { id: 'month',          label: '#' },
+  { id: 'date',           label: 'Date' },
+  { id: 'invested',       label: 'Invested' },
+  { id: 'withdrawn',      label: 'Withdrawn' },
+  { id: 'cumDeposited',   label: 'Cum. Deposited' },
+  { id: 'earned',         label: 'Interest Earned' },
+  { id: 'projected',      label: 'Interest Projected' },
+  { id: 'cumulative',     label: 'Cum. Interest' },
+  { id: 'cumAmount',      label: 'Total Value' },
 ];
 const INST_COL_LS_KEY = 'ppfInstHiddenCols';
 
@@ -165,8 +167,8 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
   const compoundMonths = installments.filter(i => i.is_compound_month);
   const freeMonths = installments.filter(i => i.lock_status === 'free');
   const partialMonths = installments.filter(i => i.lock_status === 'partial');
-  const totalInvested = installments.reduce((s, i) => s + Math.max(0, i.amount_invested || 0), 0);
-  const totalWithdrawn = installments.reduce((s, i) => s + Math.abs(Math.min(0, i.amount_invested || 0)), 0);
+  const totalInvested = installments.reduce((s, i) => s + (i.amount_invested || 0), 0);
+  const totalWithdrawn = installments.reduce((s, i) => s + (i.amount_withdrawn || 0), 0);
   const totalIntEarned = installments.reduce((s, i) => s + (i.interest_earned || 0), 0);
   const totalIntProjected = installments.reduce((s, i) => s + (i.interest_projected || 0), 0);
   const maxCumulativeInterest = Math.max(0, ...installments.map(i => i.cumulative_interest || 0));
@@ -535,13 +537,15 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
             <table style={{ borderCollapse: 'collapse', whiteSpace: 'nowrap' }}>
               <thead>
                 <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
-                  {iCol('month')      && <th style={heldTh}>#</th>}
-                  {iCol('date')       && <th style={heldTh}>Date</th>}
-                  {iCol('invested')   && <th style={{ ...heldTh, textAlign: 'right' }}>Invested</th>}
-                  {iCol('earned')     && <th style={{ ...heldTh, textAlign: 'right' }}>Int Earned</th>}
-                  {iCol('projected')  && <th style={{ ...heldTh, textAlign: 'right' }}>Int Projected</th>}
-                  {iCol('cumulative') && <th style={{ ...heldTh, textAlign: 'right' }}>Cumulative Int</th>}
-                  {iCol('cumAmount')  && <th style={{ ...heldTh, textAlign: 'right' }}>Cumulative Amt</th>}
+                  {iCol('month')        && <th style={heldTh}>#</th>}
+                  {iCol('date')         && <th style={heldTh}>Date</th>}
+                  {iCol('invested')     && <th style={{ ...heldTh, textAlign: 'right' }}>Invested</th>}
+                  {iCol('withdrawn')    && <th style={{ ...heldTh, textAlign: 'right' }}>Withdrawn</th>}
+                  {iCol('cumDeposited') && <th style={{ ...heldTh, textAlign: 'right' }}>Cum. Deposited</th>}
+                  {iCol('earned')       && <th style={{ ...heldTh, textAlign: 'right' }}>Int Earned</th>}
+                  {iCol('projected')    && <th style={{ ...heldTh, textAlign: 'right' }}>Int Projected</th>}
+                  {iCol('cumulative')   && <th style={{ ...heldTh, textAlign: 'right' }}>Cum. Interest</th>}
+                  {iCol('cumAmount')    && <th style={{ ...heldTh, textAlign: 'right' }}>Total Value</th>}
                 </tr>
               </thead>
               <tbody>
@@ -582,8 +586,14 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
                         )}
                       </td>}
                       {iCol('date')     && <td style={heldTd}>{formatDate(inst.date)}</td>}
-                      {iCol('invested') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: inst.amount_invested !== 0 ? 600 : 400, color: inst.amount_invested > 0 ? 'var(--text)' : inst.amount_invested < 0 ? 'var(--red)' : 'var(--text-muted)' }}>
-                        {inst.amount_invested > 0 ? formatINR(inst.amount_invested) : inst.amount_invested < 0 ? `-${formatINR(Math.abs(inst.amount_invested))}` : '-'}
+                      {iCol('invested') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: inst.amount_invested > 0 ? 600 : 400, color: inst.amount_invested > 0 ? 'var(--text)' : 'var(--text-muted)' }}>
+                        {inst.amount_invested > 0 ? formatINR(inst.amount_invested) : '-'}
+                      </td>}
+                      {iCol('withdrawn') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: inst.amount_withdrawn > 0 ? 600 : 400, color: inst.amount_withdrawn > 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                        {inst.amount_withdrawn > 0 ? formatINR(inst.amount_withdrawn) : '-'}
+                      </td>}
+                      {iCol('cumDeposited') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 500, color: (inst.cumulative_deposited || 0) < 0 ? 'var(--red)' : 'var(--text-dim)' }}>
+                        {formatINR(inst.cumulative_deposited || 0)}
                       </td>}
                       {iCol('earned') && <td style={{ ...heldTd, textAlign: 'right', fontWeight: 600, color: inst.interest_earned > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
                         {inst.interest_earned > 0 ? formatINR(inst.interest_earned) : '-'}

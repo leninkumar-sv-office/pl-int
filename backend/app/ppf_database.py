@@ -185,11 +185,36 @@ def _get_active_phase(phases: list, inst_date: date) -> dict | None:
     return active
 
 
+def _scan_data_rows(ws, tenure_months: int) -> list:
+    """Scan xlsx data rows (row 6+) for withdrawals (col 8) and
+    one-time contributions (col 9). Returns a contributions list."""
+    contributions = []
+    for r in range(6, 6 + tenure_months):
+        row_date = _to_date(ws.cell(r, 4).value)  # column 4: date
+        if row_date is None:
+            break
+        withdrawn = _to_float(ws.cell(r, 8).value, 0)   # column 8: Withdrawn
+        extra = _to_float(ws.cell(r, 9).value, 0)       # column 9: Contribution
+        if withdrawn > 0:
+            contributions.append({
+                "date": row_date.strftime("%Y-%m-%d"),
+                "amount": -withdrawn,
+                "remarks": "Withdrawal",
+            })
+        if extra > 0:
+            contributions.append({
+                "date": row_date.strftime("%Y-%m-%d"),
+                "amount": extra,
+                "remarks": "Contribution",
+            })
+    return contributions
+
+
 def _parse_ppf_xlsx(filepath: Path) -> dict:
     """Parse a single PPF xlsx file.
 
-    Reads ONLY metadata from rows 1-4.
-    Computes ALL monthly installments and totals in Python.
+    Reads metadata from rows 1-4, scans data rows for withdrawals/contributions
+    (columns 8-9), and computes ALL monthly installments in Python.
     """
     wb = openpyxl.load_workbook(str(filepath), data_only=True)
     ws = wb["Index"]
@@ -209,10 +234,9 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
     sip_end_date_raw = ws.cell(4, 2).value                        # B4: sip end date
     remarks = _to_str(ws.cell(4, 5).value)                        # E4: remarks
-    contributions_raw = ws.cell(4, 8).value                       # H4: contributions JSON
-    sip_phases_raw = ws.cell(4, 11).value                         # K4: SIP phases JSON
 
-    wb.close()
+    # K4: SIP phases JSON (only for multi-phase accounts)
+    sip_phases_raw = ws.cell(4, 11).value
 
     # -- Convert & derive --
     start_dt = _to_date(start_date_raw) or date.today()
@@ -228,13 +252,14 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     sip_end_dt = _to_date(sip_end_date_raw)
     sip_end_str = sip_end_dt.strftime("%Y-%m-%d") if sip_end_dt else None
 
-    # -- SIP phases: read from K4, or build from single SIP metadata --
+    # -- SIP phases: from K4 (multi-phase) or derive from metadata (single-phase) --
     sip_phases = _parse_sip_phases_json(sip_phases_raw)
     if sip_phases is None:
         sip_phases = _build_single_phase(sip_amount, sip_frequency, start_dt, sip_end_dt)
 
-    # -- One-time contributions: read from H4 --
-    contributions = _parse_json_array(contributions_raw) or []
+    # -- Contributions & withdrawals: scan data rows (cols 8-9) --
+    contributions = _scan_data_rows(ws, tenure_months)
+    wb.close()
 
     # Build a lookup: (year, month) -> total contribution amount for that month
     contrib_by_month = {}
@@ -252,6 +277,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     running_balance = 0.0
     total_deposited = 0.0
     total_withdrawn = 0.0
+    cumulative_deposited = 0.0
     total_interest_earned = 0.0
     total_interest_projected = 0.0
     cumulative_interest = 0.0
@@ -296,6 +322,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
             invested += contrib_by_month[contrib_key]
 
         running_balance += invested
+        cumulative_deposited += invested
         if invested >= 0:
             total_deposited += invested
         else:
@@ -322,10 +349,15 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         else:
             lock_status = "locked"
 
+        deposit = max(invested, 0)
+        withdrawn = abs(min(invested, 0))
+
         installments.append({
             "month": m,
             "date": inst_date.strftime("%Y-%m-%d"),
-            "amount_invested": round(invested, 2),
+            "amount_invested": round(deposit, 2),
+            "amount_withdrawn": round(withdrawn, 2),
+            "cumulative_deposited": round(cumulative_deposited, 2),
             "interest_earned": round(interest, 2) if is_past else 0.0,
             "interest_projected": round(interest, 2) if not is_past else 0.0,
             "cumulative_interest": round(cumulative_interest, 2),
@@ -485,20 +517,22 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
                 inst_d = inst_d.replace(day=last_day)
         inst_date = datetime(inst_d.year, inst_d.month, inst_d.day)
 
-        invested = 0.0
+        sip_deposit = 0.0
         if active_phase:
             phase_amount = float(active_phase.get("amount", 0))
             phase_freq = active_phase.get("frequency", "monthly")
             phase_interval = _sip_freq_to_months(phase_freq)
             months_since_start = (inst_d.year - phase_start.year) * 12 + (inst_d.month - phase_start.month)
             if months_since_start >= 0 and (months_since_start % phase_interval == 0):
-                invested = phase_amount
+                sip_deposit = phase_amount
 
-        # Add one-time contributions for this month
+        # One-time contributions/withdrawals for this month
+        extra = 0.0
         contrib_key = (inst_d.year, inst_d.month)
         if contrib_key in contrib_by_month:
-            invested += contrib_by_month[contrib_key]
+            extra = contrib_by_month[contrib_key]
 
+        invested = sip_deposit + extra
         running_balance += invested
         if invested >= 0:
             total_deposited += invested
@@ -510,7 +544,11 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
             running_balance += interest
             cumulative_interest += interest
 
-        row_data.append((m, inst_date, invested, interest))
+        # Split into columns: deposit (col 5), withdrawn (col 8), contribution (col 9)
+        deposit_col = sip_deposit + max(extra, 0)  # SIP + positive contributions
+        withdrawn_col = abs(min(extra, 0))          # negative contributions = withdrawals
+        contrib_col = max(extra, 0)                 # positive one-time contributions
+        row_data.append((m, inst_date, deposit_col, withdrawn_col, contrib_col, interest))
 
     maturity_amount = round(running_balance, 2)
 
@@ -532,32 +570,42 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
     ws.cell(3, 8, sip_amount)                   # H3
     ws.cell(3, 11, account_number)              # K3
 
-    # -- Row 4: sip_end_date, remarks, contributions, sip_phases --
+    # -- Row 4: sip_end_date, remarks, SIP phases (only multi-phase) --
     if sip_end_dt:
         ws.cell(4, 2, sip_end_dt)              # B4
     ws.cell(4, 5, remarks)                      # E4
-    if contributions and len(contributions) > 0:
-        ws.cell(4, 8, json.dumps(contributions))  # H4: contributions JSON
-    if phases and len(phases) > 0:
-        ws.cell(4, 11, json.dumps(phases))     # K4: SIP phases JSON
+    if phases and len(phases) > 1:
+        ws.cell(4, 11, json.dumps(phases))     # K4: only for multi-phase
 
     # -- Row 5: Headers --
-    headers = ['S.No', '', '#', 'Date', 'Amount Invested', 'Interest Earned', 'Interest to be Earned']
+    headers = ['S.No', '', '#', 'Date', 'Amount Invested',
+               'Interest Earned', 'Interest to be Earned',
+               'Withdrawn', 'Contribution']
     for i, h in enumerate(headers, 1):
         ws.cell(5, i, h)
 
     # -- Row 6+: Monthly data rows --
-    for m, inst_date, invested, interest in row_data:
+    for m, inst_date, deposit, withdrawn, contrib, interest in row_data:
         row = m + 5
         ws.cell(row, 1, m)
         ws.cell(row, 3, m)
         ws.cell(row, 4, inst_date)
-        ws.cell(row, 5, invested)
+        ws.cell(row, 5, deposit)
         ws.cell(row, 6, interest)
         ws.cell(row, 7, interest)
+        if withdrawn > 0:
+            ws.cell(row, 8, withdrawn)
+        if contrib > 0:
+            ws.cell(row, 9, contrib)
 
     wb.save(str(filepath))
     wb.close()
+
+    # Clean up any legacy sidecar meta files
+    meta_file = filepath.with_suffix(".meta.json")
+    if meta_file.exists():
+        meta_file.unlink()
+
     return filepath
 
 
@@ -860,7 +908,10 @@ def update(ppf_id: str, data: dict) -> dict:
         # If name changed, delete old file
         new_name = account_name
         if new_name != old_name:
+            old_meta = filepath.with_suffix(".meta.json")
             filepath.unlink()
+            if old_meta.exists():
+                old_meta.unlink()
 
         _create_ppf_xlsx(
             name=new_name,
@@ -890,7 +941,10 @@ def delete(ppf_id: str) -> dict:
             raise ValueError(f"PPF account {ppf_id} not found")
 
         account = _parse_ppf_xlsx(filepath)
+        meta_file = filepath.with_suffix(".meta.json")
         filepath.unlink()
+        if meta_file.exists():
+            meta_file.unlink()
         return {"message": f"PPF {ppf_id} deleted", "item": account}
 
 
