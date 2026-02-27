@@ -197,17 +197,28 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Amount ({'\u20B9'})</label>
-              <input
-                type="number" step="1" min="1" max={withdrawMax}
-                value={withdrawAmt}
-                onChange={(e) => { setWithdrawAmt(e.target.value); setWithdrawError(''); }}
-                autoFocus
-                style={{ width: '100%' }}
-              />
-              {withdrawError && <div style={{ color: 'var(--red)', fontSize: '12px', marginTop: '4px' }}>{withdrawError}</div>}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Date</label>
+                <input
+                  type="date"
+                  value={withdrawDate}
+                  onChange={(e) => { setWithdrawDate(e.target.value); setWithdrawError(''); }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Amount ({'\u20B9'})</label>
+                <input
+                  type="number" step="1" min="1" max={withdrawMax}
+                  value={withdrawAmt}
+                  onChange={(e) => { setWithdrawAmt(e.target.value); setWithdrawError(''); }}
+                  autoFocus
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
+            {withdrawError && <div style={{ color: 'var(--red)', fontSize: '12px', marginBottom: '8px' }}>{withdrawError}</div>}
 
             {/* Quick amount buttons */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>

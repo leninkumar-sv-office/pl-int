@@ -615,9 +615,9 @@ export default function App() {
     }
   };
 
-  const handleWithdrawPPF = async (ppfId, amount) => {
+  const handleWithdrawPPF = async (ppfId, amount, date) => {
     try {
-      await withdrawPPF(ppfId, { amount, date: new Date().toISOString().split('T')[0] });
+      await withdrawPPF(ppfId, { amount, date: date || new Date().toISOString().split('T')[0] });
       toast.success(`Withdrew ₹${Number(amount).toLocaleString('en-IN')} from PPF`);
       loadPPF();
     } catch (err) {
