@@ -3,7 +3,16 @@ CDSL CAS (Consolidated Account Statement) PDF parser for Mutual Funds.
 
 Extracts fund sections and transaction lines from CDSL CAS PDFs
 covering all AMCs (ICICI, Nippon, SBI, Tata, etc.) using pdfplumber
-table extraction with text-regex fallback.
+table extraction as the primary method.
+
+The PDF has bilingual Hindi/English text that garbles plain-text extraction,
+but pdfplumber table extraction works perfectly. Each MF transaction table
+has the structure:
+  Row 0: ['ISIN : INFxxx UCC : ...', None, None, ...]  ← ISIN identifier
+  Row 1: ['Date', 'Transaction Description', 'Amount', 'NAV', 'Price', 'Units', ...]  ← header
+  Row 2: ['', 'Opening Balance', '', '', '', '360.314', ...]
+  Row 3: ['12-01-2026', 'SIP Purchase - ...', '4999.75', '41.04', '41.04', '121.826', '.25', '0', '0']
+  Row N: ['', 'Closing Balance', '', '', '', '482.14', ...]
 """
 
 import io
@@ -18,37 +27,21 @@ from .mf_xlsx_database import mf_db, _safe_float
 
 # ── Regex patterns ────────────────────────────────────────
 
-# AMC header: "AMC Name : ICICI Prudential Mutual Fund"
+_ISIN_RE = re.compile(r"ISIN\s*:\s*(INF\w+)", re.IGNORECASE)
+_FOLIO_RE = re.compile(r"Folio\s*No\s*:\s*(\S+)", re.IGNORECASE)
 _AMC_HEADER_RE = re.compile(r"AMC\s+Name\s*:\s*(.+)", re.IGNORECASE)
-
-# Scheme header: "9453 - ICICI Prudential India Opportunities Fund ..."
-_SCHEME_HEADER_RE = re.compile(r"^(\d{3,6})\s*[-–]\s*(.+)")
-
-# ISIN line: "ISIN : INF109KC1RH9   UCC : ..."
-_ISIN_RE = re.compile(r"ISIN\s*:\s*(\S+)", re.IGNORECASE)
-
-# Folio line: "Folio : 15877031/78" or "Folio No : 15877031/78"
-_FOLIO_RE = re.compile(r"Folio(?:\s*No)?\s*:\s*(\S+)", re.IGNORECASE)
-
-# CAS ID line: e.g. "CAS Id : AA00604621"
-_CAS_ID_RE = re.compile(r"CAS\s+Id\s*:\s*(\S+)", re.IGNORECASE)
-
-# Statement period: "Statement Period : 01-01-2026 to 31-01-2026"
-_PERIOD_RE = re.compile(r"Statement\s+Period\s*:\s*(.+?)$", re.IGNORECASE | re.MULTILINE)
-
-# Transaction line (text fallback):
-# DD-MM-YYYY  Description  Amount  NAV  Price  Units  StampDuty  ...
-_TX_LINE_RE = re.compile(
-    r"^(\d{2}-\d{2}-\d{4})\s+"       # date DD-MM-YYYY
-    r"(.+?)\s+"                        # description
-    r"([\d,]+\.\d{2})\s+"             # amount
-    r"([\d,]+\.\d{2,4})\s+"           # NAV
-    r"([\d,]+\.\d{2,4})\s+"           # price
-    r"([\d,.]+)\s+"                    # units
-    r"([\d.]+)"                        # stamp duty
+_SCHEME_HEADER_RE = re.compile(r"^(\w{3,6})\s*[-–]\s*(.+)")
+_SCHEME_CODE_NUM_RE = re.compile(r"^(\d{3,6})\s*[-–]\s*(.+)")
+_PERIOD_RE = re.compile(
+    r"(?:STATEMENT.*?PERIOD.*?FROM\s+)(\d{2}-\d{2}-\d{4})\s+TO\s+(\d{2}-\d{2}-\d{4})",
+    re.IGNORECASE,
+)
+_PERIOD_ALT_RE = re.compile(
+    r"(\d{2}-\d{2}-\d{4})\s+(?:से|to)\s+(\d{2}-\d{2}-\d{4})",
+    re.IGNORECASE,
 )
 
-# Lines to skip in transaction tables
+# Descriptions to skip
 _SKIP_DESCRIPTIONS = {
     "opening balance", "opening bal", "closing balance", "closing bal",
     "stt", "total tax", "net assets",
@@ -59,7 +52,10 @@ def _parse_number(s: str) -> float:
     """Parse a number string, removing commas and whitespace."""
     if not s:
         return 0.0
-    return float(s.replace(",", "").strip())
+    cleaned = s.replace(",", "").replace("\n", "").strip()
+    if not cleaned or cleaned == "--" or cleaned == "-":
+        return 0.0
+    return float(cleaned)
 
 
 def _parse_date_ddmmyyyy(s: str) -> str:
@@ -87,11 +83,16 @@ def _should_skip_row(description: str) -> bool:
     return False
 
 
-def _match_fund_code(isin: str, fund_name: str) -> Optional[str]:
-    """Try to match a parsed fund's ISIN/name against existing MF database entries.
+def _clean_description(desc: str) -> str:
+    """Clean multi-line description from table cell."""
+    if not desc:
+        return ""
+    # Table cells may have newlines from multi-line content
+    return " ".join(desc.replace("\n", " ").split()).strip()
 
-    Returns the existing fund_code (MUTF_IN:xxx) if matched, else None.
-    """
+
+def _match_fund_code(isin: str, fund_name: str) -> Optional[str]:
+    """Try to match a parsed fund's ISIN/name against existing MF database entries."""
     parsed_upper = fund_name.upper().strip()
     parsed_words = set(parsed_upper.replace("-", " ").split())
     significant_parsed = {w for w in parsed_words if len(w) > 2}
@@ -168,338 +169,292 @@ def _check_duplicate(fund_code: str, tx_date: str, units: float, nav: float) -> 
     return False
 
 
-def _extract_table_transactions(page) -> list[dict]:
-    """Extract transactions from pdfplumber table structures on a page."""
-    transactions = []
-    tables = page.extract_tables()
-    if not tables:
-        return transactions
+def _extract_metadata_from_text(all_text: str) -> dict:
+    """Extract fund metadata from the Account Details section of the PDF.
 
-    for table in tables:
-        for row in table:
-            if not row or len(row) < 6:
-                continue
+    Builds a mapping of ISIN → {amc, scheme_name, scheme_code, folio}.
+    In the PDF, the order per fund is:
+      AMC Name → Scheme Name [+ Scheme Code on same line]
+               → Scheme Code → [continuation line] → Folio No → ISIN
+    So folio is encountered BEFORE the ISIN line.
+    Scheme name may also have a continuation line after Scheme Code.
+    """
+    isin_map = {}  # ISIN → metadata dict
+    current_amc = ""
+    current_scheme_name = ""
+    current_scheme_code = ""
+    pending_folio = ""
+    awaiting_continuation = False  # True after Scheme Code, before Folio/ISIN
 
-            # Clean cells: replace None with empty string
-            cells = [str(c).strip() if c else "" for c in row]
-
-            # Must have a date in first column: DD-MM-YYYY
-            date_str = cells[0]
-            if not re.match(r"\d{2}-\d{2}-\d{4}", date_str):
-                continue
-
-            description = cells[1] if len(cells) > 1 else ""
-            if _should_skip_row(description):
-                continue
-
-            # Try to extract numeric fields
-            try:
-                amount = _parse_number(cells[2]) if len(cells) > 2 and cells[2] else 0.0
-                nav = _parse_number(cells[3]) if len(cells) > 3 and cells[3] else 0.0
-                price = _parse_number(cells[4]) if len(cells) > 4 and cells[4] else 0.0
-                units = _parse_number(cells[5]) if len(cells) > 5 and cells[5] else 0.0
-                stamp_duty = _parse_number(cells[6]) if len(cells) > 6 and cells[6] else 0.0
-            except (ValueError, IndexError):
-                continue
-
-            if units == 0.0 or nav == 0.0:
-                continue
-
-            transactions.append({
-                "date": _parse_date_ddmmyyyy(date_str),
-                "description": description,
-                "action": _determine_action(description),
-                "amount": amount,
-                "nav": nav,
-                "units": round(abs(units), 4),
-                "balance_units": 0.0,
-                "stamp_duty": stamp_duty,
-            })
-
-    return transactions
-
-
-def _extract_text_transactions(text_lines: list[str], start_idx: int = 0) -> list[dict]:
-    """Fallback: extract transactions from plain text lines using regex."""
-    transactions = []
-
-    for i in range(start_idx, len(text_lines)):
-        line = text_lines[i].strip()
+    for line in all_text.split("\n"):
+        line = line.strip()
         if not line:
             continue
 
-        m = _TX_LINE_RE.match(line)
+        # AMC header: "AMC Name : ICICI Prudential Mutual Fund"
+        m = _AMC_HEADER_RE.match(line)
         if m:
-            description = m.group(2).strip()
-            if _should_skip_row(description):
-                continue
+            current_amc = m.group(1).strip()
+            current_scheme_name = ""
+            current_scheme_code = ""
+            pending_folio = ""
+            awaiting_continuation = False
+            continue
 
-            date_str = _parse_date_ddmmyyyy(m.group(1))
-            amount = _parse_number(m.group(3))
-            nav = _parse_number(m.group(4))
-            price = _parse_number(m.group(5))
-            units = _parse_number(m.group(6))
-            stamp_duty = _parse_number(m.group(7))
+        # "Scheme Name : ..." — may also have "Scheme Code : xxx" on same line
+        if line.startswith("Scheme Name"):
+            rest = line.split(":", 1)[1].strip() if ":" in line else ""
+            sc_match = re.search(r"Scheme\s+Code\s*:\s*(\S+)", rest)
+            if sc_match:
+                current_scheme_code = sc_match.group(1)
+                current_scheme_name = rest[:sc_match.start()].strip()
+                awaiting_continuation = False
+            else:
+                current_scheme_name = rest
+                awaiting_continuation = False
+            pending_folio = ""
+            continue
 
-            if units == 0.0 or nav == 0.0:
-                continue
+        # "Scheme Code : 9453" on its own line
+        if line.startswith("Scheme Code"):
+            current_scheme_code = line.split(":", 1)[1].strip() if ":" in line else ""
+            awaiting_continuation = True  # next line may be continuation of scheme name
+            continue
 
-            transactions.append({
-                "date": date_str,
-                "description": description,
-                "action": _determine_action(description),
-                "amount": amount,
-                "nav": nav,
-                "units": round(abs(units), 4),
-                "balance_units": 0.0,
-                "stamp_duty": stamp_duty,
-            })
+        # Folio line (appears BEFORE ISIN in Account Details)
+        m = _FOLIO_RE.search(line)
+        if m and current_amc:
+            pending_folio = m.group(1).strip()
+            awaiting_continuation = False
+            continue
 
-    return transactions
+        # ISIN line — finalizes the current fund entry
+        m = _ISIN_RE.search(line)
+        if m and current_amc and current_scheme_name:
+            isin = m.group(1).strip()
+            if isin not in isin_map:
+                isin_map[isin] = {
+                    "amc": current_amc,
+                    "scheme_name": current_scheme_name,
+                    "scheme_code": current_scheme_code,
+                    "folio": pending_folio,
+                }
+            current_scheme_name = ""
+            current_scheme_code = ""
+            pending_folio = ""
+            awaiting_continuation = False
+            continue
+
+        # Continuation line: appends to scheme name
+        # (e.g., "Growth", "PLAN", "DIRECT GROWTH PLAN", "CREATION SCHEME - DIRECT GROWTH PLAN")
+        # Only applies right after Scheme Code line
+        if awaiting_continuation and current_scheme_name and not line.startswith("KYC"):
+            current_scheme_name = current_scheme_name + " " + line
+            awaiting_continuation = False
+            continue
+
+    return isin_map
 
 
-def _attach_balance_units(transactions: list[dict], text: str):
-    """Try to find closing balance from text and attach to last transaction."""
-    # Look for "Closing Bal" or "Closing Balance" followed by units
-    m = re.search(r"Closing\s+Bal(?:ance)?\s+.*?([\d,]+\.\d{2,4})", text, re.IGNORECASE)
-    if m and transactions:
-        try:
-            transactions[-1]["balance_units"] = round(_parse_number(m.group(1)), 4)
-        except ValueError:
-            pass
+def _extract_statement_info(all_text: str) -> tuple[str, str]:
+    """Extract CAS ID and statement period from early pages."""
+    cas_id = ""
+    statement_period = ""
+
+    # CAS ID from the text (e.g., in filename or text like "AA00604621")
+    m = re.search(r"\b(AA\d{8,})\b", all_text[:5000])
+    if m:
+        cas_id = m.group(1)
+
+    # Statement period
+    m = _PERIOD_RE.search(all_text[:10000])
+    if m:
+        statement_period = f"{m.group(1)} to {m.group(2)}"
+    else:
+        m = _PERIOD_ALT_RE.search(all_text[:10000])
+        if m:
+            statement_period = f"{m.group(1)} to {m.group(2)}"
+
+    return cas_id, statement_period
 
 
 def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
     """Parse a CDSL CAS PDF and return structured fund/transaction data.
 
-    Args:
-        pdf_bytes: Raw PDF file bytes.
-
-    Returns:
-        dict with keys: cas_id, statement_period, source, funds, summary
+    Uses a table-first approach:
+    1. Extract fund metadata (AMC, scheme, ISIN, folio) from text
+    2. Extract MF transaction tables from all pages
+    3. Each table's first row has ISIN to link to fund metadata
+    4. Parse transaction rows from tables
     """
     pdf = pdfplumber.open(io.BytesIO(pdf_bytes))
 
-    # ── Phase 1: Extract all text and detect MF section ──
+    # ── Phase 1: Extract all text ──
     all_text = ""
-    page_texts = []
     for page in pdf.pages:
         text = page.extract_text() or ""
         all_text += text + "\n"
-        page_texts.append(text)
 
-    lines = all_text.split("\n")
+    # ── Phase 2: Extract metadata from Account Details section ──
+    isin_map = _extract_metadata_from_text(all_text)
+    cas_id, statement_period = _extract_statement_info(all_text)
 
-    # Extract CAS ID
-    cas_id = ""
-    m = _CAS_ID_RE.search(all_text[:3000])
-    if m:
-        cas_id = m.group(1).strip()
+    # ── Phase 3: Extract MF transaction tables from ALL pages ──
+    # Each MF transaction table starts with an ISIN row
+    funds = {}  # ISIN → fund dict
 
-    # Extract statement period
-    statement_period = ""
-    m = _PERIOD_RE.search(all_text[:3000])
-    if m:
-        statement_period = m.group(1).strip()
-
-    # ── Phase 2: Parse fund sections ──
-    funds = []
+    # Track current AMC/scheme from text for the MF transaction pages.
+    # On transaction pages, AMC appears directly as e.g. "ICICI Prudential Mutual Fund"
+    # (without "AMC Name :" prefix), and scheme as "9453 - ICICI Prudential ...".
     current_amc = ""
     current_scheme_name = ""
     current_scheme_code = ""
-    current_isin = ""
-    current_folio = ""
-    current_fund = None
 
-    # Track which pages we've extracted tables from
-    page_table_cache = {}
-
-    def _finalize_fund():
-        """Save current fund if it has transactions."""
-        nonlocal current_fund
-        if current_fund and current_fund["transactions"]:
-            funds.append(current_fund)
-        current_fund = None
-
-    for line_idx, raw_line in enumerate(lines):
-        line = raw_line.strip()
-        if not line:
+    for page in pdf.pages:
+        page_text = page.extract_text() or ""
+        tables = page.extract_tables()
+        if not tables:
             continue
 
-        # ── AMC header ──
-        m = _AMC_HEADER_RE.match(line)
-        if m:
-            _finalize_fund()
-            current_amc = m.group(1).strip()
-            continue
-
-        # ── Scheme header (e.g. "9453 - ICICI Prudential ...") ──
-        m = _SCHEME_HEADER_RE.match(line)
-        if m:
-            _finalize_fund()
-            current_scheme_code = m.group(1).strip()
-            current_scheme_name = m.group(2).strip()
-            current_isin = ""
-            current_folio = ""
-            continue
-
-        # ── ISIN line ──
-        m = _ISIN_RE.search(line)
-        if m and current_scheme_name:
-            current_isin = m.group(1).strip()
-            continue
-
-        # ── Folio line ──
-        m = _FOLIO_RE.search(line)
-        if m and current_scheme_name:
-            current_folio = m.group(1).strip()
-
-            # We have all fund metadata now — create the fund entry
-            # and try table extraction on relevant pages
-            matched_code = _match_fund_code(current_isin, current_scheme_name)
-
-            current_fund = {
-                "fund_code": matched_code or current_isin,
-                "fund_name": current_scheme_name,
-                "isin": current_isin,
-                "amc": current_amc,
-                "scheme_code": current_scheme_code,
-                "folio": current_folio,
-                "is_new_fund": matched_code is None,
-                "transactions": [],
-            }
-            continue
-
-        # ── Transaction lines (text-based fallback) ──
-        if current_fund is not None:
-            m = _TX_LINE_RE.match(line)
+        # Update AMC/scheme from page text (MF transaction section)
+        for line in page_text.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # Direct AMC name line: short line ending with "Mutual Fund"
+            if line.endswith("Mutual Fund") and len(line) < 60:
+                current_amc = line
+                continue
+            m = _AMC_HEADER_RE.match(line)
             if m:
-                description = m.group(2).strip()
-                if _should_skip_row(description):
+                current_amc = m.group(1).strip()
+                continue
+            m = _SCHEME_HEADER_RE.match(line)
+            if m:
+                current_scheme_code = m.group(1).strip()
+                current_scheme_name = m.group(2).strip()
+                continue
+
+        for table in tables:
+            if not table or len(table) < 3:
+                continue
+
+            # Check if first row is an ISIN row
+            first_row = table[0]
+            if not first_row or not first_row[0]:
+                continue
+
+            first_cell = str(first_row[0]).strip()
+            isin_match = _ISIN_RE.search(first_cell)
+            if not isin_match:
+                continue
+
+            isin = isin_match.group(1).strip()
+
+            # Look up metadata for this ISIN
+            meta = isin_map.get(isin, {})
+            amc = meta.get("amc", current_amc)
+            scheme_name = meta.get("scheme_name", current_scheme_name)
+            scheme_code = meta.get("scheme_code", current_scheme_code)
+            folio = meta.get("folio", "")
+
+            # Create or get fund entry
+            if isin not in funds:
+                matched_code = _match_fund_code(isin, scheme_name)
+                funds[isin] = {
+                    "fund_code": matched_code or isin,
+                    "fund_name": scheme_name,
+                    "isin": isin,
+                    "amc": amc,
+                    "scheme_code": scheme_code,
+                    "folio": folio,
+                    "is_new_fund": matched_code is None,
+                    "transactions": [],
+                }
+
+            fund = funds[isin]
+            closing_balance = 0.0
+
+            # Parse transaction rows (skip row 0=ISIN, row 1=header)
+            for row in table[2:]:
+                if not row or len(row) < 6:
                     continue
 
-                date_str = _parse_date_ddmmyyyy(m.group(1))
-                amount = _parse_number(m.group(3))
-                nav = _parse_number(m.group(4))
-                price = _parse_number(m.group(5))
-                units = _parse_number(m.group(6))
-                stamp_duty = _parse_number(m.group(7))
+                cells = [str(c).strip() if c else "" for c in row]
+                date_str = cells[0].strip()
+                description = _clean_description(cells[1]) if len(cells) > 1 else ""
+
+                # Check for closing balance row
+                if _should_skip_row(description):
+                    if description.lower().startswith("closing bal"):
+                        # Extract closing balance units
+                        try:
+                            closing_balance = _parse_number(cells[5]) if len(cells) > 5 else 0.0
+                        except (ValueError, IndexError):
+                            pass
+                    continue
+
+                # Must have a date: DD-MM-YYYY
+                if not re.match(r"\d{2}-\d{2}-\d{4}", date_str):
+                    continue
+
+                # Parse numeric fields
+                try:
+                    amount = _parse_number(cells[2]) if len(cells) > 2 else 0.0
+                    nav = _parse_number(cells[3]) if len(cells) > 3 else 0.0
+                    price = _parse_number(cells[4]) if len(cells) > 4 else 0.0
+                    units = _parse_number(cells[5]) if len(cells) > 5 else 0.0
+                    stamp_duty = _parse_number(cells[6]) if len(cells) > 6 else 0.0
+                except (ValueError, IndexError):
+                    continue
 
                 if units == 0.0 or nav == 0.0:
                     continue
 
-                current_fund["transactions"].append({
-                    "date": date_str,
+                fund["transactions"].append({
+                    "date": _parse_date_ddmmyyyy(date_str),
                     "description": description,
                     "action": _determine_action(description),
-                    "amount": amount,
+                    "amount": abs(amount),
                     "nav": nav,
                     "units": round(abs(units), 4),
                     "balance_units": 0.0,
-                    "stamp_duty": stamp_duty,
+                    "stamp_duty": abs(stamp_duty),
                 })
-                continue
 
-            # Check for closing balance to capture balance_units
-            closing_match = re.match(
-                r"(?:Closing\s+Bal(?:ance)?)\s+.*?([\d,]+\.\d{2,4})",
-                line, re.IGNORECASE
-            )
-            if closing_match and current_fund["transactions"]:
-                try:
-                    current_fund["transactions"][-1]["balance_units"] = round(
-                        _parse_number(closing_match.group(1)), 4
-                    )
-                except ValueError:
-                    pass
-
-    # Finalize last fund
-    _finalize_fund()
-
-    # ── Phase 3: If text regex found no transactions, try table extraction ──
-    if not any(f["transactions"] for f in funds):
-        # Reset and try table-based extraction
-        funds_meta = funds[:]  # keep metadata
-        funds = []
-
-        # Re-parse to find fund sections mapped to pages
-        for fund_meta in funds_meta:
-            fund_meta["transactions"] = []
-
-        # Extract tables from all pages
-        all_table_txns = []
-        for page_idx, page in enumerate(pdf.pages):
-            table_txns = _extract_table_transactions(page)
-            for tx in table_txns:
-                tx["_page"] = page_idx
-            all_table_txns.extend(table_txns)
-
-        # Assign table transactions to funds based on page order
-        if all_table_txns and funds_meta:
-            # Simple assignment: assign all transactions to funds
-            # based on text position analysis
-            _assign_table_txns_to_funds(funds_meta, all_table_txns, page_texts)
-            funds = [f for f in funds_meta if f["transactions"]]
+            # Attach closing balance to last transaction
+            if closing_balance and fund["transactions"]:
+                fund["transactions"][-1]["balance_units"] = round(abs(closing_balance), 4)
 
     pdf.close()
 
-    # ── Phase 4: Dedup check and fund code matching ──
-    for fund in funds:
+    # ── Phase 4: Dedup check ──
+    funds_list = list(funds.values())
+    for fund in funds_list:
         for tx in fund["transactions"]:
             tx["isDuplicate"] = _check_duplicate(
                 fund["fund_code"], tx["date"], tx["units"], tx["nav"]
             )
 
     # Filter out funds with no transactions
-    funds = [f for f in funds if len(f["transactions"]) > 0]
+    funds_list = [f for f in funds_list if len(f["transactions"]) > 0]
 
     # ── Build summary ──
     total_purchases = sum(
-        1 for f in funds for t in f["transactions"] if t["action"] == "Buy"
+        1 for f in funds_list for t in f["transactions"] if t["action"] == "Buy"
     )
     total_redemptions = sum(
-        1 for f in funds for t in f["transactions"] if t["action"] == "Sell"
+        1 for f in funds_list for t in f["transactions"] if t["action"] == "Sell"
     )
 
     return {
         "cas_id": cas_id,
         "statement_period": statement_period,
         "source": "CDSL",
-        "funds": funds,
+        "funds": funds_list,
         "summary": {
             "total_purchases": total_purchases,
             "total_redemptions": total_redemptions,
-            "funds_count": len(funds),
+            "funds_count": len(funds_list),
         },
     }
-
-
-def _assign_table_txns_to_funds(funds_meta: list, table_txns: list, page_texts: list):
-    """Assign table-extracted transactions to fund metadata entries.
-
-    Uses page text to determine which fund each transaction belongs to,
-    based on the position of scheme headers in the text.
-    """
-    # Build a map of page → fund indices by scanning page text for scheme codes
-    page_fund_map = {}
-    for fi, fund in enumerate(funds_meta):
-        scheme_code = fund.get("scheme_code", "")
-        if not scheme_code:
-            continue
-        for pi, ptext in enumerate(page_texts):
-            if scheme_code in ptext:
-                page_fund_map[pi] = fi
-                break
-
-    # Assign each transaction to the most recent fund by page
-    current_fund_idx = 0
-    sorted_fund_pages = sorted(page_fund_map.items())
-
-    for tx in table_txns:
-        tx_page = tx.pop("_page", 0)
-        # Find which fund this page belongs to
-        for page_num, fund_idx in sorted_fund_pages:
-            if tx_page >= page_num:
-                current_fund_idx = fund_idx
-        if current_fund_idx < len(funds_meta):
-            funds_meta[current_fund_idx]["transactions"].append(tx)

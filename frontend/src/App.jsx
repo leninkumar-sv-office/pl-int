@@ -61,7 +61,7 @@ export default function App() {
   const [redeemTarget, setRedeemTarget] = useState(null);     // null=closed, {fund_code, name, ...}=open
   const [sipTarget, setSipTarget] = useState(null);           // null=closed, {fund_code, name, ...}=SIP config
   const [sipConfigs, setSipConfigs] = useState([]);           // SIP configuration list
-  const [mfImportPreview, setMfImportPreview] = useState(null); // SBI MF statement preview
+  const [mfImportPreview, setMfImportPreview] = useState(null); // CDSL CAS statement preview
   const [mfImportResult, setMfImportResult] = useState(null);   // import result banner
 
   // FD / RD / Insurance states
@@ -444,14 +444,14 @@ export default function App() {
     }
   };
 
-  // ── SBI MF Statement Import ────────────────────────
+  // ── CDSL CAS Statement Import ────────────────────────
   // Accepts an array of File objects (multi-select) or a single File
   const handleParseCDSLCAS = async (filesOrFile) => {
     const files = Array.isArray(filesOrFile) ? filesOrFile : [filesOrFile];
     try {
       const allFunds = [];
       const errors = [];
-      let folio = '';
+      let casId = '';
       let statementPeriod = '';
       let totalPurchases = 0;
       let totalRedemptions = 0;
@@ -460,17 +460,15 @@ export default function App() {
         const file = files[i];
         try {
           if (files.length > 1) {
-            toast.loading(`Parsing PDF ${i + 1}/${files.length}: ${file.name}`, { id: 'sbi-mf-parse' });
+            toast.loading(`Parsing PDF ${i + 1}/${files.length}: ${file.name}`, { id: 'cdsl-cas-parse' });
           } else {
-            toast.loading('Parsing SBI MF statement...', { id: 'sbi-mf-parse' });
+            toast.loading('Parsing CDSL CAS statement...', { id: 'cdsl-cas-parse' });
           }
           const parsed = await parseCDSLCAS(file);
           if (parsed.funds && parsed.funds.length > 0) {
-            // Tag each fund's transactions with source file
             parsed.funds.forEach(f => {
               f.transactions.forEach(tx => { tx._sourceFile = file.name; });
             });
-            // Merge funds: if same fund_code appears across PDFs, combine transactions
             for (const fund of parsed.funds) {
               const existing = allFunds.find(f => f.fund_code === fund.fund_code);
               if (existing) {
@@ -479,7 +477,7 @@ export default function App() {
                 allFunds.push({ ...fund });
               }
             }
-            if (!folio && parsed.folio) folio = parsed.folio;
+            if (!casId && parsed.cas_id) casId = parsed.cas_id;
             if (parsed.statement_period) {
               statementPeriod = statementPeriod
                 ? `${statementPeriod}; ${parsed.statement_period}`
@@ -496,7 +494,7 @@ export default function App() {
         }
       }
 
-      toast.dismiss('sbi-mf-parse');
+      toast.dismiss('cdsl-cas-parse');
 
       if (errors.length > 0) {
         toast.error(errors.join('\n'), { duration: 8000 });
@@ -510,8 +508,9 @@ export default function App() {
       }
 
       setMfImportPreview({
-        folio,
+        cas_id: casId,
         statement_period: statementPeriod,
+        source: 'CDSL',
         funds: allFunds,
         summary: {
           total_purchases: totalPurchases,
@@ -521,8 +520,8 @@ export default function App() {
         _fileCount: files.length,
       });
     } catch (err) {
-      toast.dismiss('sbi-mf-parse');
-      const msg = err.response?.data?.detail || 'Failed to parse SBI MF statement';
+      toast.dismiss('cdsl-cas-parse');
+      const msg = err.response?.data?.detail || 'Failed to parse CDSL CAS statement';
       toast.error(msg, { duration: 5000 });
       throw err;
     }
@@ -530,15 +529,15 @@ export default function App() {
 
   const handleConfirmCDSLCASImport = async (funds) => {
     try {
-      toast.loading('Importing MF transactions...', { id: 'sbi-mf-import' });
+      toast.loading('Importing MF transactions...', { id: 'cdsl-cas-import' });
       const result = await confirmCDSLCASImport({ funds });
-      toast.dismiss('sbi-mf-import');
+      toast.dismiss('cdsl-cas-import');
 
       const parts = [];
       if (result.imported?.buys > 0) parts.push(`${result.imported.buys} buys`);
       if (result.imported?.sells > 0) parts.push(`${result.imported.sells} sells`);
       if (result.skipped_duplicates > 0) parts.push(`${result.skipped_duplicates} skipped`);
-      toast.success(`SBI MF Import: ${parts.join(', ')}`, { duration: 5000 });
+      toast.success(`CAS Import: ${parts.join(', ')}`, { duration: 5000 });
 
       if (result.errors?.length > 0) {
         toast.error(`${result.errors.length} error(s): ${result.errors[0]}`, { duration: 8000 });
@@ -547,8 +546,8 @@ export default function App() {
       setMfImportPreview(null);
       loadMutualFunds();
     } catch (err) {
-      toast.dismiss('sbi-mf-import');
-      const msg = err.response?.data?.detail || 'Failed to import SBI MF transactions';
+      toast.dismiss('cdsl-cas-import');
+      const msg = err.response?.data?.detail || 'Failed to import CAS transactions';
       toast.error(msg, { duration: 5000 });
     }
   };
@@ -1286,7 +1285,7 @@ export default function App() {
         />
       )}
 
-      {/* SBI MF Import Preview Modal */}
+      {/* CDSL CAS Import Preview Modal */}
       {mfImportPreview && (
         <MFImportPreviewModal
           data={mfImportPreview}
