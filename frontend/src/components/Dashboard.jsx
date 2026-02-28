@@ -5,7 +5,7 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function Dashboard({ summary, mfDashboard, loading }) {
+export default function Dashboard({ summary, mfDashboard, fdDashboard, rdDashboard, ppfDashboard, npsDashboard, loading }) {
   const [expanded, setExpanded] = useState(() => localStorage.getItem('dashboardExpanded') === 'true');
 
   const toggle = () => {
@@ -37,19 +37,62 @@ export default function Dashboard({ summary, mfDashboard, loading }) {
 
   if (!summary) return null;
 
-  // Combine stock + MF numbers when MF data is available
+  // ── Stocks ──
+  const stockInvested = summary.total_invested || 0;
+  const stockCurrent = summary.current_value || 0;
+  const stockUnrealized = summary.unrealized_pl || 0;
+  const stockRealized = summary.realized_pl || 0;
+
+  // ── Mutual Funds ──
   const hasMF = mfDashboard && mfDashboard.total_invested > 0;
-  const totalInvested = summary.total_invested + (hasMF ? mfDashboard.total_invested : 0);
-  const totalCurrentValue = summary.current_value + (hasMF ? mfDashboard.current_value : 0);
-  const totalUnrealizedPL = summary.unrealized_pl + (hasMF ? mfDashboard.unrealized_pl : 0);
+  const mfInvested = hasMF ? mfDashboard.total_invested : 0;
+  const mfCurrent = hasMF ? mfDashboard.current_value : 0;
+  const mfUnrealized = hasMF ? mfDashboard.unrealized_pl : 0;
+  const mfRealized = hasMF ? mfDashboard.realized_pl : 0;
+
+  // ── Fixed Deposits ──
+  const hasFD = fdDashboard && fdDashboard.total_invested > 0;
+  const fdInvested = hasFD ? fdDashboard.total_invested : 0;
+  const fdCurrent = hasFD ? (fdDashboard.total_invested + (fdDashboard.total_interest || 0)) : 0;
+  const fdGain = hasFD ? (fdDashboard.total_interest || 0) : 0;
+
+  // ── Recurring Deposits ──
+  const hasRD = rdDashboard && rdDashboard.total_deposited > 0;
+  const rdInvested = hasRD ? rdDashboard.total_deposited : 0;
+  const rdCurrent = hasRD ? (rdDashboard.total_deposited + (rdDashboard.total_interest_accrued || 0)) : 0;
+  const rdGain = hasRD ? (rdDashboard.total_interest_accrued || 0) : 0;
+
+  // ── PPF ──
+  const hasPPF = ppfDashboard && ppfDashboard.net_invested > 0;
+  const ppfInvested = hasPPF ? ppfDashboard.net_invested : 0;
+  const ppfCurrent = hasPPF ? (ppfDashboard.current_balance || 0) : 0;
+  const ppfGain = hasPPF ? (ppfDashboard.total_interest || 0) : 0;
+
+  // ── NPS ──
+  const hasNPS = npsDashboard && npsDashboard.total_contributed > 0;
+  const npsInvested = hasNPS ? npsDashboard.total_contributed : 0;
+  const npsCurrent = hasNPS ? npsDashboard.current_value : 0;
+  const npsGain = hasNPS ? npsDashboard.total_gain : 0;
+
+  // ── Totals ──
+  const totalInvested = stockInvested + mfInvested + fdInvested + rdInvested + ppfInvested + npsInvested;
+  const totalCurrentValue = stockCurrent + mfCurrent + fdCurrent + rdCurrent + ppfCurrent + npsCurrent;
+  const totalUnrealizedPL = totalCurrentValue - totalInvested;
   const totalUnrealizedPLPct = totalInvested > 0 ? (totalUnrealizedPL / totalInvested) * 100 : 0;
-  const totalRealizedPL = summary.realized_pl + (hasMF ? mfDashboard.realized_pl : 0);
+  const totalRealizedPL = stockRealized + mfRealized;
+
   const inProfit = summary.stocks_in_profit + (hasMF ? mfDashboard.funds_in_profit : 0);
   const inLoss = summary.stocks_in_loss + (hasMF ? mfDashboard.funds_in_loss : 0);
 
-  const holdingSub = hasMF
-    ? `${summary.total_holdings} stocks, ${mfDashboard.total_funds} funds`
-    : `${summary.total_holdings} stocks`;
+  // Build holdings subtitle
+  const parts = [];
+  if (summary.total_holdings) parts.push(`${summary.total_holdings} stocks`);
+  if (hasMF) parts.push(`${mfDashboard.total_funds} funds`);
+  if (hasFD) parts.push(`${fdDashboard.active_count} FDs`);
+  if (hasRD) parts.push(`${rdDashboard.active_count} RDs`);
+  if (hasPPF) parts.push(`${ppfDashboard.active_count} PPF`);
+  if (hasNPS) parts.push(`${npsDashboard.active_count} NPS`);
+  const holdingSub = parts.join(', ');
 
   const cards = [
     {
@@ -90,7 +133,7 @@ export default function Dashboard({ summary, mfDashboard, loading }) {
     },
   ];
 
-  // Collapsed inline summary: key numbers in a single line
+  // Collapsed inline summary
   const collapsedSummary = `${formatINR(totalCurrentValue)}  ·  P&L ${totalUnrealizedPL >= 0 ? '+' : ''}${formatINR(totalUnrealizedPL)} (${totalUnrealizedPLPct >= 0 ? '+' : ''}${totalUnrealizedPLPct.toFixed(2)}%)`;
 
   return (

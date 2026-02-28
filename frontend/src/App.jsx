@@ -985,8 +985,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Dashboard Summary — combined Stocks + MF */}
-      <Dashboard summary={summary} mfDashboard={mfDashboard} loading={loading} />
+      {/* Dashboard Summary — all asset classes */}
+      <Dashboard summary={summary} mfDashboard={mfDashboard} fdDashboard={fdDashboard} rdDashboard={rdDashboard} ppfDashboard={ppfDashboard} npsDashboard={npsDashboard} loading={loading} />
 
       {/* Market Ticker */}
       <MarketTicker tickers={marketTicker} loading={loading} />
