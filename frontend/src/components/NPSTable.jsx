@@ -65,10 +65,18 @@ const heldTd = {
   verticalAlign: 'middle',
 };
 
+const SCHEME_LABELS = { E: 'Equity', C: 'Corporate Bonds', G: 'Govt Securities' };
+const SCHEME_COLORS = { E: 'var(--blue)', C: 'var(--yellow)', G: 'var(--green)' };
+
 /* ── NPS Detail Row ──────────────────────────────── */
 function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
   const sc = statusColor(nps.status);
   const contributions = nps.contributions || [];
+  const schemes = nps.schemes_summary || [];
+  const [showAllContribs, setShowAllContribs] = useState(false);
+
+  const sortedContribs = contributions.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const displayContribs = showAllContribs ? sortedContribs : sortedContribs.slice(0, 20);
 
   return (
     <div style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '20px 24px' }}>
@@ -126,6 +134,12 @@ function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Years Active</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{nps.years_active || 0}</div>
         </div>
+        {nps.nominee && (
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Nominee</div>
+            <div style={{ fontSize: '15px', fontWeight: 600 }}>{nps.nominee}</div>
+          </div>
+        )}
         <div>
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Contributed</div>
           <div style={{ fontSize: '15px', fontWeight: 600 }}>{formatINR(nps.total_contributed)}</div>
@@ -152,6 +166,38 @@ function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
         )}
       </div>
 
+      {/* Scheme-wise breakdown */}
+      {schemes.length > 0 && (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px', color: 'var(--text)' }}>
+            Scheme-wise Holdings
+          </div>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            {schemes.map(s => {
+              const totalVal = schemes.reduce((sum, x) => sum + (x.value || 0), 0);
+              const pct = totalVal > 0 ? ((s.value / totalVal) * 100).toFixed(1) : 0;
+              return (
+                <div key={s.scheme} style={{
+                  flex: '1 1 200px', padding: '14px 16px', background: 'var(--bg-card)',
+                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+                  borderLeft: `3px solid ${SCHEME_COLORS[s.scheme] || 'var(--border)'}`,
+                }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '6px', fontWeight: 600 }}>
+                    {SCHEME_LABELS[s.scheme] || s.scheme} ({s.scheme}) - {pct}%
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
+                    {formatINR(s.value)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                    {Number(s.units).toLocaleString('en-IN', { maximumFractionDigits: 4 })} units @ NAV {Number(s.nav).toFixed(4)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Contributions list */}
       {contributions.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
@@ -160,6 +206,7 @@ function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
           </div>
           <div style={{
             border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden',
+            maxHeight: showAllContribs ? 'none' : '400px',
           }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -171,7 +218,7 @@ function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
                 </tr>
               </thead>
               <tbody>
-                {contributions.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((c, i) => (
+                {displayContribs.map((c, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     <td style={{ ...heldTd, color: 'var(--text-muted)' }}>{contributions.length - i}</td>
                     <td style={heldTd}>{formatDate(c.date)}</td>
@@ -182,6 +229,12 @@ function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
               </tbody>
             </table>
           </div>
+          {contributions.length > 20 && (
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: '8px', fontSize: '12px' }}
+              onClick={() => setShowAllContribs(p => !p)}>
+              {showAllContribs ? 'Show Less' : `Show All ${contributions.length} Contributions`}
+            </button>
+          )}
         </div>
       )}
     </div>
