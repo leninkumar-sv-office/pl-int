@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -28,6 +28,7 @@ import NPSTable from './components/NPSTable';
 import AddNPSModal from './components/AddNPSModal';
 import StandingInstructionTable from './components/StandingInstructionTable';
 import AddSIModal from './components/AddSIModal';
+import MFImportPreviewModal from './components/MFImportPreviewModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -60,6 +61,8 @@ export default function App() {
   const [redeemTarget, setRedeemTarget] = useState(null);     // null=closed, {fund_code, name, ...}=open
   const [sipTarget, setSipTarget] = useState(null);           // null=closed, {fund_code, name, ...}=SIP config
   const [sipConfigs, setSipConfigs] = useState([]);           // SIP configuration list
+  const [mfImportPreview, setMfImportPreview] = useState(null); // SBI MF statement preview
+  const [mfImportResult, setMfImportResult] = useState(null);   // import result banner
 
   // FD / RD / Insurance states
   const [fdSummary, setFdSummary] = useState([]);
@@ -437,6 +440,115 @@ export default function App() {
     } catch (err) {
       toast.dismiss('import-progress');
       const msg = err.response?.data?.detail || 'Failed to import contract note';
+      toast.error(msg, { duration: 5000 });
+    }
+  };
+
+  // ── SBI MF Statement Import ────────────────────────
+  // Accepts an array of File objects (multi-select) or a single File
+  const handleParseCDSLCAS = async (filesOrFile) => {
+    const files = Array.isArray(filesOrFile) ? filesOrFile : [filesOrFile];
+    try {
+      const allFunds = [];
+      const errors = [];
+      let folio = '';
+      let statementPeriod = '';
+      let totalPurchases = 0;
+      let totalRedemptions = 0;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          if (files.length > 1) {
+            toast.loading(`Parsing PDF ${i + 1}/${files.length}: ${file.name}`, { id: 'sbi-mf-parse' });
+          } else {
+            toast.loading('Parsing SBI MF statement...', { id: 'sbi-mf-parse' });
+          }
+          const parsed = await parseCDSLCAS(file);
+          if (parsed.funds && parsed.funds.length > 0) {
+            // Tag each fund's transactions with source file
+            parsed.funds.forEach(f => {
+              f.transactions.forEach(tx => { tx._sourceFile = file.name; });
+            });
+            // Merge funds: if same fund_code appears across PDFs, combine transactions
+            for (const fund of parsed.funds) {
+              const existing = allFunds.find(f => f.fund_code === fund.fund_code);
+              if (existing) {
+                existing.transactions.push(...fund.transactions);
+              } else {
+                allFunds.push({ ...fund });
+              }
+            }
+            if (!folio && parsed.folio) folio = parsed.folio;
+            if (parsed.statement_period) {
+              statementPeriod = statementPeriod
+                ? `${statementPeriod}; ${parsed.statement_period}`
+                : parsed.statement_period;
+            }
+            totalPurchases += parsed.summary?.total_purchases || 0;
+            totalRedemptions += parsed.summary?.total_redemptions || 0;
+          } else {
+            errors.push(`${file.name}: No transactions found`);
+          }
+        } catch (err) {
+          const msg = err.response?.data?.detail || 'Parse failed';
+          errors.push(`${file.name}: ${msg}`);
+        }
+      }
+
+      toast.dismiss('sbi-mf-parse');
+
+      if (errors.length > 0) {
+        toast.error(errors.join('\n'), { duration: 8000 });
+      }
+
+      if (allFunds.length === 0) {
+        if (errors.length === 0) {
+          toast.error('No transactions found in any PDF.', { duration: 5000 });
+        }
+        return;
+      }
+
+      setMfImportPreview({
+        folio,
+        statement_period: statementPeriod,
+        funds: allFunds,
+        summary: {
+          total_purchases: totalPurchases,
+          total_redemptions: totalRedemptions,
+          funds_count: new Set(allFunds.map(f => f.fund_code)).size,
+        },
+        _fileCount: files.length,
+      });
+    } catch (err) {
+      toast.dismiss('sbi-mf-parse');
+      const msg = err.response?.data?.detail || 'Failed to parse SBI MF statement';
+      toast.error(msg, { duration: 5000 });
+      throw err;
+    }
+  };
+
+  const handleConfirmCDSLCASImport = async (funds) => {
+    try {
+      toast.loading('Importing MF transactions...', { id: 'sbi-mf-import' });
+      const result = await confirmCDSLCASImport({ funds });
+      toast.dismiss('sbi-mf-import');
+
+      const parts = [];
+      if (result.imported?.buys > 0) parts.push(`${result.imported.buys} buys`);
+      if (result.imported?.sells > 0) parts.push(`${result.imported.sells} sells`);
+      if (result.skipped_duplicates > 0) parts.push(`${result.skipped_duplicates} skipped`);
+      toast.success(`SBI MF Import: ${parts.join(', ')}`, { duration: 5000 });
+
+      if (result.errors?.length > 0) {
+        toast.error(`${result.errors.length} error(s): ${result.errors[0]}`, { duration: 8000 });
+      }
+
+      setMfImportPreview(null);
+      loadMutualFunds();
+    } catch (err) {
+      toast.dismiss('sbi-mf-import');
+      const msg = err.response?.data?.detail || 'Failed to import SBI MF transactions';
       toast.error(msg, { duration: 5000 });
     }
   };
@@ -1051,6 +1163,7 @@ export default function App() {
           onRedeemMF={(fund) => setRedeemTarget(fund)}
           onConfigSIP={(fund) => setSipTarget(fund)}
           sipConfigs={sipConfigs}
+          onImportCDSLCAS={handleParseCDSLCAS}
         />
       )}
 
@@ -1170,6 +1283,15 @@ export default function App() {
           existingSymbols={new Set(stockSummary.map(s => s.symbol))}
           onConfirm={handleConfirmImport}
           onCancel={() => setImportPreview(null)}
+        />
+      )}
+
+      {/* SBI MF Import Preview Modal */}
+      {mfImportPreview && (
+        <MFImportPreviewModal
+          data={mfImportPreview}
+          onConfirm={handleConfirmCDSLCASImport}
+          onCancel={() => setMfImportPreview(null)}
         />
       )}
 

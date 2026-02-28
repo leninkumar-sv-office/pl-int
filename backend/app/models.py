@@ -565,3 +565,18 @@ class UpdateSIRequest(BaseModel):
     alert_days: Optional[int] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
+
+
+# ═══════════════════════════════════════════════════════════
+#  CDSL CAS / MF STATEMENT IMPORT MODELS
+# ═══════════════════════════════════════════════════════════
+
+class CDSLCASUpload(BaseModel):
+    """Request to parse a CDSL CAS statement PDF."""
+    pdf_base64: str
+    filename: str = "cdsl_cas.pdf"
+
+
+class MFImportPayload(BaseModel):
+    """Request to import confirmed MF transactions from CAS statement."""
+    funds: list  # list of fund dicts with transactions to import

@@ -25,6 +25,7 @@ from .models import (
     AddPPFRequest, UpdatePPFRequest, AddPPFContributionRequest, PPFWithdrawRequest,
     AddNPSRequest, UpdateNPSRequest, AddNPSContributionRequest,
     AddSIRequest, UpdateSIRequest,
+    CDSLCASUpload, MFImportPayload,
 )
 from .xlsx_database import xlsx_db as db
 from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache
@@ -1638,6 +1639,80 @@ def redeem_mf_units_endpoint(req: RedeemMFRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  CDSL CAS STATEMENT IMPORT
+# ══════════════════════════════════════════════════════════
+
+from .cdsl_cas_parser import parse_cdsl_cas
+
+
+@app.post("/api/mutual-funds/parse-cdsl-cas")
+def parse_cdsl_cas_endpoint(req: CDSLCASUpload):
+    """Parse a CDSL CAS statement PDF and return preview with dedup flags."""
+    import base64
+    try:
+        pdf_bytes = base64.b64decode(req.pdf_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
+    try:
+        result = parse_cdsl_cas(pdf_bytes)
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"Failed to parse CDSL CAS statement: {e}")
+
+
+@app.post("/api/mutual-funds/import-cdsl-cas-confirmed")
+def import_cdsl_cas_confirmed(req: MFImportPayload):
+    """Import confirmed (non-duplicate) transactions from CDSL CAS statement."""
+    buys = 0
+    sells = 0
+    skipped = 0
+    errors = []
+
+    for fund in req.funds:
+        fund_code = fund.get("fund_code", "")
+        fund_name = fund.get("fund_name", "")
+        for tx in fund.get("transactions", []):
+            if tx.get("isDuplicate"):
+                skipped += 1
+                continue
+            try:
+                action = tx.get("action", "Buy")
+                if action == "Buy":
+                    mf_db.add_mf_holding(
+                        fund_code=fund_code,
+                        fund_name=fund_name,
+                        units=float(tx["units"]),
+                        nav=float(tx["nav"]),
+                        buy_date=tx["date"],
+                        remarks=tx.get("description", ""),
+                    )
+                    buys += 1
+                elif action == "Sell":
+                    mf_db.add_mf_sell_transaction(
+                        fund_code=fund_code,
+                        units=float(tx["units"]),
+                        nav=float(tx["nav"]),
+                        sell_date=tx["date"],
+                        remarks=tx.get("description", ""),
+                    )
+                    sells += 1
+            except ValueError as e:
+                if "Duplicate" in str(e):
+                    skipped += 1
+                else:
+                    errors.append(f"{fund_name}: {tx.get('date', '?')} — {e}")
+            except Exception as e:
+                errors.append(f"{fund_name}: {tx.get('date', '?')} — {e}")
+
+    return {
+        "imported": {"buys": buys, "sells": sells},
+        "skipped_duplicates": skipped,
+        "errors": errors,
+    }
 
 
 # ══════════════════════════════════════════════════════════

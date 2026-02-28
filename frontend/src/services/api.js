@@ -197,6 +197,21 @@ export async function executeSIP(fundCode) {
   return data;
 }
 
+// ── CDSL CAS Statement Import ─────────────────────────
+
+export async function parseCDSLCAS(file) {
+  const base64 = await _readFileAsBase64(file);
+  const { data } = await api.post('/mutual-funds/parse-cdsl-cas',
+    { pdf_base64: base64, filename: file.name }, { timeout: 120000 });
+  return data;
+}
+
+export async function confirmCDSLCASImport(payload) {
+  const { data } = await api.post('/mutual-funds/import-cdsl-cas-confirmed',
+    payload, { timeout: 120000 });
+  return data;
+}
+
 // ── Zerodha ────────────────────────────────────────
 
 export async function getZerodhaStatus() {

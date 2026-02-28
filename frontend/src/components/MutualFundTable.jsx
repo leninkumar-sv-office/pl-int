@@ -572,10 +572,12 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
 
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs }) {
+export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS }) {
   const [expandedFund, setExpandedFund] = useState(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
+  const casFileInputRef = useRef(null);
+  const [casImporting, setCasImporting] = useState(false);
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const colPickerRef = useRef(null);
@@ -723,6 +725,47 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           <span className="section-badge" style={{ background: 'var(--red-bg)', color: 'var(--red)' }}>
             {inLoss} in loss
           </span>
+          {/* CDSL CAS PDF Import Button */}
+          <input
+            ref={casFileInputRef}
+            type="file"
+            accept=".pdf"
+            multiple
+            onChange={async (e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length === 0 || !onImportCDSLCAS) return;
+              e.target.value = '';
+              const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+              if (pdfFiles.length === 0) return;
+              setCasImporting(true);
+              try {
+                await onImportCDSLCAS(pdfFiles);
+              } catch (err) {
+                // Error handled in parent
+              } finally {
+                setCasImporting(false);
+              }
+            }}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => casFileInputRef.current?.click()}
+            disabled={casImporting}
+            style={{
+              padding: '4px 12px',
+              fontSize: '12px',
+              background: casImporting ? 'var(--bg-input)' : 'var(--blue)',
+              color: casImporting ? 'var(--text-muted)' : '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              cursor: casImporting ? 'wait' : 'pointer',
+              whiteSpace: 'nowrap',
+              opacity: casImporting ? 0.7 : 1,
+            }}
+            title="Import transactions from CDSL CAS statement PDF (all AMCs)"
+          >
+            {casImporting ? 'Parsing CAS...' : 'Import CDSL CAS'}
+          </button>
         </div>
       </div>
 
