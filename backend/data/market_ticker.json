@@ -7,6 +7,7 @@
     "price": 81287.19,
     "change": -961.42,
     "change_pct": -1.17,
+    "instrument_token": 265,
     "source": "zerodha"
   },
   {
@@ -17,6 +18,7 @@
     "price": 25178.65,
     "change": -317.9,
     "change_pct": -1.25,
+    "instrument_token": 256265,
     "source": "zerodha"
   },
   {
@@ -27,6 +29,7 @@
     "price": 16197.1,
     "change": 226.2,
     "change_pct": 1.42,
+    "instrument_token": 116433415,
     "source": "zerodha"
   },
   {
@@ -37,6 +40,7 @@
     "price": 274.39,
     "change": -0.61,
     "change_pct": -0.22,
+    "instrument_token": 115626503,
     "source": "zerodha"
   },
   {
@@ -77,6 +81,7 @@
     "price": 91.17,
     "change": 0.12,
     "change_pct": 0.13,
+    "instrument_token": 579587,
     "source": "zerodha"
   },
   {
@@ -87,6 +92,7 @@
     "price": 6100.0,
     "change": 47.0,
     "change_pct": 0.78,
+    "instrument_token": 121033991,
     "source": "zerodha"
   }
 ]

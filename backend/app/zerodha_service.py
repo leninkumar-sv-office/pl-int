@@ -645,6 +645,7 @@ def fetch_market_tickers() -> Dict[str, dict]:
             "change": round(change, 2),
             "change_pct": round(pct, 2),
             "instrument": inst_key,  # Track which Kite instrument matched
+            "instrument_token": info.get("instrument_token"),
         })
 
     # Flatten: drop priority, keep just the data
@@ -653,6 +654,91 @@ def fetch_market_tickers() -> Dict[str, dict]:
         results[key] = ticker_data
         print(f"[Zerodha] Ticker {key} → {ticker_data['instrument']} "
               f"({ticker_data['price']})")
+
+    return results
+
+
+# ── Ticker 7D/1M historical changes (via Kite Historical API) ──
+
+_ticker_hist_cache: Dict[str, dict] = {}  # key → {week_change_pct, month_change_pct, fetched_at}
+_ticker_hist_lock = threading.Lock()
+_TICKER_HIST_TTL = 6 * 3600  # 6 hours
+
+
+def fetch_ticker_historical_changes(ticker_data: Dict[str, dict]) -> Dict[str, dict]:
+    """Compute 7D/1M changes for market tickers using Kite Historical Data API.
+
+    Args:
+        ticker_data: {key: {price, instrument_token, ...}} from fetch_market_tickers()
+
+    Returns:
+        {key: {week_change_pct, month_change_pct}}
+    """
+    if not is_session_valid():
+        return {}
+
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    now_ts = time.time()
+    results: Dict[str, dict] = {}
+
+    for key, data in ticker_data.items():
+        token = data.get("instrument_token")
+        if not token:
+            continue
+
+        # Check cache
+        with _ticker_hist_lock:
+            cached = _ticker_hist_cache.get(key)
+            if cached and (now_ts - cached.get("fetched_at", 0)) < _TICKER_HIST_TTL:
+                results[key] = {
+                    "week_change_pct": cached["week_change_pct"],
+                    "month_change_pct": cached["month_change_pct"],
+                }
+                continue
+
+        # Fetch 35 days of daily candles
+        to_date = now.strftime("%Y-%m-%d")
+        from_date = (now - timedelta(days=35)).strftime("%Y-%m-%d")
+        path = f"/instruments/historical/{token}/day"
+        hist = _api_get(path, {"from": from_date, "to": to_date})
+        if not hist or "data" not in hist:
+            continue
+
+        candles = hist["data"].get("candles", [])
+        if not candles:
+            continue
+
+        latest_close = candles[-1][4] if len(candles[-1]) >= 5 else 0
+        if latest_close <= 0:
+            continue
+
+        target_7d = now - timedelta(days=7)
+        target_30d = now - timedelta(days=30)
+        close_7d = 0.0
+        close_30d = 0.0
+
+        for c in candles:
+            try:
+                ts = c[0][:10] if isinstance(c[0], str) else str(c[0])[:10]
+                candle_date = datetime.strptime(ts, "%Y-%m-%d")
+            except (ValueError, TypeError, AttributeError):
+                continue
+            if candle_date <= target_7d:
+                close_7d = c[4] if len(c) >= 5 else 0
+            if candle_date <= target_30d:
+                close_30d = c[4] if len(c) >= 5 else 0
+
+        week_pct = round((latest_close - close_7d) / close_7d * 100, 2) if close_7d > 0 else 0.0
+        month_pct = round((latest_close - close_30d) / close_30d * 100, 2) if close_30d > 0 else 0.0
+
+        result = {"week_change_pct": week_pct, "month_change_pct": month_pct}
+        results[key] = result
+
+        with _ticker_hist_lock:
+            _ticker_hist_cache[key] = {**result, "fetched_at": now_ts}
+
+        time.sleep(0.35)  # Rate limit: ~3 req/sec
 
     return results
 
