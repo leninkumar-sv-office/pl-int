@@ -24,6 +24,33 @@ const formatUnits = (u) => {
 const UPPER_ACRONYMS = ['ETF', 'FOF', 'ELSS', 'NFO', 'SIP', 'SBI', 'ICICI', 'HDFC', 'IDFC', 'PPFAS', 'DSP', 'UTI', 'HSBC', 'NPS'];
 const LOWER_WORDS = new Set(['of', 'the', 'and', 'for', 'in', 'on', 'at', 'to', 'a', 'an', 'or', 'nor', 'but', 'so', 'yet', 'as', 'via']);
 
+const extractAMC = (name) => {
+  const n = name.toUpperCase();
+  if (n.startsWith('ICICI')) return 'ICICI Prudential';
+  if (n.startsWith('NIPPON')) return 'Nippon India';
+  if (n.startsWith('SBI')) return 'SBI';
+  if (n.startsWith('KOTAK')) return 'Kotak';
+  if (n.startsWith('HDFC')) return 'HDFC';
+  if (n.startsWith('TATA')) return 'Tata';
+  if (n.startsWith('RELIANCE')) return 'Reliance / Nippon';
+  if (n.startsWith('ADITYA')) return 'Aditya Birla';
+  if (n.startsWith('AXIS')) return 'Axis';
+  if (n.startsWith('DSP')) return 'DSP';
+  if (n.startsWith('UTI')) return 'UTI';
+  if (n.startsWith('PPFAS') || n.startsWith('PARAG')) return 'PPFAS';
+  if (n.startsWith('MOTILAL')) return 'Motilal Oswal';
+  if (n.startsWith('CANARA')) return 'Canara Robeco';
+  if (n.startsWith('MIRAE')) return 'Mirae Asset';
+  if (n.startsWith('QUANT')) return 'Quant';
+  if (n.startsWith('FRANKLIN') || n.startsWith('TEMPLETON')) return 'Franklin Templeton';
+  if (n.startsWith('SUNDARAM')) return 'Sundaram';
+  if (n.startsWith('INVESCO')) return 'Invesco';
+  if (n.startsWith('EDELWEISS')) return 'Edelweiss';
+  if (n.startsWith('BANDHAN')) return 'Bandhan';
+  if (n.startsWith('HSBC')) return 'HSBC';
+  return 'Other';
+};
+
 const cleanFundName = (name) => {
   const stripped = name
     .replace(/\s*\(Erstwhile[^)]*\)\s*/i, '')
@@ -706,6 +733,18 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
     return sortDir === 'asc' ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
   });
 
+  // Group by AMC for visual rendering (preserving sort order)
+  const amcOrder = [];
+  const amcFundsMap = {};
+  for (const f of filtered) {
+    const amc = extractAMC(f.name);
+    if (!amcFundsMap[amc]) {
+      amcOrder.push(amc);
+      amcFundsMap[amc] = [];
+    }
+    amcFundsMap[amc].push(f);
+  }
+
   // Stats
   const fundsWithHeld = (funds || []).filter(f => f.total_held_units > 0);
   const totalHeldFunds = fundsWithHeld.length;
@@ -1008,7 +1047,32 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => {
+            {amcOrder.map((amc, amcIdx) => {
+              const amcFunds = amcFundsMap[amc];
+              const showHeader = amcFunds.length > 1;
+              return (
+                <React.Fragment key={amc}>
+                  {showHeader && (
+                    <tr>
+                      <td colSpan={TOTAL_COLS} style={{
+                        padding: amcIdx === 0 ? '6px 16px 4px' : '14px 16px 4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        opacity: 0.6,
+                        letterSpacing: '0.5px',
+                        textTransform: 'uppercase',
+                        borderBottom: 'none',
+                        background: 'transparent',
+                      }}>
+                        {amc}
+                        <span style={{ fontWeight: 400, marginLeft: 6, fontSize: '10px', opacity: 0.7 }}>
+                          ({amcFunds.length})
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                  {amcFunds.map(f => {
               const isExpanded = expandedFund === f.fund_code;
               const hasHeld = f.total_held_units > 0;
               const plColor = f.unrealized_pl >= 0 ? 'var(--green)' : 'var(--red)';
@@ -1157,6 +1221,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       </td>
                     </tr>
                   )}
+                </React.Fragment>
+              );
+            })}
                 </React.Fragment>
               );
             })}

@@ -29,7 +29,7 @@ from .models import MFHolding, MFSoldPosition
 
 
 # ═══════════════════════════════════════════════════════════
-#  LIVE NAV FETCHING (Google Finance)
+#  LIVE NAV FETCHING (Google Finance + AMFI)
 # ═══════════════════════════════════════════════════════════
 
 _GOOGLE_HEADERS = {
@@ -41,6 +41,57 @@ _GOOGLE_HEADERS = {
 
 _nav_cache: Dict[str, float] = {}
 _nav_cache_lock = threading.Lock()
+
+# AMFI NAV data (ISIN → NAV mapping from amfiindia.com)
+_amfi_isin_nav: Dict[str, float] = {}
+_amfi_fetch_time: float = 0.0
+_AMFI_NAV_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
+_AMFI_CACHE_TTL = 3600  # 1 hour
+
+
+def _fetch_amfi_navs() -> Dict[str, float]:
+    """Fetch all mutual fund NAVs from AMFI and build ISIN→NAV mapping.
+
+    The AMFI NAVAll.txt file contains all scheme data in this format:
+      Scheme Code;ISIN Div Payout/Growth;ISIN Div Reinvestment;Scheme Name;NAV;Date
+    One HTTP request gets NAVs for all ~45,000 schemes.
+    """
+    global _amfi_isin_nav, _amfi_fetch_time
+    # Return cached if fresh
+    if _amfi_isin_nav and (time.time() - _amfi_fetch_time) < _AMFI_CACHE_TTL:
+        return _amfi_isin_nav
+
+    try:
+        resp = _requests.get(_AMFI_NAV_URL, timeout=15)
+        if resp.status_code != 200:
+            return _amfi_isin_nav
+
+        mapping: Dict[str, float] = {}
+        for line in resp.text.split("\n"):
+            parts = line.strip().split(";")
+            if len(parts) < 5:
+                continue
+            try:
+                nav = float(parts[4])
+            except (ValueError, IndexError):
+                continue
+            if nav <= 0:
+                continue
+            # ISIN columns: index 1 (Div Payout/Growth), index 2 (Div Reinvestment)
+            for idx in (1, 2):
+                isin = parts[idx].strip()
+                if isin and isin.startswith("INF"):
+                    mapping[isin] = nav
+
+        if mapping:
+            _amfi_isin_nav = mapping
+            _amfi_fetch_time = time.time()
+            print(f"[MF-NAV] Fetched {len(mapping)} ISINs from AMFI")
+
+        return _amfi_isin_nav
+    except Exception as e:
+        print(f"[MF-NAV] AMFI fetch error: {e}")
+        return _amfi_isin_nav
 
 
 def _fetch_nav_google_finance(fund_code: str) -> Optional[float]:
@@ -71,9 +122,33 @@ def _fetch_nav_google_finance(fund_code: str) -> Optional[float]:
 
 
 def fetch_live_navs(fund_codes: List[str]) -> Dict[str, float]:
-    """Fetch live NAVs for a list of fund codes. Returns {fund_code: nav}."""
+    """Fetch live NAVs for a list of fund codes. Returns {fund_code: nav}.
+
+    For ISIN-based codes (INFxxx), uses AMFI NAVAll.txt (single bulk fetch).
+    For MUTF_IN:xxx codes, uses Google Finance scraping.
+    """
     results: Dict[str, float] = {}
-    for code in fund_codes:
+
+    # Separate ISIN-based codes from Google Finance codes
+    isin_codes = [c for c in fund_codes if c and c.startswith("INF")]
+    gf_codes = [c for c in fund_codes if c and ":" in c]
+
+    # Bulk-fetch AMFI NAVs for all ISINs at once
+    if isin_codes:
+        amfi_navs = _fetch_amfi_navs()
+        for code in isin_codes:
+            with _nav_cache_lock:
+                if code in _nav_cache:
+                    results[code] = _nav_cache[code]
+                    continue
+            nav = amfi_navs.get(code)
+            if nav and nav > 0:
+                with _nav_cache_lock:
+                    _nav_cache[code] = nav
+                results[code] = nav
+
+    # Fetch Google Finance NAVs one-by-one
+    for code in gf_codes:
         with _nav_cache_lock:
             if code in _nav_cache:
                 results[code] = _nav_cache[code]
@@ -84,6 +159,7 @@ def fetch_live_navs(fund_codes: List[str]) -> Dict[str, float]:
                 _nav_cache[code] = nav
             results[code] = nav
         time.sleep(random.uniform(0.3, 0.8))
+
     return results
 
 
