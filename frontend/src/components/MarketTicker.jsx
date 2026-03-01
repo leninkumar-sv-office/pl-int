@@ -12,6 +12,15 @@ const formatPrice = (price, type) => {
   return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const ChangeLine = ({ label, pct }) => {
+  if (!pct || pct === 0) return null;
+  return (
+    <span style={{ fontSize: '10px', color: pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+      {label}: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+    </span>
+  );
+};
+
 export default function MarketTicker({ tickers, loading }) {
   if (!tickers || tickers.length === 0) {
     if (loading) {
@@ -33,9 +42,12 @@ export default function MarketTicker({ tickers, loading }) {
   const cols = Math.max(row1.length, row2.length);
 
   const renderItem = (t, idx, rowLen) => {
-    const isUp = t.change >= 0;
     const hasData = t.price > 0;
     const isLast = idx === rowLen - 1;
+    const d = t.change_pct || 0;
+    const w = t.week_change_pct || 0;
+    const m = t.month_change_pct || 0;
+    const priceColor = d >= 0 ? 'var(--green)' : 'var(--red)';
     return (
       <div key={t.key} style={{
         ...styles.item,
@@ -43,18 +55,31 @@ export default function MarketTicker({ tickers, loading }) {
       }}>
         <span style={styles.label}>{t.label}{t.unit ? <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '10px', marginLeft: '2px' }}>{t.unit.replace('₹', '')}</span> : null}</span>
         {hasData ? (
-          <>
-            <span style={{ ...styles.price, color: isUp ? 'var(--green)' : 'var(--red)' }}>
-              {formatPrice(t.price, t.type)}
-            </span>
-            <span style={{
-              ...styles.change,
-              color: isUp ? 'var(--green)' : 'var(--red)',
-              background: isUp ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
-            }}>
-              {isUp ? '▲' : '▼'} {Math.abs(t.change_pct).toFixed(2)}%
-            </span>
-          </>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ ...styles.price, color: priceColor }}>
+                {formatPrice(t.price, t.type)}
+              </span>
+              {d !== 0 && (
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: d >= 0 ? 'var(--green)' : 'var(--red)',
+                  background: d >= 0 ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                }}>
+                  {d >= 0 ? '▲' : '▼'} {Math.abs(d).toFixed(2)}%
+                </span>
+              )}
+            </div>
+            {(w !== 0 || m !== 0) && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <ChangeLine label="7D" pct={w} />
+                <ChangeLine label="1M" pct={m} />
+              </div>
+            )}
+          </div>
         ) : (
           <span style={{ ...styles.price, color: 'var(--text-muted)' }}>--</span>
         )}
@@ -101,11 +126,5 @@ const styles = {
   price: {
     fontSize: '14px',
     fontWeight: 700,
-  },
-  change: {
-    fontSize: '11px',
-    fontWeight: 600,
-    padding: '2px 6px',
-    borderRadius: '4px',
   },
 };

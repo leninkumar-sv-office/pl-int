@@ -257,9 +257,9 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
 
 
 def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
-    """Compute 7D and 30D NAV change % using mfapi.in historical data.
-    Returns {week_change_pct, month_change_pct}."""
-    result = {"week_change_pct": 0.0, "month_change_pct": 0.0}
+    """Compute 1D, 7D and 30D NAV change % using mfapi.in historical data.
+    Returns {day_change_pct, week_change_pct, month_change_pct}."""
+    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0}
     if current_nav <= 0:
         return result
 
@@ -269,6 +269,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         cached = _nav_change_cache.get(fund_code)
         if cached and (now - cached.get("fetched_at", 0)) < _NAV_CHANGE_CACHE_TTL:
             return {
+                "day_change": cached.get("day_change", 0.0),
+                "day_change_pct": cached.get("day_change_pct", 0.0),
                 "week_change_pct": cached["week_change_pct"],
                 "month_change_pct": cached["month_change_pct"],
             }
@@ -288,7 +290,7 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             # Cache the miss so we don't retry every call
             with _nav_change_cache_lock:
                 _nav_change_cache[fund_code] = {
-                    "week_change_pct": 0.0, "month_change_pct": 0.0,
+                    "day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0,
                     "fetched_at": now,
                 }
             return result
@@ -298,12 +300,13 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
     if not nav_data:
         return result
 
-    # Parse dates and find NAVs ~7d and ~30d ago
+    # Parse all dated NAVs, sorted most-recent first
     from datetime import timedelta
     today = date.today()
     target_7d = today - timedelta(days=7)
     target_30d = today - timedelta(days=30)
 
+    dated_navs = []  # [(date, nav), ...] for 1D (need two most recent)
     nav_7d = 0.0
     nav_30d = 0.0
     best_7d_date = None
@@ -316,6 +319,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         except (ValueError, KeyError, TypeError):
             continue
 
+        dated_navs.append((d, nav_val))
+
         # Find closest date on or before target_7d
         if d <= target_7d:
             if best_7d_date is None or d > best_7d_date:
@@ -327,6 +332,15 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
                 best_30d_date = d
                 nav_30d = nav_val
 
+    # 1D change: compare current NAV against the previous trading day
+    # mfapi returns most recent first; find the 2nd most recent trading day
+    dated_navs.sort(key=lambda x: x[0], reverse=True)
+    if len(dated_navs) >= 2:
+        prev_nav = dated_navs[1][1]  # 2nd most recent = previous trading day
+        if prev_nav > 0:
+            result["day_change"] = round(current_nav - prev_nav, 2)
+            result["day_change_pct"] = round((current_nav - prev_nav) / prev_nav * 100, 2)
+
     if nav_7d > 0:
         result["week_change_pct"] = round((current_nav - nav_7d) / nav_7d * 100, 2)
     if nav_30d > 0:
@@ -335,6 +349,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
     # Cache result
     with _nav_change_cache_lock:
         _nav_change_cache[fund_code] = {
+            "day_change": result["day_change"],
+            "day_change_pct": result["day_change_pct"],
             "week_change_pct": result["week_change_pct"],
             "month_change_pct": result["month_change_pct"],
             "fetched_at": now,
@@ -843,6 +859,8 @@ class MFXlsxPortfolio:
                 "num_sold_lots": len(sold),
                 "week_52_high": w52_high,
                 "week_52_low": w52_low,
+                "day_change": nav_changes["day_change"],
+                "day_change_pct": nav_changes["day_change_pct"],
                 "week_change_pct": nav_changes["week_change_pct"],
                 "month_change_pct": nav_changes["month_change_pct"],
                 "is_above_avg_nav": current_nav > avg_nav if current_nav > 0 and avg_nav > 0 else False,

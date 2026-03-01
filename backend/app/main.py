@@ -1337,6 +1337,7 @@ _ticker_cache_time: float = 0.0
 _TICKER_REFRESH_INTERVAL = 300   # 5 minutes
 _ticker_lock = threading.Lock()
 _TICKER_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "market_ticker.json")
+_TICKER_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "market_ticker_history.json")
 
 # Background thread state
 _ticker_bg_running = False
@@ -1382,6 +1383,85 @@ def _save_ticker_file(tickers: List[dict]):
             })
     with open(_TICKER_FILE, "w") as f:
         json.dump(result, f, indent=2)
+
+
+def _record_ticker_history(tickers: List[dict]):
+    """Append today's prices to history file for 1W/1M change tracking.
+    Format: {date_str: {key: price, ...}, ...}  — keeps last 40 days."""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(_TICKER_HISTORY_FILE) as f:
+            history = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        history = {}
+
+    # Only update once per day (don't overwrite with stale intraday)
+    if today_str in history:
+        return history
+
+    day_data = {}
+    for t in tickers:
+        if t.get("price", 0) > 0:
+            day_data[t["key"]] = t["price"]
+
+    if day_data:
+        history[today_str] = day_data
+        # Prune to last 40 days
+        sorted_dates = sorted(history.keys())
+        if len(sorted_dates) > 40:
+            for old in sorted_dates[:-40]:
+                del history[old]
+        os.makedirs(os.path.dirname(_TICKER_HISTORY_FILE), exist_ok=True)
+        with open(_TICKER_HISTORY_FILE, "w") as f:
+            json.dump(history, f, indent=2)
+
+    return history
+
+
+def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
+    """Add week_change_pct and month_change_pct to each ticker from history."""
+    try:
+        with open(_TICKER_HISTORY_FILE) as f:
+            history = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return tickers
+
+    from datetime import timedelta
+    today = datetime.now().date()
+    target_7d = today - timedelta(days=7)
+    target_30d = today - timedelta(days=30)
+
+    # Find closest history date on or before each target
+    sorted_dates = sorted(history.keys())
+
+    def _find_price(key, target_date):
+        best_date = None
+        for ds in sorted_dates:
+            try:
+                d = datetime.strptime(ds, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if d <= target_date:
+                if best_date is None or d > best_date:
+                    best_date = d
+        if best_date:
+            return history.get(best_date.strftime("%Y-%m-%d"), {}).get(key, 0)
+        return 0
+
+    for t in tickers:
+        key = t["key"]
+        price = t.get("price", 0)
+        if price <= 0:
+            t["week_change_pct"] = 0.0
+            t["month_change_pct"] = 0.0
+            continue
+
+        p7 = _find_price(key, target_7d)
+        p30 = _find_price(key, target_30d)
+        t["week_change_pct"] = round((price - p7) / p7 * 100, 2) if p7 > 0 else 0.0
+        t["month_change_pct"] = round((price - p30) / p30 * 100, 2) if p30 > 0 else 0.0
+
+    return tickers
 
 
 def _refresh_tickers_once():
@@ -1483,6 +1563,8 @@ def _refresh_tickers_once():
 
     # Save to file (merge-safe) and update cache
     _save_ticker_file(results)
+    _record_ticker_history(results)
+    _enrich_ticker_changes(results)
     with _ticker_lock:
         _ticker_cache = results
         _ticker_cache_time = time.time()
@@ -1496,6 +1578,7 @@ def _ticker_bg_loop():
     # Initial load from file (instant, no network)
     saved = _load_ticker_file()
     if saved:
+        _enrich_ticker_changes(saved)
         with _ticker_lock:
             _ticker_cache = saved
             _ticker_cache_time = time.time()
@@ -1537,6 +1620,8 @@ def get_market_ticker():
             return _ticker_cache
     # Fallback: if background hasn't populated cache yet, load from file
     saved = _load_ticker_file()
+    if saved:
+        _enrich_ticker_changes(saved)
     return saved if saved else []
 
 
