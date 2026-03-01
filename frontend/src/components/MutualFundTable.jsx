@@ -21,6 +21,28 @@ const formatUnits = (u) => {
   return Number(u).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 };
 
+const UPPER_ACRONYMS = ['ETF', 'FOF', 'ELSS', 'NFO', 'SIP', 'SBI', 'ICICI', 'HDFC', 'IDFC', 'PPFAS', 'DSP', 'UTI', 'HSBC', 'NPS'];
+const LOWER_WORDS = new Set(['of', 'the', 'and', 'for', 'in', 'on', 'at', 'to', 'a', 'an', 'or', 'nor', 'but', 'so', 'yet', 'as', 'via']);
+
+const cleanFundName = (name) => {
+  const stripped = name
+    .replace(/\s*\(Erstwhile[^)]*\)\s*/i, '')
+    .replace(/\s*-?\s*Direct\s*(Plan\s*)?([-–]\s*)?(Growth|Dividend)?\s*(Plan\s*)?(Growth\s*)?(Option)?\.?\s*$/i, '')
+    .replace(/\s*Direct\s*(Growth|Dividend)?\.?\s*$/i, '')
+    .replace(/\s*-\s*$/, '')
+    .trim();
+  // Only convert if the name is ALL CAPS (leave mixed-case names like "SBI Conservative..." alone)
+  if (!stripped || stripped !== stripped.toUpperCase()) return stripped;
+  return stripped
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\b[A-Za-z]+\b/g, word => {
+      if (UPPER_ACRONYMS.includes(word.toUpperCase())) return word.toUpperCase();
+      if (LOWER_WORDS.has(word.toLowerCase()) && word !== stripped.split(/\s+/)[0]) return word.toLowerCase();
+      return word;
+    });
+};
+
 function durationText(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -163,7 +185,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
   const totalSoldPLPa = avgSoldDays > 0 && totalSoldCost > 0
     ? (Math.pow(1 + totalSoldPL / totalSoldCost, 365 / avgSoldDays) - 1) * 100
     : null;
-  const fundShortName = f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '');
+  const fundShortName = cleanFundName(f.name);
 
   return (
     <div style={{
@@ -1009,12 +1031,15 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                     </td>
                     <td>
                       <div className="stock-symbol">
-                        {f.name.replace(/\s*-\s*Direct\s*(Plan\s*)?(Growth|Dividend)?\.?$/i, '').replace(/\s*Direct\s*(Growth|Dividend)?\.?$/i, '')}
+                        {cleanFundName(f.name)}
                         {sipCfg && sipCfg.enabled && (
                           <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, background: 'rgba(0,210,106,0.12)', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
                             SIP
                           </span>
                         )}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', opacity: 0.5, marginTop: '1px' }}>
+                        Direct Growth
                       </div>
                       <div className="stock-name">
                         {f.num_held_lots} lot{f.num_held_lots !== 1 ? 's' : ''}
