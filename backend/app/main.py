@@ -13,6 +13,7 @@ import uuid
 import time
 import threading
 import traceback
+import requests
 
 from .models import (
     AddStockRequest, SellStockRequest, AddDividendRequest, ManualPriceRequest,
@@ -1418,48 +1419,92 @@ def _record_ticker_history(tickers: List[dict]):
     return history
 
 
-def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
-    """Add week_change_pct and month_change_pct to each ticker from history."""
-    try:
-        with open(_TICKER_HISTORY_FILE) as f:
-            history = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return tickers
+_ticker_hist_cache: Dict[str, dict] = {}  # key -> {prices: [(date,close),...], fetched_at: float}
+_TICKER_HIST_TTL = 6 * 3600  # 6 hours
 
+def _fetch_yahoo_chart(yahoo_sym: str) -> list:
+    """Fetch ~2 months of daily closes from Yahoo Finance chart API.
+    Returns [(date, close), ...] sorted by date."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?range=2mo&interval=1d"
+    try:
+        resp = requests.get(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+        }, timeout=10)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        result = data.get("chart", {}).get("result", [])
+        if not result:
+            return []
+        timestamps = result[0].get("timestamp", [])
+        closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        pairs = []
+        for ts, c in zip(timestamps, closes):
+            if c is not None and c > 0:
+                d = datetime.utcfromtimestamp(ts).date()
+                pairs.append((d, c))
+        return sorted(pairs, key=lambda x: x[0])
+    except Exception as e:
+        print(f"[MarketTicker] Yahoo chart error for {yahoo_sym}: {e}")
+        return []
+
+
+def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
+    """Add week_change_pct and month_change_pct using Yahoo Finance historical data."""
     from datetime import timedelta
+    now_ts = time.time()
     today = datetime.now().date()
     target_7d = today - timedelta(days=7)
     target_30d = today - timedelta(days=30)
 
-    # Find closest history date on or before each target
-    sorted_dates = sorted(history.keys())
-
-    def _find_price(key, target_date):
-        best_date = None
-        for ds in sorted_dates:
-            try:
-                d = datetime.strptime(ds, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if d <= target_date:
-                if best_date is None or d > best_date:
-                    best_date = d
-        if best_date:
-            return history.get(best_date.strftime("%Y-%m-%d"), {}).get(key, 0)
-        return 0
+    meta_map = {m["key"]: m for m in MARKET_TICKER_SYMBOLS}
 
     for t in tickers:
         key = t["key"]
         price = t.get("price", 0)
+        t.setdefault("week_change_pct", 0.0)
+        t.setdefault("month_change_pct", 0.0)
         if price <= 0:
-            t["week_change_pct"] = 0.0
-            t["month_change_pct"] = 0.0
             continue
 
-        p7 = _find_price(key, target_7d)
-        p30 = _find_price(key, target_30d)
-        t["week_change_pct"] = round((price - p7) / p7 * 100, 2) if p7 > 0 else 0.0
-        t["month_change_pct"] = round((price - p30) / p30 * 100, 2) if p30 > 0 else 0.0
+        meta = meta_map.get(key, {})
+        yahoo = meta.get("yahoo")
+        if not yahoo:
+            continue
+
+        # Check cache
+        cached = _ticker_hist_cache.get(key)
+        if cached and (now_ts - cached.get("fetched_at", 0)) < _TICKER_HIST_TTL:
+            prices = cached["prices"]
+        else:
+            prices = _fetch_yahoo_chart(yahoo)
+            if prices:
+                _ticker_hist_cache[key] = {"prices": prices, "fetched_at": now_ts}
+            elif cached:
+                prices = cached["prices"]  # stale is better than nothing
+            else:
+                continue
+
+        # Find closest price on or before target dates
+        # Note: Yahoo prices are raw (before divisor), but for % change
+        # the divisor cancels out, so we compare raw-to-raw directly
+        def _find(target):
+            best = None
+            for d, c in prices:
+                if d <= target:
+                    best = c
+            return best
+
+        # Use the most recent raw Yahoo close as reference (not our displayed price
+        # which may be from Zerodha with different scaling)
+        raw_current = prices[-1][1] if prices else None
+        p7 = _find(target_7d)
+        p30 = _find(target_30d)
+
+        if raw_current and raw_current > 0 and p7 and p7 > 0:
+            t["week_change_pct"] = round((raw_current - p7) / p7 * 100, 2)
+        if raw_current and raw_current > 0 and p30 and p30 > 0:
+            t["month_change_pct"] = round((raw_current - p30) / p30 * 100, 2)
 
     return tickers
 
