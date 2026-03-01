@@ -1055,19 +1055,20 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                   {showHeader && (
                     <tr>
                       <td colSpan={TOTAL_COLS} style={{
-                        padding: amcIdx === 0 ? '6px 16px 4px' : '14px 16px 4px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        color: 'var(--text-muted)',
-                        opacity: 0.6,
-                        letterSpacing: '0.5px',
+                        padding: amcIdx === 0 ? '10px 16px 6px' : '18px 16px 6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: 'var(--text-dim)',
+                        letterSpacing: '0.6px',
                         textTransform: 'uppercase',
-                        borderBottom: 'none',
-                        background: 'transparent',
+                        borderBottom: '1px solid var(--border)',
+                        background: 'rgba(255,255,255,0.02)',
                       }}>
-                        {amc}
-                        <span style={{ fontWeight: 400, marginLeft: 6, fontSize: '10px', opacity: 0.7 }}>
-                          ({amcFunds.length})
+                        <span style={{ borderLeft: '3px solid var(--blue)', paddingLeft: 10 }}>
+                          {amc}
+                        </span>
+                        <span style={{ fontWeight: 400, marginLeft: 8, fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {amcFunds.length} funds
                         </span>
                       </td>
                     </tr>
