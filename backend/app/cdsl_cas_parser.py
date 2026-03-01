@@ -67,9 +67,20 @@ def _parse_date_ddmmyyyy(s: str) -> str:
 
 
 def _determine_action(description: str) -> str:
-    """Determine Buy/Sell from transaction description."""
+    """Determine Buy/Sell from transaction description.
+
+    Handles:
+    - Redemption / Switch Out → Sell
+    - Reversal (e.g. "SIP Purchase (Reversal)") → Sell (undoes a previous buy)
+    - Insufficient Balance (failed SIP attempt recorded in CAS) → Sell (paired with
+      a matching Buy entry; together they cancel out to net zero)
+    """
     desc_upper = description.upper()
     if "REDEMPTION" in desc_upper or "SWITCH OUT" in desc_upper:
+        return "Sell"
+    if "REVERSAL" in desc_upper:
+        return "Sell"
+    if "INSUFFICIENT" in desc_upper:
         return "Sell"
     return "Buy"
 
@@ -92,7 +103,16 @@ def _clean_description(desc: str) -> str:
 
 
 def _match_fund_code(isin: str, fund_name: str) -> Optional[str]:
-    """Try to match a parsed fund's ISIN/name against existing MF database entries."""
+    """Try to match a parsed fund's ISIN against existing MF database entries.
+
+    First checks if ISIN already exists as a fund_code in the database.
+    Falls back to name matching only if ISIN not found (threshold 0.85).
+    """
+    # Primary: match by ISIN directly
+    if isin in mf_db._file_map:
+        return isin
+
+    # Fallback: name matching with strict threshold
     parsed_upper = fund_name.upper().strip()
     parsed_words = set(parsed_upper.replace("-", " ").split())
     significant_parsed = {w for w in parsed_words if len(w) > 2}
@@ -115,7 +135,7 @@ def _match_fund_code(isin: str, fund_name: str) -> Optional[str]:
             best_overlap = overlap
             best_code = code
 
-    return best_code if best_overlap >= 0.7 else None
+    return best_code if best_overlap >= 0.85 else None
 
 
 def _check_duplicate(fund_code: str, tx_date: str, units: float, nav: float) -> bool:
@@ -170,21 +190,23 @@ def _check_duplicate(fund_code: str, tx_date: str, units: float, nav: float) -> 
 
 
 def _extract_metadata_from_text(all_text: str) -> dict:
-    """Extract fund metadata from the Account Details section of the PDF.
+    """Extract fund metadata from the PDF text (both Account Details and MF sections).
 
     Builds a mapping of ISIN → {amc, scheme_name, scheme_code, folio}.
-    In the PDF, the order per fund is:
-      AMC Name → Scheme Name [+ Scheme Code on same line]
-               → Scheme Code → [continuation line] → Folio No → ISIN
-    So folio is encountered BEFORE the ISIN line.
-    Scheme name may also have a continuation line after Scheme Code.
+
+    Handles two PDF formats:
+    1. New (2025+): Account Details section with "AMC Name:", "Scheme Name:", "Scheme Code:"
+    2. Old (2019-2024): MF section with direct AMC names ("HDFC Mutual Fund"),
+       scheme codes ("MCOGT - HDFC Mid-Cap..."), Folio/ISIN lines.
+
+    In both formats, folio appears BEFORE ISIN.
     """
     isin_map = {}  # ISIN → metadata dict
     current_amc = ""
     current_scheme_name = ""
     current_scheme_code = ""
     pending_folio = ""
-    awaiting_continuation = False  # True after Scheme Code, before Folio/ISIN
+    awaiting_continuation = False
 
     for line in all_text.split("\n"):
         line = line.strip()
@@ -195,6 +217,15 @@ def _extract_metadata_from_text(all_text: str) -> dict:
         m = _AMC_HEADER_RE.match(line)
         if m:
             current_amc = m.group(1).strip()
+            current_scheme_name = ""
+            current_scheme_code = ""
+            pending_folio = ""
+            awaiting_continuation = False
+            continue
+
+        # Direct AMC name (old format): "HDFC Mutual Fund", "Kotak Mutual Fund"
+        if line.endswith("Mutual Fund") and len(line) < 60 and ":" not in line:
+            current_amc = line
             current_scheme_name = ""
             current_scheme_code = ""
             pending_folio = ""
@@ -218,10 +249,29 @@ def _extract_metadata_from_text(all_text: str) -> dict:
         # "Scheme Code : 9453" on its own line
         if line.startswith("Scheme Code"):
             current_scheme_code = line.split(":", 1)[1].strip() if ":" in line else ""
-            awaiting_continuation = True  # next line may be continuation of scheme name
+            awaiting_continuation = True
             continue
 
-        # Folio line (appears BEFORE ISIN in Account Details)
+        # Continuation line for scheme name (after Scheme Code line)
+        # MUST come before scheme header check, because lines like
+        # "Plan - Growth" match _SCHEME_HEADER_RE but are actually continuations
+        if awaiting_continuation and current_scheme_name and not line.startswith("KYC"):
+            current_scheme_name = current_scheme_name + " " + line
+            awaiting_continuation = False
+            continue
+
+        # Scheme header (old format): "MCOGT - HDFC Mid-Cap..." or "9453 - ICICI Prudential..."
+        m = _SCHEME_CODE_NUM_RE.match(line)
+        if not m:
+            m = _SCHEME_HEADER_RE.match(line)
+        if m and current_amc:
+            current_scheme_code = m.group(1).strip()
+            current_scheme_name = m.group(2).strip()
+            pending_folio = ""
+            awaiting_continuation = False
+            continue
+
+        # Folio line (appears BEFORE ISIN)
         m = _FOLIO_RE.search(line)
         if m and current_amc:
             pending_folio = m.group(1).strip()
@@ -242,14 +292,6 @@ def _extract_metadata_from_text(all_text: str) -> dict:
             current_scheme_name = ""
             current_scheme_code = ""
             pending_folio = ""
-            awaiting_continuation = False
-            continue
-
-        # Continuation line: appends to scheme name
-        # (e.g., "Growth", "PLAN", "DIRECT GROWTH PLAN", "CREATION SCHEME - DIRECT GROWTH PLAN")
-        # Only applies right after Scheme Code line
-        if awaiting_continuation and current_scheme_name and not line.startswith("KYC"):
-            current_scheme_name = current_scheme_name + " " + line
             awaiting_continuation = False
             continue
 
@@ -309,11 +351,23 @@ def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
     current_amc = ""
     current_scheme_name = ""
     current_scheme_code = ""
+    last_text_isin = ""  # Track last ISIN seen in page text (for cross-page tables)
 
     for page in pdf.pages:
         page_text = page.extract_text() or ""
         tables = page.extract_tables()
+
+        # Save ISIN from previous page BEFORE this page's text scan overwrites it.
+        # Continuation tables on this page belong to the fund from the previous page,
+        # not from any new fund header found in this page's text.
+        prev_page_last_isin = last_text_isin
+
         if not tables:
+            # Still scan text for ISIN tracking even without tables
+            for line in page_text.split("\n"):
+                m = _ISIN_RE.search(line.strip())
+                if m:
+                    last_text_isin = m.group(1).strip()
             continue
 
         # Update AMC/scheme from page text (MF transaction section)
@@ -322,41 +376,105 @@ def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
             if not line:
                 continue
             # Direct AMC name line: short line ending with "Mutual Fund"
-            if line.endswith("Mutual Fund") and len(line) < 60:
+            if line.endswith("Mutual Fund") and len(line) < 60 and ":" not in line:
                 current_amc = line
                 continue
             m = _AMC_HEADER_RE.match(line)
             if m:
                 current_amc = m.group(1).strip()
                 continue
+            # Scheme header: "9453 - ICICI Prudential ..." (numeric code)
+            m = _SCHEME_CODE_NUM_RE.match(line)
+            if m:
+                current_scheme_code = m.group(1).strip()
+                current_scheme_name = m.group(2).strip()
+                continue
+            # Scheme header: "MCOGT - HDFC Mid-Cap ..." (alpha code)
             m = _SCHEME_HEADER_RE.match(line)
             if m:
                 current_scheme_code = m.group(1).strip()
                 current_scheme_name = m.group(2).strip()
                 continue
+            # Track last ISIN seen in text
+            m = _ISIN_RE.search(line)
+            if m:
+                last_text_isin = m.group(1).strip()
 
-        for table in tables:
-            if not table or len(table) < 3:
+        for ti, table in enumerate(tables):
+            if not table or len(table) < 2:
                 continue
 
-            # Check if first row is an ISIN row
+            # Detect table format: new (ISIN in row 0) or old (Folio in row 0, ISIN in row 1)
             first_row = table[0]
-            if not first_row or not first_row[0]:
+            if not first_row:
                 continue
 
-            first_cell = str(first_row[0]).strip()
-            isin_match = _ISIN_RE.search(first_cell)
-            if not isin_match:
-                continue
+            first_cell = str(first_row[0] or "").strip()
+            second_cell = _clean_description(str(first_row[1])) if len(first_row) > 1 and first_row[1] else ""
+            isin = None
+            folio = ""
+            data_start_row = 2  # default: skip row 0 (ISIN/Folio) + row 1 (header)
 
-            isin = isin_match.group(1).strip()
+            # Format 1 (new, 2025+): Row 0 has "ISIN : INFxxx"
+            if first_cell:
+                isin_match = _ISIN_RE.search(first_cell)
+                if isin_match:
+                    isin = isin_match.group(1).strip()
+
+            # Format 2 (old, 2019-2024): Row 0 has "Folio No :", Row 1 has "ISIN :"
+            if not isin and first_cell.startswith("Folio No"):
+                folio_m = _FOLIO_RE.search(first_cell)
+                if folio_m:
+                    folio = folio_m.group(1).strip()
+                # Check row 1 for ISIN
+                if len(table) > 1 and table[1] and table[1][0]:
+                    row1_cell = str(table[1][0]).strip()
+                    isin_match = _ISIN_RE.search(row1_cell)
+                    if isin_match:
+                        isin = isin_match.group(1).strip()
+                        data_start_row = 3  # skip Folio row, ISIN row, header row
+
+            # Format 3a (cross-page split): Table starts with header row "Date"
+            # Always use prev_page_last_isin because cross-page splits only
+            # come from the fund on the previous page. The current page's text
+            # scan may have already overwritten last_text_isin with a new fund.
+            if not isin and first_cell.lower().startswith("date") and prev_page_last_isin:
+                isin = prev_page_last_isin
+                data_start_row = 1  # skip header row only
+
+            # Format 3b (cross-page split): Table starts with "Opening Balance" row
+            # e.g. Row 0: ['', 'Opening Balance', '', '', '', '6482.653', ...]
+            # Continuation from previous page's fund (nav tables with "Summary"
+            # header won't match this pattern)
+            if not isin and not first_cell and second_cell.lower().startswith("opening bal") and prev_page_last_isin:
+                isin = prev_page_last_isin
+                data_start_row = 0  # all rows are data (opening bal will be skipped by _should_skip_row)
+
+            # Format 3c (cross-page split): Table starts directly with date data
+            # e.g. Row 0: ['06-05-2024', 'Purchase - Systematic-...', ...]
+            # Continuation from previous page (date pattern won't match nav headers)
+            if not isin and re.match(r"\d{2}-\d{2}-\d{4}", first_cell) and prev_page_last_isin:
+                isin = prev_page_last_isin
+                data_start_row = 0  # all rows are data
+
+            # Format 3d (cross-page split): Table starts with empty date + STT/Closing Balance
+            # e.g. Row 0: ['', 'STT', '.25', ...] or ['', 'Closing Balance', ...]
+            # Tail-end rows of a fund that split across pages
+            if not isin and not first_cell and second_cell and prev_page_last_isin:
+                if _should_skip_row(second_cell) or second_cell.upper().startswith("TOTAL TAX"):
+                    isin = prev_page_last_isin
+                    data_start_row = 0
+
+            if not isin:
+                continue
 
             # Look up metadata for this ISIN
             meta = isin_map.get(isin, {})
             amc = meta.get("amc", current_amc)
             scheme_name = meta.get("scheme_name", current_scheme_name)
             scheme_code = meta.get("scheme_code", current_scheme_code)
-            folio = meta.get("folio", "")
+            if not folio:
+                folio = meta.get("folio", "")
 
             # Create or get fund entry
             if isin not in funds:
@@ -374,9 +492,10 @@ def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
 
             fund = funds[isin]
             closing_balance = 0.0
+            opening_balance = 0.0
 
-            # Parse transaction rows (skip row 0=ISIN, row 1=header)
-            for row in table[2:]:
+            # Parse transaction rows (skip metadata + header rows)
+            for row in table[data_start_row:]:
                 if not row or len(row) < 6:
                     continue
 
@@ -384,12 +503,16 @@ def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
                 date_str = cells[0].strip()
                 description = _clean_description(cells[1]) if len(cells) > 1 else ""
 
-                # Check for closing balance row
+                # Check for opening/closing balance rows
                 if _should_skip_row(description):
                     if description.lower().startswith("closing bal"):
-                        # Extract closing balance units
                         try:
                             closing_balance = _parse_number(cells[5]) if len(cells) > 5 else 0.0
+                        except (ValueError, IndexError):
+                            pass
+                    elif description.lower().startswith("opening bal"):
+                        try:
+                            opening_balance = _parse_number(cells[5]) if len(cells) > 5 else 0.0
                         except (ValueError, IndexError):
                             pass
                     continue
@@ -422,7 +545,9 @@ def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
                     "stamp_duty": abs(stamp_duty),
                 })
 
-            # Attach closing balance to last transaction
+            # Attach opening/closing balance to fund
+            if opening_balance and "opening_balance" not in fund:
+                fund["opening_balance"] = round(abs(opening_balance), 4)
             if closing_balance and fund["transactions"]:
                 fund["transactions"][-1]["balance_units"] = round(abs(closing_balance), 4)
 

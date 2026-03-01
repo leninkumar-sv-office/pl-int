@@ -884,6 +884,7 @@ class MFXlsxPortfolio:
         nav: float,
         buy_date: str,
         remarks: str = "",
+        skip_dup_check: bool = False,
     ) -> dict:
         """Add a Buy transaction for a mutual fund.
 
@@ -906,7 +907,7 @@ class MFXlsxPortfolio:
             except ValueError:
                 dt_check = None
 
-            if dt_check:
+            if dt_check and not skip_dup_check:
                 for row in range(header_row + 1, ws.max_row + 1):
                     action = ws.cell(row, 3).value
                     if action != "Buy":
