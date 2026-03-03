@@ -670,8 +670,8 @@ _GF_TICKER_MAP = {
 
 
 def fetch_market_ticker(meta: dict) -> dict:
-    """Fetch a single market ticker via Yahoo/Google Finance.
-    Only runs if ENABLE_YAHOO_GOOGLE is True, otherwise returns placeholder."""
+    """Fetch a single market ticker via Yahoo chart API / Google Finance.
+    Non-kite tickers always fetch; kite tickers only if ENABLE_YAHOO_GOOGLE is True."""
     from urllib.parse import unquote
     placeholder = {
         "key": meta["key"], "label": meta["label"],
@@ -679,20 +679,25 @@ def fetch_market_ticker(meta: dict) -> dict:
         "price": 0, "change": 0, "change_pct": 0,
     }
 
-    if not ENABLE_YAHOO_GOOGLE:
+    is_non_kite = meta.get("kite") is False
+    if not is_non_kite and not ENABLE_YAHOO_GOOGLE:
         return placeholder
 
-    # Source 1: yfinance with retry
     yf_sym = unquote(meta["yahoo"])
-    for attempt in range(MAX_RETRIES):
-        try:
-            ticker = yf.Ticker(yf_sym)
-            hist = ticker.history(period="5d")
-            if hist is not None and not hist.empty:
-                closes = hist["Close"].dropna()
-                if len(closes) > 0:
-                    price = float(closes.iloc[-1])
-                    prev = float(closes.iloc[-2]) if len(closes) >= 2 else 0
+
+    # Source 1: Yahoo chart API (direct HTTP — more reliable than yfinance library)
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_sym}?range=5d&interval=1d"
+        headers = {"User-Agent": _GOOGLE_HEADERS["User-Agent"]}
+        resp = _requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            chart = data.get("chart", {}).get("result", [])
+            if chart:
+                meta_data = chart[0].get("meta", {})
+                price = meta_data.get("regularMarketPrice", 0)
+                prev = meta_data.get("previousClose", 0) or meta_data.get("chartPreviousClose", 0)
+                if price and price > 0:
                     change = price - prev if prev > 0 else 0
                     pct = (change / prev * 100) if prev > 0 else 0
                     return {
@@ -703,11 +708,8 @@ def fetch_market_ticker(meta: dict) -> dict:
                         "change": round(change, 2),
                         "change_pct": round(pct, 2),
                     }
-        except Exception as e:
-            if attempt == MAX_RETRIES - 1:
-                print(f"[MarketTicker] Yahoo failed for {meta['key']}: {e}")
-        if attempt < MAX_RETRIES - 1:
-            time.sleep((attempt + 1) * 1.5 + random.uniform(0, 0.5))
+    except Exception as e:
+        print(f"[MarketTicker] Yahoo chart API failed for {meta['key']}: {e}")
 
     # Source 2: Google Finance scraping
     gf_sym = _GF_TICKER_MAP.get(meta["key"])
@@ -727,6 +729,69 @@ def fetch_market_ticker(meta: dict) -> dict:
             }
 
     return placeholder
+
+
+def fetch_yahoo_ticker_historical(meta: dict) -> dict:
+    """Fetch 7D/1M changes for a non-Kite ticker using Yahoo Finance chart API (direct HTTP).
+    Returns {week_change_pct, month_change_pct}."""
+    from urllib.parse import unquote
+    from datetime import datetime, timedelta
+    result = {"week_change_pct": 0.0, "month_change_pct": 0.0}
+
+    yf_sym = unquote(meta["yahoo"])
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_sym}?range=3mo&interval=1d"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    }
+    try:
+        resp = _requests.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            print(f"[MarketTicker] Yahoo chart API {resp.status_code} for {meta['key']}")
+            return result
+
+        data = resp.json()
+        chart = data.get("chart", {}).get("result", [])
+        if not chart:
+            return result
+
+        timestamps = chart[0].get("timestamp", [])
+        closes = chart[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        if not timestamps or not closes or len(timestamps) != len(closes):
+            return result
+
+        # Build (date, close) pairs
+        today = datetime.now().date()
+        target_7d = today - timedelta(days=7)
+        target_30d = today - timedelta(days=30)
+
+        latest_price = 0.0
+        price_7d = 0.0
+        price_30d = 0.0
+
+        for ts, close_val in zip(timestamps, closes):
+            if close_val is None:
+                continue
+            d = datetime.utcfromtimestamp(ts).date()
+            val = float(close_val)
+            if val <= 0:
+                continue
+            latest_price = val  # last valid close
+            if d <= target_7d:
+                price_7d = val
+            if d <= target_30d:
+                price_30d = val
+
+        if latest_price <= 0:
+            return result
+        if price_7d > 0:
+            result["week_change_pct"] = round((latest_price - price_7d) / price_7d * 100, 2)
+        if price_30d > 0:
+            result["month_change_pct"] = round((latest_price - price_30d) / price_30d * 100, 2)
+
+    except Exception as e:
+        print(f"[MarketTicker] Yahoo chart API failed for {meta['key']}: {e}")
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════

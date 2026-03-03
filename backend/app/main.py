@@ -1443,47 +1443,22 @@ def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
                 t["week_change_pct"] = ch["week_change_pct"]
                 t["month_change_pct"] = ch["month_change_pct"]
 
-    # Non-Kite tickers: compute from local ticker history
+    # Non-Kite tickers: use Yahoo Finance historical data
     if non_kite_keys:
-        try:
-            with open(_TICKER_HISTORY_FILE) as f:
-                history = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            history = {}
-
-        if history:
-            sorted_dates = sorted(history.keys(), reverse=True)
-            today = datetime.now().strftime("%Y-%m-%d")
-            target_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-            target_30d = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-
-            for t in tickers:
-                if t["key"] not in non_kite_keys:
-                    continue
-                current_price = t.get("price", 0)
-                if current_price <= 0:
-                    continue
-
-                # Find closest date on or before target
-                price_7d = 0.0
-                price_30d = 0.0
-                for d_str in sorted_dates:
-                    if d_str >= today:
-                        continue
-                    price_val = history[d_str].get(t["key"], 0)
-                    if price_val <= 0:
-                        continue
-                    if d_str <= target_7d and price_7d == 0:
-                        price_7d = price_val
-                    if d_str <= target_30d and price_30d == 0:
-                        price_30d = price_val
-                    if price_7d > 0 and price_30d > 0:
-                        break
-
-                if price_7d > 0:
-                    t["week_change_pct"] = round((current_price - price_7d) / price_7d * 100, 2)
-                if price_30d > 0:
-                    t["month_change_pct"] = round((current_price - price_30d) / price_30d * 100, 2)
+        meta_map = {m["key"]: m for m in MARKET_TICKER_SYMBOLS}
+        for t in tickers:
+            if t["key"] not in non_kite_keys:
+                continue
+            meta = meta_map.get(t["key"])
+            if not meta or not meta.get("yahoo"):
+                continue
+            try:
+                ch = stock_service.fetch_yahoo_ticker_historical(meta)
+                if ch:
+                    t["week_change_pct"] = ch["week_change_pct"]
+                    t["month_change_pct"] = ch["month_change_pct"]
+            except Exception as e:
+                print(f"[MarketTicker] Yahoo historical error for {t['key']}: {e}")
 
     return tickers
 
