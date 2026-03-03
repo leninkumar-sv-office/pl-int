@@ -6,13 +6,15 @@ const formatINR = (num) => {
 };
 
 const fmtAmt = (v) => {
-  if (!v || Math.abs(v) < 1) return '';
+  if (!v || Math.abs(v) < 0.01) return '';
   const abs = Math.abs(v);
   const sign = v >= 0 ? '+' : '-';
   if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(1)}Cr`;
   if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
   if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
-  return `${sign}₹${Math.round(abs)}`;
+  if (abs >= 100) return `${sign}₹${Math.round(abs)}`;
+  if (abs >= 10) return `${sign}₹${abs.toFixed(1)}`;
+  return `${sign}₹${abs.toFixed(2)}`;
 };
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1296,17 +1298,17 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           }}>
                             {formatINR(currentPrice)}
                           </div>
-                          {live.day_change_pct !== 0 && (() => {
-                            const amt = hasHeld ? fmtAmt((live.day_change || 0) * stock.total_held_qty) : '';
+                          {(() => {
+                            const pct = live.day_change_pct || 0;
+                            const amt = fmtAmt(live.day_change || 0) || '+₹0';
                             return (
-                              <div style={{ fontSize: '10px', color: live.day_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                1D: {live.day_change_pct >= 0 ? '+' : ''}{live.day_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              <div style={{ fontSize: '10px', color: pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                1D: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%, {amt}
                               </div>
                             );
                           })()}
                           {live.week_change_pct !== 0 && (() => {
-                            const cv = currentPrice * stock.total_held_qty;
-                            const amt = hasHeld ? fmtAmt(cv * live.week_change_pct / (100 + live.week_change_pct)) : '';
+                            const amt = fmtAmt(currentPrice * live.week_change_pct / (100 + live.week_change_pct));
                             return (
                               <div style={{ fontSize: '10px', color: live.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
                                 7D: {live.week_change_pct >= 0 ? '+' : ''}{live.week_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
@@ -1314,8 +1316,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             );
                           })()}
                           {live.month_change_pct !== 0 && (() => {
-                            const cv = currentPrice * stock.total_held_qty;
-                            const amt = hasHeld ? fmtAmt(cv * live.month_change_pct / (100 + live.month_change_pct)) : '';
+                            const amt = fmtAmt(currentPrice * live.month_change_pct / (100 + live.month_change_pct));
                             return (
                               <div style={{ fontSize: '10px', color: live.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
                                 1M: {live.month_change_pct >= 0 ? '+' : ''}{live.month_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
@@ -1343,11 +1344,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             }}>
                               {formatINR(live.week_52_low)}
                             </div>
-                            {currentPrice > 0 && (
-                              <div style={{ fontSize: '11px', color: nearLow ? 'var(--red)' : 'var(--text)', fontWeight: nearLow ? 600 : 400 }}>
-                                +{pctFromLow.toFixed(1)}% away
-                              </div>
-                            )}
+                            {currentPrice > 0 && (() => {
+                              const delta = currentPrice - live.week_52_low;
+                              const amt = fmtAmt(delta) || '+₹0';
+                              return (
+                                <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {delta >= 0 ? '+' : ''}{pctFromLow.toFixed(2)}%, {amt}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })() : (
@@ -1368,11 +1373,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             }}>
                               {formatINR(live.week_52_high)}
                             </div>
-                            {currentPrice > 0 && (
-                              <div style={{ fontSize: '11px', color: nearHigh ? 'var(--green)' : 'var(--text)', fontWeight: nearHigh ? 600 : 400 }}>
-                                -{pctFromHigh.toFixed(1)}% away
-                              </div>
-                            )}
+                            {currentPrice > 0 && (() => {
+                              const delta = currentPrice - live.week_52_high;
+                              const amt = fmtAmt(delta) || '-₹0';
+                              return (
+                                <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {delta >= 0 ? '+' : ''}{(-pctFromHigh).toFixed(2)}%, {amt}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })() : (

@@ -88,8 +88,9 @@ export default function MarketTicker({ tickers, loading }) {
                 </span>
               )}
             </div>
-            {(w !== 0 || m !== 0) && (
+            {(d !== 0 || w !== 0 || m !== 0) && (
               <div style={{ display: 'flex', gap: 8 }}>
+                <ChangeLine label="1D" pct={d} amt={dAmt} />
                 <ChangeLine label="7D" pct={w} amt={wAmt} />
                 <ChangeLine label="1M" pct={m} amt={mAmt} />
               </div>
