@@ -1353,31 +1353,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                                 </div>
                               );
                             })()}
-                            {(() => {
-                              const pct = live.day_change_pct || 0;
-                              const amt = fmtAmt(live.day_change || 0) || '+₹0';
-                              return (
-                                <div style={{ fontSize: '10px', color: pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  1D: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%, {amt}
-                                </div>
-                              );
-                            })()}
-                            {live.week_change_pct !== 0 && (() => {
-                              const amt = fmtAmt(currentPrice * live.week_change_pct / (100 + live.week_change_pct));
-                              return (
-                                <div style={{ fontSize: '10px', color: live.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  7D: {live.week_change_pct >= 0 ? '+' : ''}{live.week_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
-                                </div>
-                              );
-                            })()}
-                            {live.month_change_pct !== 0 && (() => {
-                              const amt = fmtAmt(currentPrice * live.month_change_pct / (100 + live.month_change_pct));
-                              return (
-                                <div style={{ fontSize: '10px', color: live.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  1M: {live.month_change_pct >= 0 ? '+' : ''}{live.month_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
-                                </div>
-                              );
-                            })()}
                           </div>
                         );
                       })() : (
@@ -1404,31 +1379,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                               return (
                                 <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
                                   {delta >= 0 ? '+' : ''}{(-pctFromHigh).toFixed(2)}%, {amt}
-                                </div>
-                              );
-                            })()}
-                            {(() => {
-                              const pct = live.day_change_pct || 0;
-                              const amt = fmtAmt(live.day_change || 0) || '+₹0';
-                              return (
-                                <div style={{ fontSize: '10px', color: pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  1D: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%, {amt}
-                                </div>
-                              );
-                            })()}
-                            {live.week_change_pct !== 0 && (() => {
-                              const amt = fmtAmt(currentPrice * live.week_change_pct / (100 + live.week_change_pct));
-                              return (
-                                <div style={{ fontSize: '10px', color: live.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  7D: {live.week_change_pct >= 0 ? '+' : ''}{live.week_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
-                                </div>
-                              );
-                            })()}
-                            {live.month_change_pct !== 0 && (() => {
-                              const amt = fmtAmt(currentPrice * live.month_change_pct / (100 + live.month_change_pct));
-                              return (
-                                <div style={{ fontSize: '10px', color: live.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  1M: {live.month_change_pct >= 0 ? '+' : ''}{live.month_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
                                 </div>
                               );
                             })()}
