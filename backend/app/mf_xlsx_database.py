@@ -259,7 +259,7 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
 def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
     """Compute 1D, 7D and 30D NAV change % using mfapi.in historical data.
     Returns {day_change_pct, week_change_pct, month_change_pct}."""
-    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0}
+    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0}
     if current_nav <= 0:
         return result
 
@@ -273,6 +273,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
                 "day_change_pct": cached.get("day_change_pct", 0.0),
                 "week_change_pct": cached["week_change_pct"],
                 "month_change_pct": cached["month_change_pct"],
+                "week_52_high": cached.get("week_52_high", 0.0),
+                "week_52_low": cached.get("week_52_low", 0.0),
             }
 
     # Look up AMFI scheme code (cached on disk)
@@ -346,6 +348,13 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
     if nav_30d > 0:
         result["month_change_pct"] = round((current_nav - nav_30d) / nav_30d * 100, 2)
 
+    # 52-week high/low from last 365 days of NAV data
+    target_52w = today - timedelta(days=365)
+    navs_52w = [nav for d, nav in dated_navs if d >= target_52w and nav > 0]
+    if navs_52w:
+        result["week_52_high"] = round(max(navs_52w), 4)
+        result["week_52_low"] = round(min(navs_52w), 4)
+
     # Cache result
     with _nav_change_cache_lock:
         _nav_change_cache[fund_code] = {
@@ -353,6 +362,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             "day_change_pct": result["day_change_pct"],
             "week_change_pct": result["week_change_pct"],
             "month_change_pct": result["month_change_pct"],
+            "week_52_high": result["week_52_high"],
+            "week_52_low": result["week_52_low"],
             "fetched_at": now,
         }
 
@@ -857,8 +868,8 @@ class MFXlsxPortfolio:
                 "stcg_realized_pl": round(stcg_rpl, 2),
                 "num_held_lots": len(holdings),
                 "num_sold_lots": len(sold),
-                "week_52_high": w52_high,
-                "week_52_low": w52_low,
+                "week_52_high": nav_changes.get("week_52_high", 0.0) or w52_high,
+                "week_52_low": nav_changes.get("week_52_low", 0.0) or w52_low,
                 "day_change": nav_changes["day_change"],
                 "day_change_pct": nav_changes["day_change_pct"],
                 "week_change_pct": nav_changes["week_change_pct"],
