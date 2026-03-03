@@ -1018,7 +1018,9 @@ export default function App() {
 
       {/* Header */}
       <header className="header">
-        <h1><span>Portfolio</span> Dashboard</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+          <Dashboard summary={summary} mfDashboard={mfDashboard} fdDashboard={fdDashboard} rdDashboard={rdDashboard} ppfDashboard={ppfDashboard} npsDashboard={npsDashboard} loading={loading} />
+        </div>
         <div className="header-actions">
           {/* Zerodha status */}
           {zerodhaStatus && (
@@ -1095,9 +1097,6 @@ export default function App() {
           )}
         </div>
       </header>
-
-      {/* Dashboard Summary — all asset classes */}
-      <Dashboard summary={summary} mfDashboard={mfDashboard} fdDashboard={fdDashboard} rdDashboard={rdDashboard} ppfDashboard={ppfDashboard} npsDashboard={npsDashboard} loading={loading} />
 
       {/* Market Ticker */}
       <MarketTicker tickers={marketTicker} loading={loading} />

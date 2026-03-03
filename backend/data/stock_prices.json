@@ -25,7 +25,7 @@
   },
   "LICI.BSE": {
     "price": 842.1,
-    "name": "Life Insurance Corporation Of India",
+    "name": "LICI",
     "week_52_high": 980.05,
     "week_52_low": 723.8,
     "day_change": 0.0,
@@ -145,7 +145,7 @@
   },
   "PIIND.BSE": {
     "price": 3098.35,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4329,
     "week_52_low": 2970.65,
     "day_change": 0.0,
@@ -217,7 +217,7 @@
   },
   "LT.BSE": {
     "price": 4066.45,
-    "name": "Larsen and Toubro Ltd",
+    "name": "LT",
     "week_52_high": 4440,
     "week_52_low": 2967.65,
     "day_change": 0.0,
@@ -361,7 +361,7 @@
   },
   "RALLIS.BSE": {
     "price": 262.45,
-    "name": "Rallis India Ltd",
+    "name": "RALLIS",
     "week_52_high": 385.6,
     "week_52_low": 197,
     "day_change": 0.0,
@@ -385,7 +385,7 @@
   },
   "OIL.NSE": {
     "price": 488.05,
-    "name": "Oil India Ltd",
+    "name": "OIL",
     "week_52_high": 524,
     "week_52_low": 325,
     "day_change": 0.0,
@@ -397,7 +397,7 @@
   },
   "LICI.NSE": {
     "price": 841.95,
-    "name": "Life Insurance Corporation Of India",
+    "name": "LICI",
     "week_52_high": 980,
     "week_52_low": 723.2,
     "day_change": 0.0,
@@ -529,7 +529,7 @@
   },
   "RAILTEL.BSE": {
     "price": 293.7,
-    "name": "Railtel Corporation of India Ltd",
+    "name": "RAILTEL",
     "week_52_high": 478.8,
     "week_52_low": 265.6,
     "day_change": 0.0,
@@ -553,7 +553,7 @@
   },
   "NATIONALUM.BSE": {
     "price": 362.8,
-    "name": "National Aluminium Company Limited",
+    "name": "NATIONALUM",
     "week_52_high": 431.6,
     "week_52_low": 140,
     "day_change": 0.0,
@@ -577,7 +577,7 @@
   },
   "PIIND.NSE": {
     "price": 3099.4,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4330,
     "week_52_low": 2964.95,
     "day_change": 0.0,
@@ -601,7 +601,7 @@
   },
   "LT.NSE": {
     "price": 4066.7,
-    "name": "Larsen and Toubro Ltd",
+    "name": "LT",
     "week_52_high": 4440,
     "week_52_low": 2965.3,
     "day_change": 0.0,
@@ -649,7 +649,7 @@
   },
   "RVNL.BSE": {
     "price": 299.6,
-    "name": "Rail Vikas Nigam",
+    "name": "RVNL",
     "week_52_high": 448,
     "week_52_low": 287.15,
     "day_change": 0.0,
@@ -781,7 +781,7 @@
   },
   "RALLIS.NSE": {
     "price": 262.55,
-    "name": "Rallis India Ltd",
+    "name": "RALLIS",
     "week_52_high": 385.9,
     "week_52_low": 196.78,
     "day_change": 0.0,
@@ -841,7 +841,7 @@
   },
   "RAILTEL.NSE": {
     "price": 293.55,
-    "name": "Railtel Corporation of India Ltd",
+    "name": "RAILTEL",
     "week_52_high": 478.95,
     "week_52_low": 266,
     "day_change": 0.0,
@@ -853,7 +853,7 @@
   },
   "NATIONALUM.NSE": {
     "price": 362.85,
-    "name": "National Aluminium Company Limited",
+    "name": "NATIONALUM",
     "week_52_high": 431.5,
     "week_52_low": 137.75,
     "day_change": 0.0,
@@ -1033,7 +1033,7 @@
   },
   "RVNL.NSE": {
     "price": 299.45,
-    "name": "Rail Vikas Nigam",
+    "name": "RVNL",
     "week_52_high": 447.8,
     "week_52_low": 295.2,
     "day_change": 0.0,

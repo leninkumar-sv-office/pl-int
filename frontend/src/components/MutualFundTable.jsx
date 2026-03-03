@@ -101,6 +101,8 @@ const COL_DEFS = [
   { id: 'units',        label: 'Units' },
   { id: 'avgNav',       label: 'Avg NAV' },
   { id: 'currentNav',   label: 'Current NAV' },
+  { id: 'w52Low',       label: '52W Low' },
+  { id: 'w52High',      label: '52W High' },
   { id: 'currentValue', label: 'Current Value' },
   { id: 'invested',     label: 'Invested' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
@@ -736,6 +738,8 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'avgNav':       va = a.avg_nav; vb = b.avg_nav; break;
       case 'invested':     va = a.total_invested; vb = b.total_invested; break;
       case 'currentNav':   va = a.current_nav; vb = b.current_nav; break;
+      case 'w52Low':       va = a.week_52_low || 0; vb = b.week_52_low || 0; break;
+      case 'w52High':      va = a.week_52_high || 0; vb = b.week_52_high || 0; break;
       case 'currentValue': va = a.current_value; vb = b.current_value; break;
       case 'unrealizedPL': va = a.unrealized_pl; vb = b.unrealized_pl; break;
       case 'realizedPL':   va = a.realized_pl; vb = b.realized_pl; break;
@@ -1044,6 +1048,12 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               {col('currentNav') && <th onClick={() => handleSort('currentNav')} style={{ cursor: 'pointer' }}>
                 Current NAV<SortIcon field="currentNav" />
               </th>}
+              {col('w52Low') && <th onClick={() => handleSort('w52Low')} style={{ cursor: 'pointer' }}>
+                52W Low<SortIcon field="w52Low" />
+              </th>}
+              {col('w52High') && <th onClick={() => handleSort('w52High')} style={{ cursor: 'pointer' }}>
+                52W High<SortIcon field="w52High" />
+              </th>}
               {col('currentValue') && <th onClick={() => handleSort('currentValue')} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="currentValue" />
               </th>}
@@ -1171,6 +1181,64 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>--</span>
+                      )}
+                    </td>}
+                    {col('w52Low') && <td>
+                      {f.week_52_low > 0 ? (() => {
+                        const currentNav = f.current_nav || 0;
+                        const nearLow = currentNav > 0 && currentNav <= f.week_52_low * 1.05;
+                        const pctFromLow = currentNav > 0 && f.week_52_low > 0
+                          ? ((currentNav - f.week_52_low) / f.week_52_low * 100) : 0;
+                        return (
+                          <div>
+                            <div style={{
+                              fontWeight: nearLow ? 600 : 400,
+                              color: nearLow ? 'var(--red)' : 'var(--text)',
+                            }}>
+                              {formatINR(f.week_52_low)}
+                            </div>
+                            {currentNav > 0 && (() => {
+                              const delta = currentNav - f.week_52_low;
+                              const amt = fmtAmt(delta) || '+₹0';
+                              return (
+                                <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {delta >= 0 ? '+' : ''}{pctFromLow.toFixed(2)}%, {amt}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-muted)' }}>--</span>
+                      )}
+                    </td>}
+                    {col('w52High') && <td>
+                      {f.week_52_high > 0 ? (() => {
+                        const currentNav = f.current_nav || 0;
+                        const nearHigh = currentNav > 0 && currentNav >= f.week_52_high * 0.95;
+                        const pctFromHigh = currentNav > 0 && f.week_52_high > 0
+                          ? ((f.week_52_high - currentNav) / f.week_52_high * 100) : 0;
+                        return (
+                          <div>
+                            <div style={{
+                              fontWeight: nearHigh ? 600 : 400,
+                              color: nearHigh ? 'var(--green)' : 'var(--text)',
+                            }}>
+                              {formatINR(f.week_52_high)}
+                            </div>
+                            {currentNav > 0 && (() => {
+                              const delta = currentNav - f.week_52_high;
+                              const amt = fmtAmt(delta) || '-₹0';
+                              return (
+                                <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {delta >= 0 ? '+' : ''}{(-pctFromHigh).toFixed(2)}%, {amt}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>}
                     {col('currentValue') && <td>
