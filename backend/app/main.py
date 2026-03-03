@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from typing import List, Dict, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 import json
 import uuid
@@ -1419,26 +1419,71 @@ def _record_ticker_history(tickers: List[dict]):
 
 
 def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
-    """Add week_change_pct and month_change_pct using Zerodha Historical Data API.
-    Requires instrument_token in ticker data (set during Zerodha quote fetch)."""
+    """Add week_change_pct and month_change_pct.
+    Kite tickers: use Zerodha Historical Data API.
+    Non-Kite tickers: use local ticker history file."""
     # Build {key: {instrument_token, ...}} from tickers that have tokens
     ticker_data = {}
+    non_kite_keys = set()
     for t in tickers:
         t.setdefault("week_change_pct", 0.0)
         t.setdefault("month_change_pct", 0.0)
         token = t.get("instrument_token")
         if token and t.get("price", 0) > 0:
             ticker_data[t["key"]] = {"instrument_token": token}
+        elif t.get("price", 0) > 0:
+            non_kite_keys.add(t["key"])
 
-    if not ticker_data:
-        return tickers
+    # Kite tickers: Zerodha Historical API
+    if ticker_data:
+        changes = zerodha_service.fetch_ticker_historical_changes(ticker_data)
+        for t in tickers:
+            ch = changes.get(t["key"])
+            if ch:
+                t["week_change_pct"] = ch["week_change_pct"]
+                t["month_change_pct"] = ch["month_change_pct"]
 
-    changes = zerodha_service.fetch_ticker_historical_changes(ticker_data)
-    for t in tickers:
-        ch = changes.get(t["key"])
-        if ch:
-            t["week_change_pct"] = ch["week_change_pct"]
-            t["month_change_pct"] = ch["month_change_pct"]
+    # Non-Kite tickers: compute from local ticker history
+    if non_kite_keys:
+        try:
+            with open(_TICKER_HISTORY_FILE) as f:
+                history = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            history = {}
+
+        if history:
+            sorted_dates = sorted(history.keys(), reverse=True)
+            today = datetime.now().strftime("%Y-%m-%d")
+            target_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            target_30d = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+
+            for t in tickers:
+                if t["key"] not in non_kite_keys:
+                    continue
+                current_price = t.get("price", 0)
+                if current_price <= 0:
+                    continue
+
+                # Find closest date on or before target
+                price_7d = 0.0
+                price_30d = 0.0
+                for d_str in sorted_dates:
+                    if d_str >= today:
+                        continue
+                    price_val = history[d_str].get(t["key"], 0)
+                    if price_val <= 0:
+                        continue
+                    if d_str <= target_7d and price_7d == 0:
+                        price_7d = price_val
+                    if d_str <= target_30d and price_30d == 0:
+                        price_30d = price_val
+                    if price_7d > 0 and price_30d > 0:
+                        break
+
+                if price_7d > 0:
+                    t["week_change_pct"] = round((current_price - price_7d) / price_7d * 100, 2)
+                if price_30d > 0:
+                    t["month_change_pct"] = round((current_price - price_30d) / price_30d * 100, 2)
 
     return tickers
 
@@ -1499,8 +1544,8 @@ def _refresh_tickers_once():
             results.append(result)
             continue
 
-        # SOURCE 2: Yahoo/Google — ONLY if explicitly enabled
-        if stock_service.ENABLE_YAHOO_GOOGLE:
+        # SOURCE 2: Yahoo/Google — always for non-Kite tickers, else only if explicitly enabled
+        if not meta.get("kite", True) or stock_service.ENABLE_YAHOO_GOOGLE:
             import random as _rnd
             yg_result = stock_service.fetch_market_ticker(meta)
             if yg_result.get("price", 0) > 0:
