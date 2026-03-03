@@ -12,11 +12,23 @@ const formatPrice = (price, type) => {
   return price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const ChangeLine = ({ label, pct }) => {
+const fmtTickerAmt = (v, type) => {
+  if (!v || Math.abs(v) < 0.01) return '';
+  const abs = Math.abs(v);
+  const sign = v >= 0 ? '+' : '-';
+  const prefix = type === 'index' ? '' : '₹';
+  if (abs >= 10000000) return `${sign}${prefix}${(abs / 10000000).toFixed(1)}Cr`;
+  if (abs >= 100000) return `${sign}${prefix}${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${sign}${prefix}${(abs / 1000).toFixed(1)}K`;
+  if (abs >= 1) return `${sign}${prefix}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
+  return `${sign}${prefix}${abs.toFixed(2)}`;
+};
+
+const ChangeLine = ({ label, pct, amt }) => {
   if (!pct || pct === 0) return null;
   return (
     <span style={{ fontSize: '10px', color: pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-      {label}: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+      {label}: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
     </span>
   );
 };
@@ -47,6 +59,9 @@ export default function MarketTicker({ tickers, loading }) {
     const d = t.change_pct || 0;
     const w = t.week_change_pct || 0;
     const m = t.month_change_pct || 0;
+    const dAmt = t.change ? fmtTickerAmt(t.change, t.type) : '';
+    const wAmt = w ? fmtTickerAmt(t.price * w / (100 + w), t.type) : '';
+    const mAmt = m ? fmtTickerAmt(t.price * m / (100 + m), t.type) : '';
     const priceColor = d >= 0 ? 'var(--green)' : 'var(--red)';
     return (
       <div key={t.key} style={{
@@ -69,14 +84,14 @@ export default function MarketTicker({ tickers, loading }) {
                   padding: '1px 5px',
                   borderRadius: '3px',
                 }}>
-                  {d >= 0 ? '▲' : '▼'} {Math.abs(d).toFixed(2)}%
+                  {d >= 0 ? '▲' : '▼'} {Math.abs(d).toFixed(2)}%{dAmt ? `, ${dAmt}` : ''}
                 </span>
               )}
             </div>
             {(w !== 0 || m !== 0) && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <ChangeLine label="7D" pct={w} />
-                <ChangeLine label="1M" pct={m} />
+                <ChangeLine label="7D" pct={w} amt={wAmt} />
+                <ChangeLine label="1M" pct={m} amt={mAmt} />
               </div>
             )}
           </div>

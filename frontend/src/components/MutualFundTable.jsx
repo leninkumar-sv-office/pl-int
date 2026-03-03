@@ -5,6 +5,16 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const fmtAmt = (v) => {
+  if (!v || Math.abs(v) < 1) return '';
+  const abs = Math.abs(v);
+  const sign = v >= 0 ? '+' : '-';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(1)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
+  return `${sign}₹${Math.round(abs)}`;
+};
+
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const formatDate = (dateStr) => {
   if (!dateStr) return '--';
@@ -1131,21 +1141,32 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                           }}>
                             {formatINR(f.current_nav)}
                           </div>
-                          {(f.day_change_pct || 0) !== 0 && (
-                            <div style={{ fontSize: '10px', color: f.day_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              1D: {f.day_change_pct >= 0 ? '+' : ''}{f.day_change_pct.toFixed(2)}%
-                            </div>
-                          )}
-                          {f.week_change_pct !== 0 && (
-                            <div style={{ fontSize: '10px', color: f.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              7D: {f.week_change_pct >= 0 ? '+' : ''}{f.week_change_pct.toFixed(2)}%
-                            </div>
-                          )}
-                          {f.month_change_pct !== 0 && (
-                            <div style={{ fontSize: '10px', color: f.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              1M: {f.month_change_pct >= 0 ? '+' : ''}{f.month_change_pct.toFixed(2)}%
-                            </div>
-                          )}
+                          {(f.day_change_pct || 0) !== 0 && (() => {
+                            const amt = hasHeld ? fmtAmt((f.day_change || 0) * f.total_held_units) : '';
+                            return (
+                              <div style={{ fontSize: '10px', color: f.day_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                1D: {f.day_change_pct >= 0 ? '+' : ''}{f.day_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              </div>
+                            );
+                          })()}
+                          {f.week_change_pct !== 0 && (() => {
+                            const cv = f.current_nav * f.total_held_units;
+                            const amt = hasHeld ? fmtAmt(cv * f.week_change_pct / (100 + f.week_change_pct)) : '';
+                            return (
+                              <div style={{ fontSize: '10px', color: f.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                7D: {f.week_change_pct >= 0 ? '+' : ''}{f.week_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              </div>
+                            );
+                          })()}
+                          {f.month_change_pct !== 0 && (() => {
+                            const cv = f.current_nav * f.total_held_units;
+                            const amt = hasHeld ? fmtAmt(cv * f.month_change_pct / (100 + f.month_change_pct)) : '';
+                            return (
+                              <div style={{ fontSize: '10px', color: f.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                1M: {f.month_change_pct >= 0 ? '+' : ''}{f.month_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>--</span>

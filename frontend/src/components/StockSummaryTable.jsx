@@ -5,6 +5,16 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const fmtAmt = (v) => {
+  if (!v || Math.abs(v) < 1) return '';
+  const abs = Math.abs(v);
+  const sign = v >= 0 ? '+' : '-';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(1)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
+  return `${sign}₹${Math.round(abs)}`;
+};
+
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const formatDate = (dateStr) => {
   if (!dateStr) return '--';
@@ -1286,21 +1296,32 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                           }}>
                             {formatINR(currentPrice)}
                           </div>
-                          {live.day_change_pct !== 0 && (
-                            <div style={{ fontSize: '10px', color: live.day_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              1D: {live.day_change_pct >= 0 ? '+' : ''}{live.day_change_pct.toFixed(2)}%
-                            </div>
-                          )}
-                          {live.week_change_pct !== 0 && (
-                            <div style={{ fontSize: '10px', color: live.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              7D: {live.week_change_pct >= 0 ? '+' : ''}{live.week_change_pct.toFixed(2)}%
-                            </div>
-                          )}
-                          {live.month_change_pct !== 0 && (
-                            <div style={{ fontSize: '10px', color: live.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              1M: {live.month_change_pct >= 0 ? '+' : ''}{live.month_change_pct.toFixed(2)}%
-                            </div>
-                          )}
+                          {live.day_change_pct !== 0 && (() => {
+                            const amt = hasHeld ? fmtAmt((live.day_change || 0) * stock.total_held_qty) : '';
+                            return (
+                              <div style={{ fontSize: '10px', color: live.day_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                1D: {live.day_change_pct >= 0 ? '+' : ''}{live.day_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              </div>
+                            );
+                          })()}
+                          {live.week_change_pct !== 0 && (() => {
+                            const cv = currentPrice * stock.total_held_qty;
+                            const amt = hasHeld ? fmtAmt(cv * live.week_change_pct / (100 + live.week_change_pct)) : '';
+                            return (
+                              <div style={{ fontSize: '10px', color: live.week_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                7D: {live.week_change_pct >= 0 ? '+' : ''}{live.week_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              </div>
+                            );
+                          })()}
+                          {live.month_change_pct !== 0 && (() => {
+                            const cv = currentPrice * stock.total_held_qty;
+                            const amt = hasHeld ? fmtAmt(cv * live.month_change_pct / (100 + live.month_change_pct)) : '';
+                            return (
+                              <div style={{ fontSize: '10px', color: live.month_change_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                1M: {live.month_change_pct >= 0 ? '+' : ''}{live.month_change_pct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <span style={{ color: stock.price_error ? 'var(--red)' : 'var(--text-muted)', fontSize: '12px' }}>
