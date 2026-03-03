@@ -89,7 +89,9 @@ export default function MarketTicker({ tickers, loading }) {
               )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              <ChangeLine label="1D" pct={d} amt={dAmt} />
+              <span style={{ fontSize: '10px', color: d >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                1D: {d >= 0 ? '+' : ''}{d.toFixed(2)}%, {dAmt || '+0'}
+              </span>
               <ChangeLine label="7D" pct={w} amt={wAmt} />
               <ChangeLine label="1M" pct={m} amt={mAmt} />
             </div>
