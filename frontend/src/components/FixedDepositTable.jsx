@@ -359,6 +359,10 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
+    try { return localStorage.getItem('fdSummaryCollapsed') !== 'false'; } catch { return true; }
+  });
+  const toggleSummary = () => setSummaryCollapsed(prev => { const next = !prev; localStorage.setItem('fdSummaryCollapsed', String(next)); return next; });
 
   const col = (id) => visibleCols.has(id);
 
@@ -430,7 +434,10 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   return (
     <div className="section">
       <div className="section-header">
-        <div className="section-title">Fixed Deposits & MIS</div>
+        <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
+          Fixed Deposits & MIS
+        </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="section-badge">{activeCount} active</span>
           <span className="section-badge" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
@@ -440,7 +447,7 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
       </div>
 
       {/* Summary Bar */}
-      {fdDashboard && (
+      {!summaryCollapsed && fdDashboard && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
           <div style={{ flex: '1 1 120px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Invested</div>

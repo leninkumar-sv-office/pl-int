@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -29,6 +29,7 @@ import AddNPSModal from './components/AddNPSModal';
 import StandingInstructionTable from './components/StandingInstructionTable';
 import AddSIModal from './components/AddSIModal';
 import MFImportPreviewModal from './components/MFImportPreviewModal';
+import DividendImportPreviewModal from './components/DividendImportPreviewModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -55,6 +56,7 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState('');
   const [importPreview, setImportPreview] = useState(null); // parsed contract note preview
   const [importResult, setImportResult] = useState(null);   // persistent banner after import
+  const [dividendImportPreview, setDividendImportPreview] = useState(null); // parsed dividend statement preview
   const [mfSummary, setMfSummary] = useState([]);           // mutual fund per-fund summaries
   const [mfDashboard, setMfDashboard] = useState(null);     // mutual fund dashboard totals
   const [addMFModalData, setAddMFModalData] = useState(null); // null=closed, {}=open, {fund_code,...}=prefill
@@ -440,6 +442,103 @@ export default function App() {
     } catch (err) {
       toast.dismiss('import-progress');
       const msg = err.response?.data?.detail || 'Failed to import contract note';
+      toast.error(msg, { duration: 5000 });
+    }
+  };
+
+  // ── Bank Statement Dividend Import ─────────────────────
+  const handleParseDividendStatement = async (filesOrFile) => {
+    const files = Array.isArray(filesOrFile) ? filesOrFile : [filesOrFile];
+    try {
+      const allDividends = [];
+      const errors = [];
+      let statementPeriod = '';
+      let totalAmount = 0;
+      let matchedCount = 0;
+      let unmatchedCount = 0;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          if (files.length > 1) {
+            toast.loading(`Parsing PDF ${i + 1}/${files.length}: ${file.name}`, { id: 'div-parse-progress' });
+          }
+          const parsed = await parseDividendStatement(file);
+          if (parsed.dividends.length > 0) {
+            parsed.dividends.forEach(d => { d._sourceFile = file.name; });
+            allDividends.push(...parsed.dividends);
+            if (parsed.statement_period) statementPeriod = parsed.statement_period;
+            totalAmount += parsed.summary.total_amount;
+            matchedCount += parsed.summary.matched;
+            unmatchedCount += parsed.summary.unmatched;
+          } else {
+            errors.push(`${file.name}: No dividend entries found`);
+          }
+        } catch (err) {
+          const msg = err.response?.data?.detail || 'Parse failed';
+          errors.push(`${file.name}: ${msg}`);
+        }
+      }
+
+      toast.dismiss('div-parse-progress');
+
+      if (errors.length > 0) {
+        toast.error(errors.join('\n'), { duration: 8000 });
+      }
+
+      if (allDividends.length === 0) {
+        if (errors.length === 0) {
+          toast.error('No dividend entries found in any PDF.', { duration: 8000 });
+        }
+        return;
+      }
+
+      setDividendImportPreview({
+        statement_period: statementPeriod,
+        source: 'SBI Bank Statement',
+        dividends: allDividends,
+        summary: {
+          count: allDividends.length,
+          total_amount: totalAmount,
+          matched: matchedCount,
+          unmatched: unmatchedCount,
+        },
+        _multiPdf: files.length > 1,
+        _fileCount: files.length,
+      });
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Failed to parse bank statement';
+      toast.error(msg, { duration: 5000 });
+      throw err;
+    }
+  };
+
+  const handleConfirmDividendImport = async (importableDividends, symbolOverrides = {}) => {
+    if (!dividendImportPreview) return;
+    try {
+      const result = await confirmDividendImport({
+        dividends: importableDividends,
+        symbol_overrides: symbolOverrides,
+      });
+
+      if (result.imported > 0) {
+        toast.success(result.message, { duration: 5000 });
+      } else if (result.skipped_duplicates > 0) {
+        toast(`All ${result.skipped_duplicates} dividend(s) already exist — nothing imported`, { icon: '⚠️', duration: 5000 });
+      } else if (!result.errors || result.errors.length === 0) {
+        toast.success('Dividend import complete', { duration: 4000 });
+      }
+      if (result.skipped_duplicates > 0 && result.imported > 0) {
+        toast(`${result.skipped_duplicates} duplicate(s) skipped`, { icon: '⚠️', duration: 4000 });
+      }
+      if (result.errors && result.errors.length > 0) {
+        toast.error(result.errors.join('\n'), { duration: 8000 });
+      }
+
+      setDividendImportPreview(null);
+      loadStocks();
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Failed to import dividends';
       toast.error(msg, { duration: 5000 });
     }
   };
@@ -1144,6 +1243,7 @@ export default function App() {
           onAddStock={(stockData) => setAddModalData(stockData || {})}
           onDividend={(data) => setDividendTarget(data)}
           onImportContractNote={handleParseContractNote}
+          onImportDividendStatement={handleParseDividendStatement}
           bulkSellDoneKey={bulkSellDoneKey}
         />
       )}
@@ -1281,6 +1381,16 @@ export default function App() {
           existingSymbols={new Set(stockSummary.map(s => s.symbol))}
           onConfirm={handleConfirmImport}
           onCancel={() => setImportPreview(null)}
+        />
+      )}
+
+      {/* Bank Statement Dividend Import Preview Modal */}
+      {dividendImportPreview && (
+        <DividendImportPreviewModal
+          data={dividendImportPreview}
+          existingSymbols={new Set(stockSummary.map(s => s.symbol))}
+          onConfirm={handleConfirmDividendImport}
+          onCancel={() => setDividendImportPreview(null)}
         />
       )}
 

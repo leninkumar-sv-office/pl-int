@@ -26,12 +26,14 @@ from .models import (
     AddNPSRequest, UpdateNPSRequest, AddNPSContributionRequest,
     AddSIRequest, UpdateSIRequest,
     CDSLCASUpload, MFImportPayload,
+    DividendStatementUpload,
 )
 from .xlsx_database import xlsx_db as db
 from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache
 from . import stock_service
 from . import zerodha_service
 from . import contract_note_parser
+from . import dividend_parser
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -268,6 +270,115 @@ def add_dividend(req: AddDividendRequest):
         raise HTTPException(status_code=404, detail=f"No xlsx file found for {req.symbol}")
     return {
         "message": f"Dividend of ₹{req.amount:.2f} recorded for {req.symbol.upper()}",
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  BANK STATEMENT DIVIDEND IMPORT
+# ══════════════════════════════════════════════════════════
+
+@app.post("/api/portfolio/parse-dividend-statement")
+def parse_dividend_statement_preview(req: DividendStatementUpload):
+    """Parse bank statement PDF for CEMTEX DEP dividend entries — no data is written."""
+    import base64
+
+    if not req.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
+    try:
+        pdf_bytes = base64.b64decode(req.pdf_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
+
+    try:
+        result = dividend_parser.parse_dividend_statement(
+            pdf_bytes=pdf_bytes,
+            portfolio_name_map=dict(db._name_map),
+            existing_fingerprints_fn=lambda sym: db.get_existing_dividend_fingerprints(sym),
+        )
+    except Exception as e:
+        print(f"[DividendImport] PDF parse error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)[:200]}")
+
+    return result
+
+
+@app.post("/api/portfolio/import-dividends-confirmed")
+def import_dividends_confirmed(req: dict):
+    """Import confirmed dividends from bank statement preview.
+
+    Receives list of dividends (possibly symbol-edited by user).
+    Server-side re-checks duplicates as safety net.
+    """
+    dividends = req.get("dividends", [])
+    symbol_overrides = req.get("symbol_overrides", {})
+    if not dividends:
+        return {"message": "No dividends to import", "imported": 0, "skipped_duplicates": 0}
+
+    # Persist user symbol overrides for future imports
+    if symbol_overrides:
+        try:
+            dividend_parser.save_user_overrides(symbol_overrides)
+        except Exception as e:
+            print(f"[DividendImport] Failed to save overrides: {e}")
+
+    imported = 0
+    skipped_dups = 0
+    errors = []
+    details = []
+
+    # Cache fingerprints per symbol for batch dedup
+    _fp_cache: dict = {}
+
+    for div in dividends:
+        symbol = (div.get("symbol") or "").upper()
+        div_date = div.get("date", "")
+        amount = round(float(div.get("amount", 0)), 2)
+
+        if not symbol or amount <= 0:
+            errors.append(f"Invalid entry: {symbol} {amount}")
+            continue
+
+        # Server-side duplicate check
+        if symbol not in _fp_cache:
+            try:
+                _fp_cache[symbol] = db.get_existing_dividend_fingerprints(symbol)
+            except Exception:
+                _fp_cache[symbol] = set()
+
+        fp = (div_date, amount)
+        if fp in _fp_cache[symbol]:
+            skipped_dups += 1
+            continue
+
+        try:
+            db.add_dividend(
+                symbol=symbol,
+                exchange="NSE",
+                amount=amount,
+                dividend_date=div_date,
+                remarks=div.get("remarks", "DIVIDEND"),
+            )
+            imported += 1
+            details.append({"symbol": symbol, "date": div_date, "amount": amount})
+            # Update in-memory cache
+            _fp_cache[symbol].add(fp)
+        except FileNotFoundError:
+            errors.append(f"{symbol}: No xlsx file found")
+        except Exception as e:
+            errors.append(f"{symbol}: {str(e)[:100]}")
+
+    if imported > 0:
+        db.reindex()
+
+    total_amount = sum(d["amount"] for d in details)
+    return {
+        "message": f"Imported {imported} dividend(s) totalling ₹{total_amount:.2f}",
+        "imported": imported,
+        "skipped_duplicates": skipped_dups,
+        "errors": errors,
+        "details": details,
     }
 
 

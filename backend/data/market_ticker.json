@@ -4,53 +4,49 @@
     "label": "Sensex",
     "type": "index",
     "unit": "",
-    "price": 80238.85,
-    "change": 0.0,
-    "change_pct": 0.0,
-    "instrument_token": 265,
-    "source": "zerodha"
+    "price": 79116.19,
+    "change": -1122.66,
+    "change_pct": -1.4,
+    "source": "cached"
   },
   {
     "key": "NIFTY50",
     "label": "Nifty 50",
     "type": "index",
     "unit": "",
-    "price": 24865.7,
-    "change": 0.0,
-    "change_pct": 0.0,
-    "instrument_token": 256265,
-    "source": "zerodha"
+    "price": 24480.5,
+    "change": -385.2,
+    "change_pct": -1.55,
+    "source": "cached"
   },
   {
     "key": "GOLD",
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/g",
-    "price": 16110.2,
-    "change": -0.6,
-    "change_pct": -0.0,
-    "instrument_token": 116433415,
-    "source": "zerodha"
+    "price": 16155.0,
+    "change": 44.2,
+    "change_pct": 0.27,
+    "source": "cached"
   },
   {
     "key": "SILVER",
     "label": "Silver",
     "type": "commodity",
     "unit": "\u20b9/g",
-    "price": 260.46,
-    "change": 1.98,
-    "change_pct": 0.77,
-    "instrument_token": 115626503,
-    "source": "zerodha"
+    "price": 259.5,
+    "change": -1.89,
+    "change_pct": -0.72,
+    "source": "cached"
   },
   {
     "key": "SGX",
     "label": "SGX STI",
     "type": "index",
     "unit": "",
-    "price": 4916.65,
-    "change": -104.14,
-    "change_pct": -2.07,
+    "price": 4812.75,
+    "change": -194.98,
+    "change_pct": -3.89,
     "source": "yahoo/google"
   },
   {
@@ -58,9 +54,9 @@
     "label": "Nikkei",
     "type": "index",
     "unit": "",
-    "price": 56279.05,
-    "change": -2304.07,
-    "change_pct": -3.93,
+    "price": 56600.44,
+    "change": -2249.83,
+    "change_pct": -3.82,
     "source": "yahoo/google"
   },
   {
@@ -68,9 +64,9 @@
     "label": "SGD/INR",
     "type": "forex",
     "unit": "",
-    "price": 72.08,
-    "change": 0.37,
-    "change_pct": 0.51,
+    "price": 72.32,
+    "change": 0.38,
+    "change_pct": 0.53,
     "source": "yahoo/google"
   },
   {
@@ -78,21 +74,19 @@
     "label": "USD/INR",
     "type": "forex",
     "unit": "",
-    "price": 91.64,
-    "change": 0.0,
-    "change_pct": 0.0,
-    "instrument_token": 579587,
-    "source": "zerodha"
+    "price": 92.19,
+    "change": 0.55,
+    "change_pct": 0.6,
+    "source": "cached"
   },
   {
     "key": "CRUDEOIL",
     "label": "Crude Oil",
     "type": "commodity",
     "unit": "\u20b9/bbl",
-    "price": 6975.0,
-    "change": 5.0,
-    "change_pct": 0.07,
-    "instrument_token": 121033991,
-    "source": "zerodha"
+    "price": 6921.0,
+    "change": -49.0,
+    "change_pct": -0.7,
+    "source": "cached"
   }
 ]

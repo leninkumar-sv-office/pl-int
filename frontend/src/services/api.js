@@ -106,6 +106,20 @@ export async function confirmImportContractNote(payload) {
   return data;
 }
 
+// ── Bank Statement Dividend Import ───────────────────
+
+export async function parseDividendStatement(file) {
+  const base64 = await _readFileAsBase64(file);
+  const payload = { pdf_base64: base64, filename: file.name };
+  const { data } = await api.post('/portfolio/parse-dividend-statement', payload, { timeout: 120000 });
+  return data;
+}
+
+export async function confirmDividendImport(payload) {
+  const { data } = await api.post('/portfolio/import-dividends-confirmed', payload, { timeout: 120000 });
+  return data;
+}
+
 // ── Market Ticker ────────────────────────────────────
 
 export async function getMarketTicker() {

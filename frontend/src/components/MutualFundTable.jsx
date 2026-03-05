@@ -641,6 +641,10 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const [sortDir, setSortDir] = useState('asc');
   const casFileInputRef = useRef(null);
   const [casImporting, setCasImporting] = useState(false);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
+    try { return localStorage.getItem('mfSummaryCollapsed') !== 'false'; } catch { return true; }
+  });
+  const toggleSummary = () => setSummaryCollapsed(prev => { const next = !prev; localStorage.setItem('mfSummaryCollapsed', String(next)); return next; });
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
   const [colPickerOpen, setColPickerOpen] = useState(false);
   const colPickerRef = useRef(null);
@@ -791,7 +795,10 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   return (
     <div className="section">
       <div className="section-header">
-        <div className="section-title">Mutual Fund Summary</div>
+        <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
+          Mutual Fund Summary
+        </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="section-badge">
             {totalHeldFunds} funds held
@@ -847,7 +854,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       </div>
 
       {/* ── MF Summary Bar (matches Stock Summary Bar) ── */}
-      {mfDashboard && (() => {
+      {!summaryCollapsed && mfDashboard && (() => {
         const uplPct = mfDashboard.total_invested > 0 ? (mfDashboard.unrealized_pl / mfDashboard.total_invested) * 100 : 0;
         return (
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>

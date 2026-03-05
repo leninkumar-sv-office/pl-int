@@ -558,7 +558,7 @@ function loadVisibleCols() {
 }
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, bulkSellDoneKey }) {
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
   const [sortField, setSortField] = useState('symbol');
   const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null);
@@ -566,7 +566,13 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [hideZeroHeld, setHideZeroHeld] = useState(true);
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
+  const dividendFileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
+  const [importingDividends, setImportingDividends] = useState(false);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
+    try { return localStorage.getItem('stockSummaryCollapsed') !== 'false'; } catch { return true; }
+  });
+  const toggleSummary = () => setSummaryCollapsed(prev => { const next = !prev; localStorage.setItem('stockSummaryCollapsed', String(next)); return next; });
   // Bulk selection tracks individual lot (holding) IDs
   const [selectedLots, setSelectedLots] = useState(new Set());
 
@@ -784,6 +790,24 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     }
   };
 
+  // ── Bank Statement Dividend Import (supports multiple files) ──
+  const handleDividendFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = '';
+    const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfFiles.length === 0) return;
+    if (!onImportDividendStatement) return;
+    setImportingDividends(true);
+    try {
+      await onImportDividendStatement(pdfFiles);
+    } catch (err) {
+      // Error toast handled in parent
+    } finally {
+      setImportingDividends(false);
+    }
+  };
+
   // Count selected lots info for the action bar
   const selectedCount = selectedLots.size;
   const selectedItems = selectedCount > 0
@@ -800,7 +824,10 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   return (
     <div className="section">
       <div className="section-header">
-        <div className="section-title">Stock Summary</div>
+        <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
+          Stock Summary
+        </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="section-badge">
             {totalHeldStocks} stocks held
@@ -838,11 +865,38 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           >
             {importing ? 'Parsing PDFs...' : 'Import PDF'}
           </button>
+          {/* Dividend Import Button */}
+          <input
+            ref={dividendFileInputRef}
+            type="file"
+            accept=".pdf"
+            multiple
+            onChange={handleDividendFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={() => dividendFileInputRef.current?.click()}
+            disabled={importingDividends}
+            style={{
+              padding: '4px 12px',
+              fontSize: '12px',
+              background: importingDividends ? 'var(--bg-input)' : '#8b5cf6',
+              color: importingDividends ? 'var(--text-muted)' : '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              cursor: importingDividends ? 'wait' : 'pointer',
+              whiteSpace: 'nowrap',
+              opacity: importingDividends ? 0.7 : 1,
+            }}
+            title="Import dividends from SBI bank statement PDFs (select multiple)"
+          >
+            {importingDividends ? 'Parsing...' : 'Import Dividends'}
+          </button>
         </div>
       </div>
 
       {/* ── Stock Summary Bar (matches MF dashboard pattern) ── */}
-      {(() => {
+      {!summaryCollapsed && (() => {
         const heldStocks = stocks.filter(s => s.total_held_qty > 0);
         const sumInvested = heldStocks.reduce((s, st) => s + (st.total_invested || 0), 0);
         const sumCurrentVal = heldStocks.reduce((s, st) => s + (st.current_value || 0), 0);

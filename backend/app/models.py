@@ -580,3 +580,9 @@ class CDSLCASUpload(BaseModel):
 class MFImportPayload(BaseModel):
     """Request to import confirmed MF transactions from CAS statement."""
     funds: list  # list of fund dicts with transactions to import
+
+
+class DividendStatementUpload(BaseModel):
+    """Bank statement PDF as base64-encoded string for dividend extraction."""
+    pdf_base64: str
+    filename: str = "bank_statement.pdf"

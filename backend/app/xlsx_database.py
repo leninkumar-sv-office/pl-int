@@ -1151,6 +1151,66 @@ class XlsxPortfolio:
 
         return fingerprints, remarks_set
 
+    def get_existing_dividend_fingerprints(self, symbol: str) -> set:
+        """Return set of (date_str, amount_rounded) tuples for existing DIV rows.
+
+        Used for duplicate detection when bulk-importing dividends from bank statements.
+        """
+        symbol = symbol.upper()
+        files = self._all_files.get(symbol, [])
+        if not files:
+            fallback = self._find_file_for_symbol(symbol)
+            if fallback:
+                files = [fallback]
+            else:
+                return set()
+
+        fingerprints = set()
+
+        for fp in files:
+            try:
+                wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+                if "Trading History" not in wb.sheetnames:
+                    wb.close()
+                    continue
+                ws = wb["Trading History"]
+
+                header_row = 4
+                for r in range(1, 11):
+                    vals = [ws.cell(r, c).value for c in range(1, 5)]
+                    if "DATE" in vals and "ACTION" in vals:
+                        header_row = r
+                        break
+
+                for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+                    if not row or len(row) < 6:
+                        continue
+                    raw_date, exch, _action, _qty, price, cost = (
+                        row[0], row[1], row[2], row[3], row[4], row[5]
+                    )
+                    if str(exch).strip() != "DIV":
+                        continue
+
+                    # Parse date
+                    date_str = ""
+                    if isinstance(raw_date, datetime):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif isinstance(raw_date, date):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif raw_date:
+                        date_str = _parse_date(raw_date) or ""
+
+                    # Amount: prefer column F (cost), fall back to E (price)
+                    amount = _safe_float(cost) or _safe_float(price) or 0
+                    if date_str and amount > 0:
+                        fingerprints.add((date_str, round(amount, 2)))
+
+                wb.close()
+            except Exception as e:
+                print(f"[XlsxDB] Error reading dividend fingerprints from {fp.name}: {e}")
+
+        return fingerprints
+
     def _find_header_row(self, ws) -> int:
         """Find the header row in a Trading History sheet."""
         for r in range(1, 11):
