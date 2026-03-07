@@ -537,3 +537,10 @@ tr.highlight-profit:hover {
   .table-container { overflow-x: auto; }
   table { min-width: 800px; }
 }
+
+/* Hide number input spinners in filter row */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

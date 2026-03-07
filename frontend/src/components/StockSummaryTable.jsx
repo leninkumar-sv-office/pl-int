@@ -557,6 +557,169 @@ function loadVisibleCols() {
   return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
 
+/* ── Column filter helpers ─────────────────────────────── */
+function pctFromLow(stock) {
+  const cp = stock.live?.current_price || 0;
+  const low = stock.live?.week_52_low || 0;
+  return (low > 0 && cp > 0) ? ((cp - low) / low * 100) : 9999;
+}
+
+function pctFromHigh(stock) {
+  const cp = stock.live?.current_price || 0;
+  const high = stock.live?.week_52_high || 0;
+  return (high > 0 && cp > 0) ? ((high - cp) / high * 100) : 9999;
+}
+
+function getFilterValue(stock, colId) {
+  switch (colId) {
+    case 'held': return stock.total_held_qty;
+    case 'sold': return stock.total_sold_qty;
+    case 'buyPrice': return stock.avg_buy_price;
+    case 'totalCost': return stock.total_invested;
+    case 'currentPrice': return stock.live?.current_price || 0;
+    case 'w52Low': return pctFromLow(stock);
+    case 'w52High': return pctFromHigh(stock);
+    case 'unrealizedPF': return stock.unrealized_profit || 0;
+    case 'unrealizedLoss': return Math.abs(stock.unrealized_loss || 0);
+    case 'dividends': return stock.total_dividend || 0;
+    default: return null;
+  }
+}
+
+function matchesPreset(stock, colId, preset) {
+  switch (colId) {
+    case 'w52Low': {
+      const pct = pctFromLow(stock);
+      if (preset === 'near5') return pct < 5;
+      if (preset === 'near10') return pct < 10;
+      if (preset === 'near20') return pct < 20;
+      return true;
+    }
+    case 'w52High': {
+      const pct = pctFromHigh(stock);
+      if (preset === 'near5') return pct < 5;
+      if (preset === 'near10') return pct < 10;
+      if (preset === 'near20') return pct < 20;
+      return true;
+    }
+    case 'status': {
+      const hasHeld = stock.total_held_qty > 0;
+      if (preset === 'profit') return hasHeld && stock.is_above_avg_buy;
+      if (preset === 'loss') return hasHeld && !stock.is_above_avg_buy && !!stock.live;
+      if (preset === 'sold') return stock.total_held_qty === 0;
+      if (preset === 'ltcg') return (stock.ltcg_profitable_qty > 0) || (stock.ltcg_loss_qty > 0);
+      if (preset === 'stcg') return (stock.stcg_profitable_qty > 0) || (stock.stcg_loss_qty > 0);
+      return true;
+    }
+    case 'unrealizedPF': {
+      const val = stock.unrealized_profit || 0;
+      if (preset === '>1K') return val > 1000;
+      if (preset === '>10K') return val > 10000;
+      if (preset === '>50K') return val > 50000;
+      if (preset === '>1L') return val > 100000;
+      return true;
+    }
+    case 'unrealizedLoss': {
+      const val = Math.abs(stock.unrealized_loss || 0);
+      if (preset === '>1K') return val > 1000;
+      if (preset === '>5K') return val > 5000;
+      if (preset === '>10K') return val > 10000;
+      return true;
+    }
+    default: return true;
+  }
+}
+
+/* ── Sort by % p.a. support ───────────────────────────── */
+const PA_SORT_FIELDS = new Set([
+  'unrealized_profit', 'ltcg_unrealized_profit', 'stcg_unrealized_profit',
+  'unrealized_loss', 'ltcg_unrealized_loss', 'stcg_unrealized_loss',
+  'unrealized_pl', 'ltcg_unrealized_pl', 'stcg_unrealized_pl',
+  'realized_pl', 'ltcg_realized_pl', 'stcg_realized_pl',
+]);
+
+function sortPaVal(stock, field) {
+  let val;
+  switch (field) {
+    case 'unrealized_profit': val = stock.unrealized_profit || 0; break;
+    case 'ltcg_unrealized_profit': val = stock.ltcg_unrealized_profit || 0; break;
+    case 'stcg_unrealized_profit': val = stock.stcg_unrealized_profit || 0; break;
+    case 'unrealized_loss': val = stock.unrealized_loss || 0; break;
+    case 'ltcg_unrealized_loss': val = stock.ltcg_unrealized_loss || 0; break;
+    case 'stcg_unrealized_loss': val = stock.stcg_unrealized_loss || 0; break;
+    case 'unrealized_pl': val = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0); break;
+    case 'ltcg_unrealized_pl': val = (stock.ltcg_unrealized_profit || 0) + (stock.ltcg_unrealized_loss || 0); break;
+    case 'stcg_unrealized_pl': val = (stock.stcg_unrealized_profit || 0) + (stock.stcg_unrealized_loss || 0); break;
+    case 'realized_pl': val = stock.realized_pl || 0; break;
+    case 'ltcg_realized_pl': val = stock.ltcg_realized_pl || 0; break;
+    case 'stcg_realized_pl': val = stock.stcg_realized_pl || 0; break;
+    default: return 0;
+  }
+  const pfx = field.startsWith('ltcg_') ? 'ltcg' : field.startsWith('stcg_') ? 'stcg' : 'total';
+  const isRealized = field.includes('realized') && !field.includes('unrealized');
+  let invested, diffDays;
+  if (isRealized) {
+    if (pfx === 'ltcg') {
+      invested = stock.ltcg_sold_cost || 0;
+      const eb = stock.ltcg_sold_earliest_buy, ls = stock.ltcg_sold_latest_sell;
+      diffDays = (eb && ls) ? Math.floor((new Date(ls + 'T00:00:00') - new Date(eb + 'T00:00:00')) / 86400000) : 0;
+    } else if (pfx === 'stcg') {
+      invested = stock.stcg_sold_cost || 0;
+      const eb = stock.stcg_sold_earliest_buy, ls = stock.stcg_sold_latest_sell;
+      diffDays = (eb && ls) ? Math.floor((new Date(ls + 'T00:00:00') - new Date(eb + 'T00:00:00')) / 86400000) : 0;
+    } else {
+      invested = (stock.ltcg_sold_cost || 0) + (stock.stcg_sold_cost || 0);
+      const buys = [stock.ltcg_sold_earliest_buy, stock.stcg_sold_earliest_buy].filter(Boolean);
+      const sells = [stock.ltcg_sold_latest_sell, stock.stcg_sold_latest_sell].filter(Boolean);
+      if (buys.length && sells.length) {
+        diffDays = Math.floor((new Date(sells.sort().pop() + 'T00:00:00') - new Date(buys.sort()[0] + 'T00:00:00')) / 86400000);
+      } else { diffDays = 0; }
+    }
+  } else {
+    if (pfx === 'ltcg') {
+      invested = stock.ltcg_invested || 0;
+      const d = stock.ltcg_earliest_date;
+      diffDays = d ? Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 86400000) : 0;
+    } else if (pfx === 'stcg') {
+      invested = stock.stcg_invested || 0;
+      const d = stock.stcg_earliest_date;
+      diffDays = d ? Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 86400000) : 0;
+    } else {
+      invested = stock.total_invested || 0;
+      const dates = [stock.ltcg_earliest_date, stock.stcg_earliest_date].filter(Boolean);
+      const earliest = dates.length ? dates.sort()[0] : null;
+      diffDays = earliest ? Math.floor((Date.now() - new Date(earliest + 'T00:00:00').getTime()) / 86400000) : 0;
+    }
+  }
+  if (invested <= 0 || diffDays <= 0) return val >= 0 ? -Infinity : Infinity;
+  return (Math.pow(1 + val / invested, 365 / diffDays) - 1) * 100;
+}
+
+const FILTER_INPUT_STYLE = {
+  width: '55px',
+  padding: '2px 4px',
+  fontSize: '11px',
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border)',
+  borderRadius: '3px',
+  color: 'var(--text)',
+  outline: 'none',
+  MozAppearance: 'textfield',
+  WebkitAppearance: 'none',
+};
+
+const FILTER_SELECT_STYLE = {
+  padding: '2px 4px',
+  fontSize: '11px',
+  background: 'var(--bg-input)',
+  border: '1px solid var(--border)',
+  borderRadius: '3px',
+  color: 'var(--text)',
+  outline: 'none',
+  cursor: 'pointer',
+  maxWidth: '110px',
+};
+
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
   const [sortField, setSortField] = useState('symbol');
@@ -587,6 +750,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const colPickerRef = useRef(null);
   const col = (id) => visibleCols.has(id);  // shorthand
 
+  // ── Column filters ──
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [columnFilters, setColumnFilters] = useState(() => {
+    try { const s = localStorage.getItem('stockColumnFilters'); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+
+  // ── Sort by % p.a. toggle ──
+  const [sortByPa, setSortByPa] = useState(false);
+
   const toggleCol = (id) => {
     setVisibleCols(prev => {
       const next = new Set(prev);
@@ -612,6 +784,28 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [colPickerOpen]);
+
+  // Persist column filters
+  useEffect(() => {
+    try { localStorage.setItem('stockColumnFilters', JSON.stringify(columnFilters)); } catch (_) {}
+  }, [columnFilters]);
+
+  const updateFilter = (colId, key, value) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      if (!next[colId]) next[colId] = {};
+      if (value === '' || value === undefined || value === 'all') {
+        delete next[colId][key];
+        if (Object.keys(next[colId]).length === 0) delete next[colId];
+      } else {
+        next[colId][key] = value;
+      }
+      return next;
+    });
+  };
+
+  const clearAllFilters = () => setColumnFilters({});
+  const activeFilterCount = Object.keys(columnFilters).length;
 
   useEffect(() => {
     if (searchRef.current) searchRef.current.focus();
@@ -686,17 +880,31 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     }
   };
 
-  // Filter stocks by search query (matches symbol or name) and held-units toggle
+  // Filter stocks by search query (matches symbol or name), held-units toggle, and column filters
   const q = searchQuery.trim().toLowerCase();
   const filtered = stocks.filter(s => {
     if (hideZeroHeld && s.total_held_qty <= 0) return false;
     if (q && !s.symbol.toLowerCase().includes(q) && !(s.name || '').toLowerCase().includes(q)) return false;
+    // Column filters
+    for (const [colId, f] of Object.entries(columnFilters)) {
+      if (f.preset && f.preset !== 'all') {
+        if (!matchesPreset(s, colId, f.preset)) return false;
+      }
+      const val = getFilterValue(s, colId);
+      if (val !== null) {
+        if (f.min !== undefined && f.min !== '' && val < Number(f.min)) return false;
+        if (f.max !== undefined && f.max !== '' && val > Number(f.max)) return false;
+      }
+    }
     return true;
   });
 
   const sorted = [...filtered].sort((a, b) => {
     let aVal, bVal;
-    switch (sortField) {
+    if (sortByPa && PA_SORT_FIELDS.has(sortField)) {
+      aVal = sortPaVal(a, sortField);
+      bVal = sortPaVal(b, sortField);
+    } else switch (sortField) {
       case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
       case 'total_held_qty': aVal = a.total_held_qty; bVal = b.total_held_qty; break;
       case 'total_sold_qty': aVal = a.total_sold_qty; bVal = b.total_sold_qty; break;
@@ -1024,6 +1232,56 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             {filtered.length} of {stocks.length} stocks
           </span>
         )}
+        {/* Filters toggle */}
+        <button
+          onClick={() => setFiltersVisible(v => !v)}
+          style={{
+            padding: '5px 10px',
+            fontSize: '12px',
+            background: filtersVisible ? 'var(--blue)' : 'var(--bg-input)',
+            color: filtersVisible ? '#fff' : 'var(--text-dim)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            position: 'relative',
+          }}
+          title="Toggle column filters"
+        >
+          <span style={{ fontSize: '12px' }}>&#9663;</span> Filters
+          {activeFilterCount > 0 && (
+            <span style={{
+              background: 'var(--red)',
+              color: '#fff',
+              fontSize: '10px',
+              fontWeight: 700,
+              borderRadius: '8px',
+              padding: '0 5px',
+              minWidth: '16px',
+              textAlign: 'center',
+              lineHeight: '16px',
+            }}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {activeFilterCount > 0 && (
+          <span
+            onClick={clearAllFilters}
+            style={{
+              fontSize: '11px',
+              color: 'var(--blue)',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Clear All
+          </span>
+        )}
         {/* Column picker */}
         <div ref={colPickerRef} style={{ position: 'relative' }}>
           <button
@@ -1123,16 +1381,36 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>}
               {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
+                <span
+                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
+                >{sortByPa ? '% p.a.' : '₹'}</span>
               </th>}
               {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ minWidth: '120px' }}>Status</th>}
               {col('unrealizedLoss') && <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
+                <span
+                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
+                >{sortByPa ? '% p.a.' : '₹'}</span>
               </th>}
               {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
+                <span
+                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
+                >{sortByPa ? '% p.a.' : '₹'}</span>
               </th>}
               {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
+                <span
+                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
+                >{sortByPa ? '% p.a.' : '₹'}</span>
               </th>}
               {col('dividends') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
                 Dividends<SortIcon field="total_dividend" />
@@ -1160,6 +1438,103 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                 </React.Fragment>
               ))}
             </tr>}
+            {/* ── Filter row ── */}
+            {filtersVisible && (
+              <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <th></th>
+                <th></th>
+                {col('held') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min" value={columnFilters.held?.min ?? ''} onChange={e => updateFilter('held', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max" value={columnFilters.held?.max ?? ''} onChange={e => updateFilter('held', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('sold') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min" value={columnFilters.sold?.min ?? ''} onChange={e => updateFilter('sold', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max" value={columnFilters.sold?.max ?? ''} onChange={e => updateFilter('sold', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('price') && <th></th>}
+                {col('buyPrice') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min ₹" value={columnFilters.buyPrice?.min ?? ''} onChange={e => updateFilter('buyPrice', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.buyPrice?.max ?? ''} onChange={e => updateFilter('buyPrice', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('totalCost') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min ₹" value={columnFilters.totalCost?.min ?? ''} onChange={e => updateFilter('totalCost', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.totalCost?.max ?? ''} onChange={e => updateFilter('totalCost', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('currentPrice') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min ₹" value={columnFilters.currentPrice?.min ?? ''} onChange={e => updateFilter('currentPrice', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.currentPrice?.max ?? ''} onChange={e => updateFilter('currentPrice', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('w52Low') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.w52Low?.preset || 'all'} onChange={e => updateFilter('w52Low', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                    <option value="all">All</option>
+                    <option value="near5">Near Low (&lt;5%)</option>
+                    <option value="near10">&lt;10% from Low</option>
+                    <option value="near20">&lt;20% from Low</option>
+                  </select>
+                </th>}
+                {col('w52High') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.w52High?.preset || 'all'} onChange={e => updateFilter('w52High', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                    <option value="all">All</option>
+                    <option value="near5">Near High (&lt;5%)</option>
+                    <option value="near10">&lt;10% from High</option>
+                    <option value="near20">&lt;20% from High</option>
+                  </select>
+                </th>}
+                {col('unrealizedPF') && <th colSpan={3} style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select value={columnFilters.unrealizedPF?.preset || 'all'} onChange={e => updateFilter('unrealizedPF', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                      <option value="all">All</option>
+                      <option value=">1K">&gt;₹1K</option>
+                      <option value=">10K">&gt;₹10K</option>
+                      <option value=">50K">&gt;₹50K</option>
+                      <option value=">1L">&gt;₹1L</option>
+                    </select>
+                    <input type="number" placeholder="min ₹" value={columnFilters.unrealizedPF?.min ?? ''} onChange={e => updateFilter('unrealizedPF', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.unrealizedPF?.max ?? ''} onChange={e => updateFilter('unrealizedPF', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('status') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.status?.preset || 'all'} onChange={e => updateFilter('status', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                    <option value="all">All</option>
+                    <option value="profit">In Profit</option>
+                    <option value="loss">In Loss</option>
+                    <option value="sold">Fully Sold</option>
+                    <option value="ltcg">Has LTCG</option>
+                    <option value="stcg">Has STCG</option>
+                  </select>
+                </th>}
+                {col('unrealizedLoss') && <th colSpan={3} style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select value={columnFilters.unrealizedLoss?.preset || 'all'} onChange={e => updateFilter('unrealizedLoss', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                      <option value="all">All</option>
+                      <option value=">1K">Loss &gt;₹1K</option>
+                      <option value=">5K">Loss &gt;₹5K</option>
+                      <option value=">10K">Loss &gt;₹10K</option>
+                    </select>
+                    <input type="number" placeholder="min ₹" value={columnFilters.unrealizedLoss?.min ?? ''} onChange={e => updateFilter('unrealizedLoss', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.unrealizedLoss?.max ?? ''} onChange={e => updateFilter('unrealizedLoss', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+                {col('unrealizedPL') && <th colSpan={3}></th>}
+                {col('realizedPL') && <th colSpan={3}></th>}
+                {col('dividends') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min ₹" value={columnFilters.dividends?.min ?? ''} onChange={e => updateFilter('dividends', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.dividends?.max ?? ''} onChange={e => updateFilter('dividends', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
+                </th>}
+              </tr>
+            )}
           </thead>
           <tbody>
             {sorted.map((stock) => {
