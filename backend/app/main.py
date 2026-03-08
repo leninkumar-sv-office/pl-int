@@ -1110,6 +1110,15 @@ def get_stock_live(symbol: str, exchange: str = "NSE"):
     return data
 
 
+@app.get("/api/stock/{symbol}/price")
+def get_stock_price(symbol: str, exchange: str = "NSE"):
+    """Fetch live price for any stock (triggers network call if not cached)."""
+    data = stock_service.fetch_live_data(symbol.upper(), exchange.upper())
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Could not fetch price for {symbol}")
+    return data
+
+
 @app.get("/api/stock/lookup/{symbol}")
 def lookup_stock_name(symbol: str, exchange: str = "NSE"):
     """Fast lookup of company name — tries Zerodha instruments, then saved prices."""
@@ -1135,9 +1144,11 @@ def lookup_stock_name(symbol: str, exchange: str = "NSE"):
 
 @app.get("/api/stock/search/{query}")
 def search_stock(query: str, exchange: str = "NSE"):
-    """Search for a stock by name or symbol."""
-    results = stock_service.search_stock(query, exchange)
-    return results
+    """Search for a stock by name or symbol. Tries Zerodha instruments first, falls back to Yahoo."""
+    results = zerodha_service.search_instruments(query, exchange)
+    if results:
+        return results
+    return stock_service.search_stock(query, exchange)
 
 
 @app.post("/api/stock/manual-price")

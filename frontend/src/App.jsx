@@ -30,6 +30,7 @@ import StandingInstructionTable from './components/StandingInstructionTable';
 import AddSIModal from './components/AddSIModal';
 import MFImportPreviewModal from './components/MFImportPreviewModal';
 import DividendImportPreviewModal from './components/DividendImportPreviewModal';
+import BuyPlannerModal from './components/BuyPlannerModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -65,6 +66,7 @@ export default function App() {
   const [sipConfigs, setSipConfigs] = useState([]);           // SIP configuration list
   const [mfImportPreview, setMfImportPreview] = useState(null); // CDSL CAS statement preview
   const [mfImportResult, setMfImportResult] = useState(null);   // import result banner
+  const [buyPlannerOpen, setBuyPlannerOpen] = useState(false);
 
   // FD / RD / Insurance states
   const [fdSummary, setFdSummary] = useState([]);
@@ -1190,9 +1192,14 @@ export default function App() {
               + Add SI
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={() => setAddModalData({})}>
-              + Add Stock
-            </button>
+            <>
+              <button className="btn btn-ghost" onClick={() => setBuyPlannerOpen(true)}>
+                Buy Planner
+              </button>
+              <button className="btn btn-primary" onClick={() => setAddModalData({})}>
+                + Add Stock
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -1485,6 +1492,14 @@ export default function App() {
           initialData={addSIModalData}
           onAdd={handleAddSI}
           onClose={() => setAddSIModalData(null)}
+        />
+      )}
+
+      {/* Buy Planner Modal */}
+      {buyPlannerOpen && (
+        <BuyPlannerModal
+          stocks={stockSummary}
+          onClose={() => setBuyPlannerOpen(false)}
         />
       )}
     </div>
