@@ -112,12 +112,18 @@ export default function TradePlanner() {
     if (initializedRef.current && rows.length > 0) savePlan(rows);
   }, [rows]);
 
+  const sortedRows = [...rows].sort((a, b) => {
+    const aHas = (parseInt(a.buyQty) || 0) > 0 || (parseInt(a.sellQty) || 0) > 0 ? 0 : 1;
+    const bHas = (parseInt(b.buyQty) || 0) > 0 || (parseInt(b.sellQty) || 0) > 0 ? 0 : 1;
+    return aHas - bHas;
+  });
+
   const filteredRows = searchQuery.trim()
-    ? rows.filter(r => {
+    ? sortedRows.filter(r => {
         const q = searchQuery.trim().toLowerCase();
         return r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
       })
-    : rows;
+    : sortedRows;
 
   const handleSearchChange = useCallback((e) => {
     const q = e.target.value;
