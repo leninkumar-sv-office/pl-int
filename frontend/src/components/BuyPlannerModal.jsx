@@ -77,7 +77,7 @@ export default function TradePlanner() {
       delete savedMap[key];
       return {
         symbol: s.symbol, exchange: s.exchange, name: s.name,
-        onHand: s.total_held_qty,
+        onHand: s.total_held_qty, avgBuy: s.avg_buy_price || 0,
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
         buyQty: sv?.buyQty || '', sellQty: sv?.sellQty || '',
       };
@@ -407,6 +407,7 @@ export default function TradePlanner() {
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Buy Qty</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Sell Qty</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Est. Amount</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>Realized P&L</th>
               <th style={{ ...thStyle, width: '28px' }}></th>
             </tr>
           </thead>
@@ -452,6 +453,19 @@ export default function TradePlanner() {
                       </>
                     ) : '--'}
                   </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {sq > 0 && row.avgBuy > 0 ? (() => {
+                      const pl = (row.current - row.avgBuy) * sq;
+                      const plPct = row.avgBuy > 0 ? ((row.current - row.avgBuy) / row.avgBuy * 100) : 0;
+                      const clr = pl >= 0 ? 'var(--green)' : 'var(--red)';
+                      return (
+                        <div>
+                          <div style={{ fontWeight: 600, color: clr }}>{pl >= 0 ? '+' : ''}{formatINR(pl)}</div>
+                          <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>{plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%</div>
+                        </div>
+                      );
+                    })() : sq > 0 ? '--' : ''}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     {row.onHand === 0 && (
                       <button onClick={() => removeRow(idx)}
@@ -462,7 +476,7 @@ export default function TradePlanner() {
                 </tr>
                 {isExpanded && (
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td colSpan={9} style={{ padding: 0 }}>
+                    <td colSpan={10} style={{ padding: 0 }}>
                       <div style={{ display: 'flex', background: 'var(--surface)', borderLeft: `3px solid ${chartColor}`, minHeight: '220px' }}>
                         {/* Left: price info */}
                         <div style={{ padding: '16px 20px', minWidth: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
@@ -544,10 +558,16 @@ export default function TradePlanner() {
               );
             })}
             {filteredRows.length === 0 && searchQuery.trim() && (
-              <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+              <tr><td colSpan={10} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
                 No matching stocks — select from dropdown to add new</td></tr>
             )}
-            {filteredRows.length > 0 && (
+            {filteredRows.length > 0 && (() => {
+              const totalRealizedPL = rows.reduce((sum, r) => {
+                const sq = parseInt(r.sellQty) || 0;
+                if (sq > 0 && r.avgBuy > 0 && r.current > 0) return sum + (r.current - r.avgBuy) * sq;
+                return sum;
+              }, 0);
+              return (
               <tr style={{ borderTop: '2px solid var(--border)' }}>
                 <td colSpan={7} style={{ ...tdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
@@ -555,9 +575,17 @@ export default function TradePlanner() {
                   {sellTotal > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(sellTotal)}</div>}
                   {!buyTotal && !sellTotal && <span style={{ color: 'var(--text-muted)' }}>--</span>}
                 </td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  {totalRealizedPL !== 0 ? (
+                    <div style={{ color: totalRealizedPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {totalRealizedPL >= 0 ? '+' : ''}{formatINR(totalRealizedPL)}
+                    </div>
+                  ) : ''}
+                </td>
                 <td></td>
               </tr>
-            )}
+              );
+            })()}
           </tbody>
         </table>
       </div>
@@ -573,7 +601,7 @@ export default function TradePlanner() {
       {hasAnyQty && (
         <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
           <div ref={captureRef} style={{ background: '#1a1a2e', color: '#e0e0e0', padding: '24px 28px',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', width: '920px' }}>
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', width: '1040px' }}>
             <div style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#ffffff' }}>Trade Plan — {todayStr()}</div>
             </div>
@@ -588,6 +616,7 @@ export default function TradePlanner() {
                   <th style={{ ...capThStyle, textAlign: 'right' }}>Buy</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>Sell</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>Amount</th>
+                  <th style={{ ...capThStyle, textAlign: 'right' }}>Realized P&L</th>
                 </tr>
               </thead>
               <tbody>
@@ -610,16 +639,45 @@ export default function TradePlanner() {
                         {bq > 0 && <div style={{ color: '#f87171' }}>-{formatINR(bq * row.current)}</div>}
                         {sq > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(sq * row.current)}</div>}
                       </td>
+                      <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600 }}>
+                        {sq > 0 && row.avgBuy > 0 ? (() => {
+                          const pl = (row.current - row.avgBuy) * sq;
+                          const plPct = row.avgBuy > 0 ? ((row.current - row.avgBuy) / row.avgBuy * 100) : 0;
+                          const clr = pl >= 0 ? '#4ade80' : '#f87171';
+                          return (
+                            <div>
+                              <div style={{ color: clr }}>{pl >= 0 ? '+' : ''}{formatINR(pl)}</div>
+                              <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>{plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%</div>
+                            </div>
+                          );
+                        })() : ''}
+                      </td>
                     </tr>
                   );
                 })}
+                {(() => {
+                  const capTotalPL = rowsWithQty.reduce((sum, r) => {
+                    const sq = parseInt(r.sellQty) || 0;
+                    if (sq > 0 && r.avgBuy > 0 && r.current > 0) return sum + (r.current - r.avgBuy) * sq;
+                    return sum;
+                  }, 0);
+                  return (
                 <tr style={{ borderTop: '2px solid #333355' }}>
                   <td colSpan={7} style={{ ...capTdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
                   <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 700, fontSize: '14px' }}>
                     {buyTotal > 0 && <div style={{ color: '#f87171' }}>-{formatINR(buyTotal)}</div>}
                     {sellTotal > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(sellTotal)}</div>}
                   </td>
+                  <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 700, fontSize: '14px' }}>
+                    {capTotalPL !== 0 && (
+                      <div style={{ color: capTotalPL >= 0 ? '#4ade80' : '#f87171' }}>
+                        {capTotalPL >= 0 ? '+' : ''}{formatINR(capTotalPL)}
+                      </div>
+                    )}
+                  </td>
                 </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
