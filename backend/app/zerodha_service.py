@@ -980,6 +980,107 @@ def get_mf_ltp(tradingsymbol: str) -> float:
 
 
 # ═══════════════════════════════════════════════════════════
+#  STOCK HISTORY (for charting)
+# ═══════════════════════════════════════════════════════════
+
+# Cache: {f"{symbol}.{exchange}.{period}" → {"data": [...], "fetched_at": float}}
+_history_cache: Dict[str, dict] = {}
+_history_cache_lock = threading.Lock()
+_HISTORY_CACHE_TTL = 300  # 5 minutes
+
+
+def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optional[List[dict]]:
+    """Fetch OHLCV candle data for charting via Kite Historical Data API.
+
+    Period mapping:
+      1d  → 5minute,  today
+      5d  → 15minute, 5 days
+      1m  → day,      30 days
+      6m  → day,      180 days
+      ytd → day,      Jan 1 → today
+      1y  → day,      365 days
+      5y  → week,     5 years
+      max → month,    20 years
+
+    Returns list of {date, open, high, low, close, volume} dicts, or None on error.
+    """
+    if not is_session_valid():
+        return None
+
+    from datetime import datetime, timedelta
+
+    now = datetime.now()
+    to_date = now.strftime("%Y-%m-%d")
+    period = period.lower()
+
+    period_map = {
+        "1d":  ("5minute",  timedelta(days=1)),
+        "5d":  ("15minute", timedelta(days=5)),
+        "1m":  ("day",      timedelta(days=30)),
+        "6m":  ("day",      timedelta(days=180)),
+        "1y":  ("day",      timedelta(days=365)),
+        "5y":  ("week",     timedelta(days=5 * 365)),
+        "max": ("month",    timedelta(days=20 * 365)),
+    }
+
+    if period == "ytd":
+        interval = "day"
+        from_date = f"{now.year}-01-01"
+    elif period in period_map:
+        interval, delta = period_map[period]
+        from_date = (now - delta).strftime("%Y-%m-%d")
+    else:
+        return None
+
+    # Check cache
+    cache_key = f"{symbol.upper()}.{exchange.upper()}.{period}"
+    with _history_cache_lock:
+        cached = _history_cache.get(cache_key)
+        if cached and (time.time() - cached["fetched_at"]) < _HISTORY_CACHE_TTL:
+            return cached["data"]
+
+    # Resolve instrument token
+    token = _get_instrument_token(symbol.upper(), exchange.upper())
+    if not token:
+        return None
+
+    path = f"/instruments/historical/{token}/{interval}"
+    data = _api_get(path, {"from": from_date, "to": to_date})
+    if not data or "data" not in data:
+        return None
+
+    candles = data["data"].get("candles", [])
+    if not candles:
+        return None
+
+    # Candle format: [timestamp, open, high, low, close, volume]
+    result = []
+    for c in candles:
+        if len(c) < 6:
+            continue
+        ts = c[0]
+        # Normalize timestamp to string
+        if hasattr(ts, 'isoformat'):
+            date_str = ts.isoformat()
+        else:
+            date_str = str(ts)
+        result.append({
+            "date": date_str,
+            "open": round(float(c[1]), 2),
+            "high": round(float(c[2]), 2),
+            "low": round(float(c[3]), 2),
+            "close": round(float(c[4]), 2),
+            "volume": int(c[5]),
+        })
+
+    # Cache result
+    with _history_cache_lock:
+        _history_cache[cache_key] = {"data": result, "fetched_at": time.time()}
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
 #  STATUS
 # ═══════════════════════════════════════════════════════════
 

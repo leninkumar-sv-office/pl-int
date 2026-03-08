@@ -70,6 +70,12 @@ export async function searchStock(query, exchange = 'NSE') {
   return data;
 }
 
+export async function getStockHistory(symbol, exchange = 'NSE', period = '1y') {
+  const { data } = await api.get(`/stock/${encodeURIComponent(symbol)}/history`,
+    { params: { exchange, period } });
+  return data;
+}
+
 export async function setManualPrice(symbol, exchange, price) {
   const { data } = await api.post('/stock/manual-price', { symbol, exchange, price });
   return data;

@@ -1151,6 +1151,15 @@ def search_stock(query: str, exchange: str = "NSE"):
     return stock_service.search_stock(query, exchange)
 
 
+@app.get("/api/stock/{symbol}/history")
+def get_stock_history(symbol: str, exchange: str = "NSE", period: str = "1y"):
+    """Get historical OHLCV candle data for charting."""
+    data = zerodha_service.fetch_stock_history(symbol.upper(), exchange.upper(), period)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"No history for {symbol}.{exchange} ({period})")
+    return data
+
+
 @app.post("/api/stock/manual-price")
 def set_manual_price(req: ManualPriceRequest):
     """Manually set a stock price (fallback when Yahoo is unavailable)."""

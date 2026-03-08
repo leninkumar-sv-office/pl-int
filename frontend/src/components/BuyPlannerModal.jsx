@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { searchStock, fetchStockPrice, getStockSummary } from '../services/api';
+import { searchStock, fetchStockPrice, getStockSummary, getStockHistory } from '../services/api';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import html2canvas from 'html2canvas';
 
 const STORAGE_KEY = 'buyPlannerData';
@@ -44,6 +45,10 @@ export default function TradePlanner() {
   const [searching, setSearching] = useState(false);
   const [fetchingPrice, setFetchingPrice] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [expandedSymbol, setExpandedSymbol] = useState(null); // "SYMBOL.EXCHANGE" or null
+  const [chartPeriod, setChartPeriod] = useState('1y');
+  const [chartData, setChartData] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
   const captureRef = useRef(null);
   const searchDebounceRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -157,6 +162,43 @@ export default function TradePlanner() {
   const clearAllQty = () => {
     setRows(prev => prev.map(r => ({ ...r, buyQty: '', sellQty: '' })));
     localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const CHART_PERIODS = ['1D', '5D', '1M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
+
+  const fetchChart = useCallback(async (symbol, exchange, period) => {
+    setChartLoading(true);
+    setChartData([]);
+    try {
+      const data = await getStockHistory(symbol, exchange, period.toLowerCase());
+      setChartData(data || []);
+    } catch { setChartData([]); }
+    finally { setChartLoading(false); }
+  }, []);
+
+  const handleRowClick = useCallback((row) => {
+    const key = `${row.symbol}.${row.exchange}`;
+    if (expandedSymbol === key) {
+      setExpandedSymbol(null);
+    } else {
+      setExpandedSymbol(key);
+      setChartPeriod('1y');
+      fetchChart(row.symbol, row.exchange, '1y');
+    }
+  }, [expandedSymbol, fetchChart]);
+
+  const handlePeriodChange = useCallback((period, row) => {
+    setChartPeriod(period.toLowerCase());
+    fetchChart(row.symbol, row.exchange, period);
+  }, [fetchChart]);
+
+  const formatChartDate = (dateStr, period) => {
+    const d = new Date(dateStr);
+    if (period === '1d' || period === '5d') {
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    }
+    if (period === '1m') return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
   };
 
   const buyTotal = rows.reduce((sum, r) => sum + (parseInt(r.buyQty) || 0) * r.current, 0);
@@ -368,32 +410,43 @@ export default function TradePlanner() {
               const bq = parseInt(row.buyQty) || 0;
               const sq = parseInt(row.sellQty) || 0;
               const hasQty = bq > 0 || sq > 0;
+              const rowKey = `${row.symbol}.${row.exchange}`;
+              const isExpanded = expandedSymbol === rowKey;
+              const chartUp = chartData.length >= 2 && chartData[chartData.length - 1].close >= chartData[0].close;
+              const chartColor = chartUp ? '#00d26a' : '#ff4757';
               return (
-                <tr key={`${row.symbol}-${row.exchange}`}
-                  style={{ borderBottom: '1px solid var(--border)', opacity: hasQty ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+                <React.Fragment key={`${row.symbol}-${row.exchange}`}>
+                <tr
+                  onClick={() => handleRowClick(row)}
+                  style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--border)', opacity: hasQty ? 1 : 0.5, transition: 'opacity 0.2s', cursor: 'pointer' }}>
                   <td style={tdStyle}>
-                    <div style={{ fontWeight: 600 }}>{row.symbol}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{row.name} · {row.exchange}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>&#9654;</span>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{row.symbol}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{row.name} · {row.exchange}</div>
+                      </div>
+                    </div>
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHand || '--'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.low ? formatINR(row.low) : '--'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{row.current ? formatINR(row.current) : '--'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.high ? formatINR(row.high) : '--'}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                  <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     <input type="number" min="0" value={row.buyQty} onChange={(e) => updateQty(idx, 'buyQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                  <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     <input type="number" min="0" value={row.sellQty} onChange={(e) => updateQty(idx, 'sellQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: hasQty ? 600 : 400, fontVariantNumeric: 'tabular-nums' }}>
                     {hasQty ? (
                       <>
-                        {bq > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(bq * row.current)}</div>}
-                        {sq > 0 && <div style={{ color: 'var(--red)' }}>-{formatINR(sq * row.current)}</div>}
+                        {bq > 0 && <div style={{ color: 'var(--red)' }}>-{formatINR(bq * row.current)}</div>}
+                        {sq > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(sq * row.current)}</div>}
                       </>
                     ) : '--'}
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
+                  <td style={{ ...tdStyle, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     {row.onHand === 0 && (
                       <button onClick={() => removeRow(idx)}
                         style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', padding: '2px' }}
@@ -401,6 +454,87 @@ export default function TradePlanner() {
                     )}
                   </td>
                 </tr>
+                {isExpanded && (
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                      <div style={{ display: 'flex', background: 'var(--surface)', borderLeft: `3px solid ${chartColor}`, minHeight: '220px' }}>
+                        {/* Left: price info */}
+                        <div style={{ padding: '16px 20px', minWidth: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
+                          <div style={{ fontSize: '24px', fontWeight: 700 }}>{row.current ? formatINR(row.current) : '--'}</div>
+                          {row.low > 0 && row.high > 0 && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              <div style={{ marginBottom: '4px' }}>52W Range</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>{formatINR(row.low)}</span>
+                                <div style={{ flex: 1, height: '4px', background: 'var(--border)', borderRadius: '2px', position: 'relative', minWidth: '60px' }}>
+                                  <div style={{
+                                    position: 'absolute', top: '-2px',
+                                    left: `${Math.min(100, Math.max(0, ((row.current - row.low) / (row.high - row.low)) * 100))}%`,
+                                    width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text)',
+                                    transform: 'translateX(-50%)',
+                                  }} />
+                                </div>
+                                <span>{formatINR(row.high)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {/* Right: chart */}
+                        <div style={{ flex: 1, padding: '12px 16px 12px 0', display: 'flex', flexDirection: 'column' }}>
+                          {/* Period tabs */}
+                          <div style={{ display: 'flex', gap: '2px', marginBottom: '8px' }}>
+                            {CHART_PERIODS.map(p => (
+                              <button key={p} onClick={() => handlePeriodChange(p, row)}
+                                style={{
+                                  padding: '3px 8px', fontSize: '11px', fontWeight: 600, border: 'none', borderRadius: '4px', cursor: 'pointer',
+                                  background: chartPeriod === p.toLowerCase() ? 'var(--text)' : 'transparent',
+                                  color: chartPeriod === p.toLowerCase() ? 'var(--bg)' : 'var(--text-muted)',
+                                }}>
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Chart area */}
+                          <div style={{ flex: 1, minHeight: '160px' }}>
+                            {chartLoading ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '12px' }}>Loading chart...</div>
+                            ) : chartData.length === 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '12px' }}>No data available</div>
+                            ) : (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                                  <defs>
+                                    <linearGradient id={`grad-${rowKey}`} x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="0%" stopColor={chartColor} stopOpacity={0.3} />
+                                      <stop offset="100%" stopColor={chartColor} stopOpacity={0.02} />
+                                    </linearGradient>
+                                  </defs>
+                                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false}
+                                    tickFormatter={(v) => formatChartDate(v, chartPeriod)}
+                                    interval="preserveStartEnd" minTickGap={40} />
+                                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false}
+                                    tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v.toFixed(0)} width={45} />
+                                  <Tooltip
+                                    contentStyle={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '11px' }}
+                                    labelFormatter={(v) => {
+                                      const d = new Date(v);
+                                      return (chartPeriod === '1d' || chartPeriod === '5d')
+                                        ? d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                        : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                                    }}
+                                    formatter={(value, name) => [formatINR(value), name.charAt(0).toUpperCase() + name.slice(1)]}
+                                  />
+                                  <Area type="monotone" dataKey="close" stroke={chartColor} strokeWidth={1.5} fill={`url(#grad-${rowKey})`} dot={false} />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
             {filteredRows.length === 0 && searchQuery.trim() && (
@@ -411,8 +545,8 @@ export default function TradePlanner() {
               <tr style={{ borderTop: '2px solid var(--border)' }}>
                 <td colSpan={7} style={{ ...tdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {buyTotal > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(buyTotal)}</div>}
-                  {sellTotal > 0 && <div style={{ color: 'var(--red)' }}>-{formatINR(sellTotal)}</div>}
+                  {buyTotal > 0 && <div style={{ color: 'var(--red)' }}>-{formatINR(buyTotal)}</div>}
+                  {sellTotal > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(sellTotal)}</div>}
                   {!buyTotal && !sellTotal && <span style={{ color: 'var(--text-muted)' }}>--</span>}
                 </td>
                 <td></td>
@@ -467,8 +601,8 @@ export default function TradePlanner() {
                       <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600, color: bq ? '#4ade80' : '#888' }}>{bq || '--'}</td>
                       <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600, color: sq ? '#f87171' : '#888' }}>{sq || '--'}</td>
                       <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600 }}>
-                        {bq > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(bq * row.current)}</div>}
-                        {sq > 0 && <div style={{ color: '#f87171' }}>-{formatINR(sq * row.current)}</div>}
+                        {bq > 0 && <div style={{ color: '#f87171' }}>-{formatINR(bq * row.current)}</div>}
+                        {sq > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(sq * row.current)}</div>}
                       </td>
                     </tr>
                   );
@@ -476,8 +610,8 @@ export default function TradePlanner() {
                 <tr style={{ borderTop: '2px solid #333355' }}>
                   <td colSpan={7} style={{ ...capTdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
                   <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 700, fontSize: '14px' }}>
-                    {buyTotal > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(buyTotal)}</div>}
-                    {sellTotal > 0 && <div style={{ color: '#f87171' }}>-{formatINR(sellTotal)}</div>}
+                    {buyTotal > 0 && <div style={{ color: '#f87171' }}>-{formatINR(buyTotal)}</div>}
+                    {sellTotal > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(sellTotal)}</div>}
                   </td>
                 </tr>
               </tbody>
