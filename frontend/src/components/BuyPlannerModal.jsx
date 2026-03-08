@@ -24,6 +24,7 @@ export default function BuyPlannerModal({ stocks, onClose }) {
   const captureRef = useRef(null);
   const searchDebounceRef = useRef(null);
   const searchInputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Pre-populate from portfolio stocks (held only)
   useEffect(() => {
@@ -133,26 +134,192 @@ export default function BuyPlannerModal({ stocks, onClose }) {
 
   const rowsWithQty = rows.filter(r => parseInt(r.buyQty) > 0);
 
-  // Generate and download image
+  const PLAN_KEY = 'BuyPlan';
+
+  // Insert a tEXt chunk into PNG bytes (proper PNG metadata, survives all file handling)
+  const insertPNGTextChunk = (pngBytes, key, value) => {
+    const data = new TextEncoder().encode(key + '\0' + value);
+    const chunkLen = data.length;
+    // tEXt chunk: 4-byte length + "tEXt" + data + 4-byte CRC
+    const chunk = new Uint8Array(12 + chunkLen);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, chunkLen); // length
+    chunk[4] = 0x74; chunk[5] = 0x45; chunk[6] = 0x58; chunk[7] = 0x74; // "tEXt"
+    chunk.set(data, 8);
+    // CRC32 over type + data
+    const crcData = chunk.slice(4, 8 + chunkLen);
+    view.setUint32(8 + chunkLen, crc32(crcData));
+    // Insert before IEND (last 12 bytes of a PNG)
+    const result = new Uint8Array(pngBytes.length + chunk.length);
+    result.set(pngBytes.slice(0, pngBytes.length - 12), 0);
+    result.set(chunk, pngBytes.length - 12);
+    result.set(pngBytes.slice(pngBytes.length - 12), pngBytes.length - 12 + chunk.length);
+    return result;
+  };
+
+  // CRC32 for PNG chunks
+  const crc32 = (bytes) => {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) {
+      crc ^= bytes[i];
+      for (let j = 0; j < 8; j++) {
+        crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+      }
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  };
+
+  // Read a tEXt chunk from PNG bytes
+  const readPNGTextChunk = (bytes, key) => {
+    let offset = 8; // skip PNG signature
+    while (offset < bytes.length) {
+      const view = new DataView(bytes.buffer, bytes.byteOffset + offset);
+      const len = view.getUint32(0);
+      const type = new TextDecoder().decode(bytes.slice(offset + 4, offset + 8));
+      if (type === 'tEXt') {
+        const chunkData = bytes.slice(offset + 8, offset + 8 + len);
+        const nullIdx = chunkData.indexOf(0);
+        if (nullIdx >= 0) {
+          const chunkKey = new TextDecoder().decode(chunkData.slice(0, nullIdx));
+          if (chunkKey === key) {
+            return new TextDecoder().decode(chunkData.slice(nullIdx + 1));
+          }
+        }
+      }
+      if (type === 'IEND') break;
+      offset += 12 + len; // 4 len + 4 type + data + 4 crc
+    }
+    return null;
+  };
+
+  // Generate and download image with embedded plan data
   const handleDownload = async () => {
     if (rowsWithQty.length === 0) return;
     setGenerating(true);
     try {
-      // Wait a tick for the capture div to render
       await new Promise(r => setTimeout(r, 100));
       const canvas = await html2canvas(captureRef.current, {
         backgroundColor: '#1a1a2e',
         scale: 2,
       });
+      const dateStr = new Date().toISOString().split('T')[0];
+      const planData = rowsWithQty.map(r => ({
+        symbol: r.symbol, exchange: r.exchange, buyQty: parseInt(r.buyQty) || 0,
+      }));
+      const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const pngBuf = new Uint8Array(await pngBlob.arrayBuffer());
+      const withData = insertPNGTextChunk(pngBuf, PLAN_KEY, JSON.stringify(planData));
+      const finalBlob = new Blob([withData], { type: 'image/png' });
       const link = document.createElement('a');
-      link.download = `buy-plan-${new Date().toISOString().split('T')[0]}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.download = `buy-plan-${dateStr}.png`;
+      link.href = URL.createObjectURL(finalBlob);
       link.click();
+      URL.revokeObjectURL(link.href);
     } catch (err) {
       console.error('Image generation failed:', err);
     } finally {
       setGenerating(false);
     }
+  };
+
+  // Extract plan JSON from PNG tEXt chunk
+  const extractPlanFromPNG = (arrayBuffer) => {
+    const bytes = new Uint8Array(arrayBuffer);
+    const json = readPNGTextChunk(bytes, PLAN_KEY);
+    if (!json) return null;
+    return JSON.parse(json);
+  };
+
+  // Import plan data into rows
+  const importPlanData = async (planData) => {
+    if (!Array.isArray(planData) || planData.length === 0) return;
+    // Fetch prices for new stocks first, then do a single setRows update
+    const newStocks = [];
+    // We need current rows — read via ref-style trick
+    let currentRows = [];
+    setRows(prev => { currentRows = prev; return prev; });
+
+    for (const entry of planData) {
+      const { symbol, exchange = 'NSE', buyQty } = entry;
+      if (!symbol) continue;
+      const qty = String(parseInt(buyQty) || 0);
+      const alreadyExists = currentRows.some(r => r.symbol === symbol && r.exchange === exchange)
+        || newStocks.some(r => r.symbol === symbol && r.exchange === exchange);
+      if (alreadyExists) {
+        // Will update qty in the batch below
+        newStocks.push({ symbol, exchange, qty, existingOnly: true });
+      } else {
+        try {
+          const price = await fetchStockPrice(symbol, exchange);
+          newStocks.push({
+            symbol, exchange, qty, existingOnly: false,
+            name: price.name || symbol,
+            low: price.week_52_low || 0,
+            current: price.current_price || 0,
+            high: price.week_52_high || 0,
+          });
+        } catch {
+          newStocks.push({
+            symbol, exchange, qty, existingOnly: false,
+            name: symbol, low: 0, current: 0, high: 0,
+          });
+        }
+      }
+    }
+    // Single setRows call — update existing + prepend new
+    setRows(prev => {
+      let updated = [...prev];
+      const toAdd = [];
+      for (const s of newStocks) {
+        const idx = updated.findIndex(r => r.symbol === s.symbol && r.exchange === s.exchange);
+        if (idx >= 0) {
+          updated[idx] = { ...updated[idx], buyQty: s.qty };
+        } else {
+          toAdd.push({
+            symbol: s.symbol, exchange: s.exchange,
+            name: s.name, onHand: 0,
+            low: s.low, current: s.current, high: s.high,
+            buyQty: s.qty,
+          });
+        }
+      }
+      return [...toAdd, ...updated];
+    });
+  };
+
+  // Upload handler — supports PNG (with embedded data) and JSON
+  const handleUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isPNG = file.type === 'image/png' || file.name.endsWith('.png');
+    if (isPNG) {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const planData = extractPlanFromPNG(evt.target.result);
+          if (planData) {
+            await importPlanData(planData);
+          } else {
+            console.error('No plan data found in image');
+          }
+        } catch (err) {
+          console.error('Failed to parse plan from image:', err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const planData = JSON.parse(evt.target.result);
+          await importPlanData(planData);
+        } catch (err) {
+          console.error('Failed to parse plan file:', err);
+        }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
   };
 
   return (
@@ -162,9 +329,23 @@ export default function BuyPlannerModal({ stocks, onClose }) {
         style={{ maxWidth: '960px', width: '95vw', maxHeight: '90vh', overflow: 'hidden', margin: 'auto', padding: 0, display: 'flex', flexDirection: 'column' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sticky header: title + search */}
+        {/* Sticky header: title + upload + search */}
         <div style={{ padding: '24px 28px 0', flexShrink: 0 }}>
-          <h2 style={{ marginBottom: '12px' }}>Buy Planner</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h2 style={{ margin: 0 }}>Buy Planner</h2>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.png,image/png"
+                onChange={handleUpload}
+                style={{ display: 'none' }}
+              />
+              <button className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()}>
+                Upload Plan
+              </button>
+            </div>
+          </div>
           {/* Search input with clear button */}
           <div style={{ position: 'relative', marginBottom: '12px' }}>
             <input
@@ -372,14 +553,14 @@ export default function BuyPlannerModal({ stocks, onClose }) {
         </div>
 
         {/* Sticky footer: actions */}
-        <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
           <button
             className="btn btn-primary"
             onClick={handleDownload}
             disabled={generating || rowsWithQty.length === 0}
           >
-            {generating ? 'Generating...' : 'Download Image'}
+            {generating ? 'Generating...' : 'Download'}
           </button>
         </div>
 
