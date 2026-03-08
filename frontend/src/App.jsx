@@ -30,7 +30,7 @@ import StandingInstructionTable from './components/StandingInstructionTable';
 import AddSIModal from './components/AddSIModal';
 import MFImportPreviewModal from './components/MFImportPreviewModal';
 import DividendImportPreviewModal from './components/DividendImportPreviewModal';
-import BuyPlannerModal from './components/BuyPlannerModal';
+import TradePlanner, { openTradePlanner } from './components/BuyPlannerModal';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -38,6 +38,11 @@ export const formatINR = (num) => {
 };
 
 export default function App() {
+  // If opened as Trade Planner window, render only that
+  if (new URLSearchParams(window.location.search).get('view') === 'trade-planner') {
+    return <TradePlanner />;
+  }
+
   const [portfolio, setPortfolio] = useState([]);
   const [stockSummary, setStockSummary] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -66,8 +71,6 @@ export default function App() {
   const [sipConfigs, setSipConfigs] = useState([]);           // SIP configuration list
   const [mfImportPreview, setMfImportPreview] = useState(null); // CDSL CAS statement preview
   const [mfImportResult, setMfImportResult] = useState(null);   // import result banner
-  const [buyPlannerOpen, setBuyPlannerOpen] = useState(false);
-
   // FD / RD / Insurance states
   const [fdSummary, setFdSummary] = useState([]);
   const [fdDashboard, setFdDashboard] = useState(null);
@@ -1193,8 +1196,8 @@ export default function App() {
             </button>
           ) : (
             <>
-              <button className="btn btn-ghost" onClick={() => setBuyPlannerOpen(true)}>
-                Buy Planner
+              <button className="btn btn-ghost" onClick={openTradePlanner}>
+                Trade Planner
               </button>
               <button className="btn btn-primary" onClick={() => setAddModalData({})}>
                 + Add Stock
@@ -1495,13 +1498,6 @@ export default function App() {
         />
       )}
 
-      {/* Buy Planner Modal */}
-      {buyPlannerOpen && (
-        <BuyPlannerModal
-          stocks={stockSummary}
-          onClose={() => setBuyPlannerOpen(false)}
-        />
-      )}
     </div>
   );
 }
