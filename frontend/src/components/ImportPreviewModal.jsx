@@ -5,7 +5,7 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function ImportPreviewModal({ data, existingSymbols = new Set(), onConfirm, onCancel }) {
+export default function ImportPreviewModal({ data, existingSymbols = new Set(), stockSummary = [], onConfirm, onCancel }) {
   const [confirming, setConfirming] = useState(false);
   // Editable symbol overrides: { index: newSymbol }
   const [symbolEdits, setSymbolEdits] = useState({});
@@ -32,6 +32,10 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
   const totalBuyCost = importableBuys.reduce((s, t) => s + t.net_total_after_levies, 0);
   const totalSellProceeds = importableSells.reduce((s, t) => s + t.net_total_after_levies, 0);
 
+  // Build avg buy price map for realized P&L on sells
+  const avgBuyMap = {};
+  stockSummary.forEach(s => { if (s.avg_buy_price > 0) avgBuyMap[s.symbol] = s.avg_buy_price; });
+
   const handleSymbolChange = useCallback((globalIdx, value) => {
     setSymbolEdits(prev => ({ ...prev, [globalIdx]: value.toUpperCase() }));
   }, []);
@@ -56,7 +60,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
   const dupRowBorder = '1px solid rgba(251,191,36,0.25)';
 
   // Shared row renderer for both BUY and SELL tables
-  const renderRow = (t, i, filterAction) => {
+  const renderRow = (t, i, filterAction, extraCell) => {
     const globalIdx = transactions.indexOf(transactions.filter(x => x.action === filterAction)[i]);
     const isBuy = filterAction === 'Buy';
     const charges = isBuy
@@ -154,6 +158,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(t.effective_price)}</td>
         <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(t.net_total_after_levies)}</td>
         <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(charges)}</td>
+        {extraCell}
       </tr>
     );
   };
@@ -173,7 +178,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
     }} onClick={onCancel}>
       <div style={{
         background: 'var(--bg-card)', borderRadius: 'var(--radius)',
-        border: '1px solid var(--border)', maxWidth: '950px', width: '100%',
+        border: '1px solid var(--border)', maxWidth: '1100px', width: '100%',
         maxHeight: '85vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }} onClick={e => e.stopPropagation()}>
@@ -322,18 +327,50 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                     <th style={{ ...thStyle, textAlign: 'right' }}>Effective Price</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Total Proceeds</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Charges</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Realized P&L</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sells.map((t, i) => renderRow(t, i, 'Sell'))}
-                  <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
-                    <td style={tdStyle} colSpan={4}>Total Sells (excl. duplicates)</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{importableSells.reduce((s, t) => s + t.quantity, 0)}</td>
-                    <td style={tdStyle}></td>
-                    <td style={tdStyle}></td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalSellProceeds)}</td>
-                    <td style={tdStyle}></td>
-                  </tr>
+                  {sells.map((t, i) => {
+                    const avgBuy = avgBuyMap[t.symbol] || 0;
+                    const pl = avgBuy > 0 ? (t.effective_price - avgBuy) * t.quantity : null;
+                    const plPct = avgBuy > 0 ? ((t.effective_price - avgBuy) / avgBuy * 100) : null;
+                    const plCell = (
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>
+                        {pl !== null ? (
+                          <div>
+                            <div style={{ fontWeight: 600, color: pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              {pl >= 0 ? '+' : ''}{formatINR(pl)}
+                            </div>
+                            <div style={{ fontSize: '10px', color: pl >= 0 ? 'var(--green)' : 'var(--red)', opacity: 0.85 }}>
+                              {plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%
+                            </div>
+                          </div>
+                        ) : <span style={{ color: 'var(--text-muted)' }}>--</span>}
+                      </td>
+                    );
+                    return renderRow(t, i, 'Sell', plCell);
+                  })}
+                  {(() => {
+                    const totalRealizedPL = importableSells.reduce((sum, t) => {
+                      const avgBuy = avgBuyMap[t.symbol] || 0;
+                      if (avgBuy > 0) return sum + (t.effective_price - avgBuy) * t.quantity;
+                      return sum;
+                    }, 0);
+                    return (
+                    <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                      <td style={tdStyle} colSpan={4}>Total Sells (excl. duplicates)</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{importableSells.reduce((s, t) => s + t.quantity, 0)}</td>
+                      <td style={tdStyle}></td>
+                      <td style={tdStyle}></td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalSellProceeds)}</td>
+                      <td style={tdStyle}></td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: totalRealizedPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                        {totalRealizedPL !== 0 ? `${totalRealizedPL >= 0 ? '+' : ''}${formatINR(totalRealizedPL)}` : ''}
+                      </td>
+                    </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             </>

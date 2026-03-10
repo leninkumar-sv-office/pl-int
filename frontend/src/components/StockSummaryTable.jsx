@@ -638,8 +638,8 @@ const COL_DEFS = [
   { id: 'price',          label: 'Price',           grouped: false },
   { id: 'buyPrice',       label: 'Buy Price',       grouped: false },
   { id: 'totalCost',      label: 'Total Cost',      grouped: false },
-  { id: 'currentPrice',   label: 'Current Price',   grouped: false },
   { id: 'w52Low',         label: '52W Low',         grouped: false },
+  { id: 'currentPrice',   label: 'Current Price',   grouped: false },
   { id: 'w52High',        label: '52W High',        grouped: false },
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
   { id: 'status',         label: 'Status',          grouped: false },
@@ -1473,11 +1473,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('price') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Price</th>}
               {col('buyPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Buy Price</th>}
               {col('totalCost') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Total Cost</th>}
-              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('day_change_pct')} style={{ cursor: 'pointer' }}>
-                Current Price<SortIcon field="day_change_pct" />
-              </th>}
               {col('w52Low') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="week_52_low" />
+              </th>}
+              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('day_change_pct')} style={{ cursor: 'pointer' }}>
+                Current Price<SortIcon field="day_change_pct" />
               </th>}
               {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
@@ -1571,12 +1571,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <input type="number" placeholder="max ₹" value={columnFilters.totalCost?.max ?? ''} onChange={e => updateFilter('totalCost', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
                   </div>
                 </th>}
-                {col('currentPrice') && <th style={{ padding: '4px 6px' }}>
-                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                    <input type="number" placeholder="min ₹" value={columnFilters.currentPrice?.min ?? ''} onChange={e => updateFilter('currentPrice', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
-                    <input type="number" placeholder="max ₹" value={columnFilters.currentPrice?.max ?? ''} onChange={e => updateFilter('currentPrice', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
-                  </div>
-                </th>}
                 {col('w52Low') && <th style={{ padding: '4px 6px' }}>
                   <select value={columnFilters.w52Low?.preset || 'all'} onChange={e => updateFilter('w52Low', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
                     <option value="all">All</option>
@@ -1584,6 +1578,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <option value="near10">&lt;10% from Low</option>
                     <option value="near20">&lt;20% from Low</option>
                   </select>
+                </th>}
+                {col('currentPrice') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min ₹" value={columnFilters.currentPrice?.min ?? ''} onChange={e => updateFilter('currentPrice', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max ₹" value={columnFilters.currentPrice?.max ?? ''} onChange={e => updateFilter('currentPrice', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
                 </th>}
                 {col('w52High') && <th style={{ padding: '4px 6px' }}>
                   <select value={columnFilters.w52High?.preset || 'all'} onChange={e => updateFilter('w52High', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
@@ -1819,6 +1819,35 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     {col('price') && <td>{hasHeld ? formatINR(stock.avg_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
                     {col('buyPrice') && <td>{hasHeld ? formatINR(stock.avg_buy_price) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
                     {col('totalCost') && <td>{hasHeld ? formatINR(stock.total_invested) : <span style={{ color: 'var(--text-muted)' }}>-</span>}</td>}
+                    {col('w52Low') && <td>
+                      {live?.week_52_low ? (() => {
+                        const nearLow = currentPrice > 0 && currentPrice <= live.week_52_low * 1.05;
+                        const pctFromLow = currentPrice > 0 && live.week_52_low > 0
+                          ? ((currentPrice - live.week_52_low) / live.week_52_low * 100) : 0;
+                        return (
+                          <div>
+                            <div style={{
+                              fontSize: '13px',
+                              color: nearLow ? 'var(--red)' : 'var(--text)',
+                              fontWeight: nearLow ? 600 : 400,
+                            }}>
+                              {formatINR(live.week_52_low)}
+                            </div>
+                            {currentPrice > 0 && (() => {
+                              const delta = currentPrice - live.week_52_low;
+                              const amt = fmtAmt(delta) || '+₹0';
+                              return (
+                                <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                  {delta >= 0 ? '+' : ''}{pctFromLow.toFixed(2)}%, {amt}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-muted)' }}>--</span>
+                      )}
+                    </td>}
                     {col('currentPrice') && <td>
                       {live ? (
                         <div>
@@ -1860,35 +1889,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         <span style={{ color: stock.price_error ? 'var(--red)' : 'var(--text-muted)', fontSize: '12px' }}>
                           {stock.price_error ? 'N/A' : '--'}
                         </span>
-                      )}
-                    </td>}
-                    {col('w52Low') && <td>
-                      {live?.week_52_low ? (() => {
-                        const nearLow = currentPrice > 0 && currentPrice <= live.week_52_low * 1.05;
-                        const pctFromLow = currentPrice > 0 && live.week_52_low > 0
-                          ? ((currentPrice - live.week_52_low) / live.week_52_low * 100) : 0;
-                        return (
-                          <div>
-                            <div style={{
-                              fontSize: '13px',
-                              color: nearLow ? 'var(--red)' : 'var(--text)',
-                              fontWeight: nearLow ? 600 : 400,
-                            }}>
-                              {formatINR(live.week_52_low)}
-                            </div>
-                            {currentPrice > 0 && (() => {
-                              const delta = currentPrice - live.week_52_low;
-                              const amt = fmtAmt(delta) || '+₹0';
-                              return (
-                                <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  {delta >= 0 ? '+' : ''}{pctFromLow.toFixed(2)}%, {amt}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })() : (
-                        <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>}
                     {col('w52High') && <td>

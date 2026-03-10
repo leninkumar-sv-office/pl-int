@@ -1234,5 +1234,29 @@
     "month_change_pct": 19.97,
     "volume": 1849959,
     "previous_close": 426.25
+  },
+  "TEJASNET.NSE": {
+    "price": 464.4,
+    "name": "Tejas Networks Limited",
+    "week_52_high": 914.4,
+    "week_52_low": 294,
+    "day_change": 38.3,
+    "day_change_pct": 8.99,
+    "week_change_pct": -7.05,
+    "month_change_pct": 30.78,
+    "volume": 28145302,
+    "previous_close": 426.1
+  },
+  "TMCV.BSE": {
+    "price": 459.15,
+    "name": "Tata Motors Ltd",
+    "week_52_high": 508.95,
+    "week_52_low": 306,
+    "day_change": 10.05,
+    "day_change_pct": 2.24,
+    "week_change_pct": -4.61,
+    "month_change_pct": -3.8,
+    "volume": 980691,
+    "previous_close": 449.1
   }
 }
