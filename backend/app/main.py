@@ -96,7 +96,7 @@ def on_startup():
         zerodha_service.load_instruments_async()
         print("[App] Loading Zerodha instrument names (background)...")
     _start_ticker_bg_refresh()
-    print("[App] Background market ticker refresh started (every 300s)")
+    print("[App] Background market ticker refresh started (every 60s)")
 
 
 @app.on_event("shutdown")
@@ -1450,6 +1450,7 @@ def get_dashboard_summary():
 MARKET_TICKER_SYMBOLS = [
     {"key": "SENSEX",    "yahoo": "%5EBSESN",    "label": "Sensex",     "type": "index",     "kite": True},
     {"key": "NIFTY50",   "yahoo": "%5ENSEI",     "label": "Nifty 50",   "type": "index",     "kite": True},
+    {"key": "GIFTNIFTY", "yahoo": "%5ENSEI",       "label": "GIFT Nifty", "type": "index",     "kite": True},
     {"key": "GOLD",      "yahoo": "GC%3DF",      "label": "Gold",       "type": "commodity", "unit": "₹/g",    "kite": True, "divisor": 10},
     {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "₹/g",    "kite": True, "divisor": 1000},
     {"key": "SGX",       "yahoo": "%5ESTI",         "label": "SGX STI",    "type": "index",                        "kite": False},
@@ -1465,7 +1466,7 @@ MARKET_TICKER_SYMBOLS = [
 
 _ticker_cache: List[dict] = []
 _ticker_cache_time: float = 0.0
-_TICKER_REFRESH_INTERVAL = 300   # 5 minutes
+_TICKER_REFRESH_INTERVAL = 60    # 1 minute
 _ticker_lock = threading.Lock()
 _TICKER_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "market_ticker.json")
 _TICKER_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "market_ticker_history.json")
@@ -1745,15 +1746,18 @@ def _stop_ticker_bg_refresh():
 @app.get("/api/market-ticker")
 def get_market_ticker():
     """Get market indices, forex rates, and commodity prices.
-    Data is refreshed automatically every 5 minutes by background thread."""
+    Data is refreshed automatically every 60 seconds by background thread."""
     with _ticker_lock:
         if _ticker_cache:
-            return _ticker_cache
+            return {
+                "tickers": _ticker_cache,
+                "last_updated": datetime.fromtimestamp(_ticker_cache_time).isoformat() if _ticker_cache_time else None,
+            }
     # Fallback: if background hasn't populated cache yet, load from file
     saved = _load_ticker_file()
     if saved:
         _enrich_ticker_changes(saved)
-    return saved if saved else []
+    return {"tickers": saved if saved else [], "last_updated": None}
 
 
 @app.post("/api/market-ticker/update")

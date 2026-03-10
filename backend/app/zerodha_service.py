@@ -568,6 +568,7 @@ def _build_ticker_candidates() -> Dict[str, List[str]]:
         # Indices — fixed names, always available
         "SENSEX":   ["BSE:SENSEX"],
         "NIFTY50":  ["NSE:NIFTY 50"],
+        "GIFTNIFTY": [f"NFO:NIFTY{s0}FUT", f"NFO:NIFTY{s1}FUT"],
 
         # Currency derivatives (CDS segment on NSE)
         "USDINR":   [f"CDS:USDINR{s0}FUT", f"CDS:USDINR{s1}FUT"],

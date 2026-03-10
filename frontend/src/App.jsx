@@ -56,6 +56,7 @@ export default function App() {
   const [bulkSellItems, setBulkSellItems] = useState(null); // null = closed, [...] = open
   const [bulkSellDoneKey, setBulkSellDoneKey] = useState(0); // increments to signal selection clear
   const [marketTicker, setMarketTicker] = useState([]);
+  const [tickerLastUpdated, setTickerLastUpdated] = useState(null);
   const [refreshInterval, setRefreshInterval] = useState(300); // seconds
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
   const [showTokenInput, setShowTokenInput] = useState(false);
@@ -127,7 +128,11 @@ export default function App() {
 
   const loadGlobal = useCallback(async () => {
     const [tickR, zsR] = await Promise.allSettled([getMarketTicker(), getZerodhaStatus()]);
-    if (tickR.status === 'fulfilled') setMarketTicker(tickR.value);
+    if (tickR.status === 'fulfilled') {
+      const resp = tickR.value;
+      setMarketTicker(resp.tickers || resp);
+      if (resp.last_updated) setTickerLastUpdated(resp.last_updated);
+    }
     if (zsR.status === 'fulfilled') setZerodhaStatus(zsR.value);
   }, []);
 
@@ -1208,7 +1213,7 @@ export default function App() {
       </header>
 
       {/* Market Ticker */}
-      <MarketTicker tickers={marketTicker} loading={loading} />
+      <MarketTicker tickers={marketTicker} loading={loading} lastUpdated={tickerLastUpdated} />
 
       {/* Tabs */}
       <div className="tabs">
@@ -1389,6 +1394,7 @@ export default function App() {
         <ImportPreviewModal
           data={importPreview}
           existingSymbols={new Set(stockSummary.map(s => s.symbol))}
+          stockSummary={stockSummary}
           onConfirm={handleConfirmImport}
           onCancel={() => setImportPreview(null)}
         />

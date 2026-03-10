@@ -33,7 +33,7 @@ const ChangeLine = ({ label, pct, amt }) => {
   );
 };
 
-export default function MarketTicker({ tickers, loading }) {
+export default function MarketTicker({ tickers, loading, lastUpdated }) {
   if (!tickers || tickers.length === 0) {
     if (loading) {
       return (
@@ -48,7 +48,7 @@ export default function MarketTicker({ tickers, loading }) {
   }
 
   // Row 1: indices, Row 2: rest — use same column count so they align
-  const INDEX_KEYS = new Set(['SENSEX', 'NIFTY50', 'SGX', 'NIKKEI', 'SGDINR', 'USDINR']);
+  const INDEX_KEYS = new Set(['SENSEX', 'NIFTY50', 'GIFTNIFTY', 'SGX', 'NIKKEI', 'SGDINR', 'USDINR']);
   const row1 = tickers.filter((t) => INDEX_KEYS.has(t.key));
   const row2 = tickers.filter((t) => !INDEX_KEYS.has(t.key));
   const cols = Math.max(row1.length, row2.length);
@@ -103,6 +103,8 @@ export default function MarketTicker({ tickers, loading }) {
     );
   };
 
+  const fmtTime = lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
+
   return (
     <div style={styles.bar}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
@@ -111,6 +113,11 @@ export default function MarketTicker({ tickers, loading }) {
       {row2.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, borderTop: '1px solid var(--border)' }}>
           {row2.map((t, i) => renderItem(t, i, row2.length))}
+        </div>
+      )}
+      {fmtTime && (
+        <div style={{ textAlign: 'right', fontSize: '13px', color: 'var(--text-dim)', padding: '6px 12px 2px', fontWeight: 500 }}>
+          Last updated: {fmtTime}
         </div>
       )}
     </div>
