@@ -34,6 +34,7 @@ from . import stock_service
 from . import zerodha_service
 from . import contract_note_parser
 from . import dividend_parser
+from . import epaper_service
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -2375,6 +2376,86 @@ def delete_si_endpoint(si_id: str):
         return si_delete(si_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════
+#  ADVISOR (Business Line + AI Analysis)
+# ══════════════════════════════════════════════════════════
+
+@app.get("/api/advisor/status")
+def advisor_status():
+    return epaper_service.get_status()
+
+
+@app.get("/api/advisor/insights")
+def get_advisor_insights():
+    """Get today's personalized financial insights from Business Line."""
+    articles = epaper_service.fetch_todays_articles()
+    # Get portfolio symbols for matching
+    try:
+        holdings = db.get_all_holdings()
+        symbols = list(set(h.symbol for h in holdings))
+    except Exception:
+        symbols = []
+    insights = epaper_service.generate_insights(articles, symbols)
+    return {
+        "date": date.today().isoformat(),
+        "insights": insights,
+        "articles_count": len(articles),
+        "has_ai": epaper_service.has_api_key(),
+    }
+
+
+@app.post("/api/advisor/refresh")
+def refresh_advisor():
+    """Force re-scrape articles and regenerate insights."""
+    articles = epaper_service.fetch_todays_articles(force_refresh=True)
+    try:
+        holdings = db.get_all_holdings()
+        symbols = list(set(h.symbol for h in holdings))
+    except Exception:
+        symbols = []
+    # Clear insights cache so they regenerate
+    today = date.today().isoformat()
+    with epaper_service._cache_lock:
+        epaper_service._insights_cache.pop(today, None)
+    insights = epaper_service.generate_insights(articles, symbols)
+    return {
+        "date": today,
+        "insights": insights,
+        "articles_count": len(articles),
+        "has_ai": epaper_service.has_api_key(),
+    }
+
+
+@app.post("/api/advisor/chat")
+def advisor_chat(body: dict):
+    """Chat with the AI advisor about today's market news."""
+    message = body.get("message", "").strip()
+    history = body.get("history", [])
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    articles = epaper_service.fetch_todays_articles()
+    try:
+        holdings = db.get_all_holdings()
+        symbols = list(set(h.symbol for h in holdings))
+    except Exception:
+        symbols = []
+    response = epaper_service.chat(message, articles, symbols, history)
+    return {"response": response}
+
+
+@app.get("/api/advisor/articles")
+def get_advisor_articles():
+    """Get raw scraped articles from today's Business Line."""
+    articles = epaper_service.fetch_todays_articles()
+    # Strip body to reduce payload
+    return [{
+        "title": a["title"],
+        "summary": a.get("summary", ""),
+        "section": a["section"],
+        "url": a["url"],
+    } for a in articles]
 
 
 # ══════════════════════════════════════════════════════════

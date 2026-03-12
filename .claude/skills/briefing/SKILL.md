@@ -1,71 +1,112 @@
 ---
 name: briefing
-description: Generate a comprehensive daily market briefing from Business Line articles
-user_invocable: true
+description: Generate a comprehensive daily market briefing from Business Line articles. Use when user asks for market news, daily briefing, stock recommendations, or financial analysis.
 ---
 
 # Daily Market Briefing
 
-Generate a comprehensive market briefing from today's Business Line articles.
+Generate a comprehensive, detailed market briefing from today's Business Line articles.
 
 ## Steps
 
 1. **Fetch articles** from the backend:
-   ```
+   ```bash
    curl -s http://localhost:8000/api/advisor/articles
    ```
    This returns a JSON array of scraped articles with fields: title, summary, body, section, url.
 
 2. **Fetch portfolio holdings** for context:
-   ```
+   ```bash
    curl -s http://localhost:8000/api/portfolio/stock-summary
    ```
 
 3. **Fetch advisor insights** (keyword-matched or AI-generated):
-   ```
+   ```bash
    curl -s http://localhost:8000/api/advisor/insights
    ```
 
-4. If the articles list is empty or the backend is down, inform the user and suggest running:
-   ```
+4. If the articles list is empty or the backend is down, try refreshing first:
+   ```bash
    curl -s -X POST http://localhost:8000/api/advisor/refresh
    ```
 
-5. **Analyze ALL articles** (not just portfolio-matched ones) and produce a briefing organized into these sections:
+5. **Read the BODY of every article** — not just headlines. The `body` field contains the actual article text (up to 3000 chars). Use this to extract:
+   - Specific investment amounts ("Apollo-led funds invest $500M in Adani Energy")
+   - Company names involved in deals, mergers, partnerships
+   - Negative news — lawsuits, frauds, earnings misses, downgrades
+   - Analyst recommendations with target prices
+   - Government policy changes with affected companies
+   - IPO details with subscription recommendations
 
-### Output Format
+6. **Produce the briefing** using the format below.
 
-```
-## Market Overview
-- Nifty/Sensex direction, key movers, FII/DII flows
+## Output Format
 
-## Actionable Stock Ideas
+### Market Overview
+- Nifty/Sensex direction, % change, key index levels
+- FII/DII flow direction if mentioned
+- Top gainers and losers by name
+
+### Actionable Stock Ideas
 | Stock | Signal | Detail |
-Table of specific buy/sell/watch recommendations from articles
+|-------|--------|--------|
+List ALL stocks mentioned with specific recommendations. Include:
+- Price targets if mentioned
+- Analyst house (Jefferies, CLSA, etc.) if mentioned
+- Reason for the call (order win, earnings, sector tailwind)
 
-## Sector-specific section (if major news)
-E.g. "Jal Jeevan Mission Winners" or "Oil & Energy Crisis" — any theme with 3+ articles
+### Corporate Actions & Deals
+For EVERY article about investments, acquisitions, fundraising, partnerships:
+- WHO is investing/acquiring
+- HOW MUCH (₹ or $ amount)
+- IN WHAT (target company/unit)
+- WHY it matters for investors
+Example: "Apollo-led funds invested $500M in Adani Energy Solutions' transmission unit — signals institutional confidence in India's power infra buildout"
 
-## Sector Impacts
-- Group by sector: Oil/Energy, Banking, IT, Pharma, Defence, Auto, FMCG, Metals, Infra, Real Estate
-- Only include sectors that have actual news today
+### Negative News & Risks
+For EVERY article about bad news, fraud, regulatory action, earnings miss:
+- WHAT happened
+- WHO is affected
+- HOW BAD (quantify if possible — stock drop %, fine amount, etc.)
+- WHAT TO DO (sell/avoid/watch)
+Example: "CBI arrested Darwin Labs co-founder in crypto fraud — avoid related stocks, check exposure to crypto-adjacent companies"
 
-## Mutual Fund / SIP Insights
-- New fund launches, SIP trends, NAV impacts, AMC news, IPO reviews
+### Sector Themes
+Group related articles into themes. For each theme with 3+ articles:
+- Name the theme (e.g., "Oil Crisis Impact", "Jal Jeevan Mission Beneficiaries")
+- List ALL affected companies with specific context
+- Actionable takeaway
 
-## Macro & Geopolitical Risks
-- RBI policy, inflation, crude oil, rupee, global cues, geopolitical events
+### Sector Impacts
+Cover EVERY sector that has news:
+- Oil/Energy, Banking/NBFC, IT, Pharma, Defence, Auto/EV, FMCG, Metals, Infra, Real Estate, Insurance, Hospitality
+- For each: what happened, which companies, direction (bullish/bearish)
 
-## Key Takeaway
-- 2-3 sentence actionable summary of what an investor should do today
-```
+### Mutual Fund / SIP / Investment Products
+- New fund launches (name, NAV, type)
+- SIP trend data
+- AMC-specific news
+- IPO reviews with subscribe/avoid recommendation
+- FD/RD rate changes if any
 
-### Guidelines
-- Cover ALL 100+ articles, not just portfolio stocks
-- Lead with the most urgent/actionable items
-- Use tables for stock picks (Stock | Signal | Detail)
-- Flag HIGH urgency items that need action today
-- Include source article titles for key insights
-- Use INR for all currency
-- Be direct and specific — no vague "markets may move" language
-- If crude oil, gold, or rupee have significant moves, highlight them prominently
+### Macro & Geopolitical
+- RBI policy, inflation data
+- Crude oil price and direction
+- Rupee level and trend
+- Gold/Silver prices
+- Global cues (US, China, EU)
+- Geopolitical events with market impact
+
+### Key Takeaway
+2-3 sentences: What should an investor DO today? Be specific.
+
+## Critical Guidelines
+- **Read article bodies, not just headlines** — the detail is in the body text
+- **Cover ALL articles** — every single one. Don't skip any section
+- **Be specific** — include ₹ amounts, % changes, company names, analyst names
+- **Every company mention = potential insight** — if Company A invests in Company B, BOTH are relevant
+- **Bad news is as important as good news** — frauds, arrests, downgrades, supply disruptions
+- **No vague language** — don't say "markets may move", say "Nifty fell 1.2% to 21,850"
+- **Connect the dots** — if crude rises, mention which companies benefit (ONGC, Oil India) AND which suffer (paints, airlines, logistics)
+- Use INR for all currency references
+- Flag items needing immediate action with **[ACTION TODAY]**

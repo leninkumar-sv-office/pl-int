@@ -440,3 +440,30 @@ export async function deleteSI(siId) {
   const { data } = await api.delete(`/standing-instructions/${siId}`);
   return data;
 }
+
+// ── Advisor (Business Line + AI) ────────────────────────
+
+export async function getAdvisorInsights() {
+  const { data } = await api.get('/advisor/insights', { timeout: 120000 });
+  return data;
+}
+
+export async function refreshAdvisor() {
+  const { data } = await api.post('/advisor/refresh', null, { timeout: 120000 });
+  return data;
+}
+
+export async function advisorChat(message, history = []) {
+  const { data } = await api.post('/advisor/chat', { message, history }, { timeout: 60000 });
+  return data;
+}
+
+export async function getAdvisorArticles() {
+  const { data } = await api.get('/advisor/articles', { timeout: 120000 });
+  return data;
+}
+
+export async function getAdvisorStatus() {
+  const { data } = await api.get('/advisor/status');
+  return data;
+}

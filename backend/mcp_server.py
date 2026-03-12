@@ -648,5 +648,47 @@ def add_si(bank: str, beneficiary: str, amount: float, frequency: str,
     }))
 
 
+# ═══════════════════════════════════════════════════════════
+#  ADVISOR — Business Line News & Insights
+# ═══════════════════════════════════════════════════════════
+
+@mcp.tool()
+def get_todays_market_news() -> str:
+    """Get today's Business Line articles from key financial sections.
+
+    Scrapes articles from: Markets, Stock Markets, Portfolio, Money & Banking,
+    Economy, and Companies sections of thehindubusinessline.com.
+
+    Returns article titles, summaries, sections, and URLs.
+    Use this to understand what's happening in Indian markets today.
+    """
+    return _fmt(_get("/advisor/articles"))
+
+
+@mcp.tool()
+def get_portfolio_insights() -> str:
+    """Get personalized financial insights from today's Business Line news.
+
+    Analyzes today's articles against your portfolio holdings and returns:
+    - Articles mentioning your stocks (with sentiment: positive/negative/neutral)
+    - Market-moving headlines (SENSEX, NIFTY, RBI, crude, rupee)
+    - Sector impacts
+    - Each insight includes: headline, stocks_affected, sentiment, action, urgency
+
+    Call this to get a quick briefing of what matters for YOUR portfolio today.
+    """
+    return _fmt(_get("/advisor/insights"))
+
+
+@mcp.tool()
+def refresh_market_news() -> str:
+    """Force re-scrape today's Business Line articles and regenerate insights.
+
+    Use this if you want the latest articles (e.g., after market hours when
+    new articles may have been published).
+    """
+    return _fmt(_post("/advisor/refresh"))
+
+
 if __name__ == "__main__":
     mcp.run()
