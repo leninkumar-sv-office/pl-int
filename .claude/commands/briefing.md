@@ -1,8 +1,9 @@
-Generate a comprehensive daily market briefing from Business Line articles.
+Generate a comprehensive daily market briefing from Business Line + The Hindu articles.
 
 ## Steps
 
 1. Fetch articles: `curl -s http://localhost:8000/api/advisor/articles`
+   - Returns articles with `source` field: "Business Line" or "The Hindu"
 2. Fetch portfolio: `curl -s http://localhost:8000/api/portfolio/stock-summary`
 3. Fetch insights: `curl -s http://localhost:8000/api/advisor/insights`
 4. If empty, refresh: `curl -s -X POST http://localhost:8000/api/advisor/refresh`
@@ -15,20 +16,20 @@ Read the BODY of every article (not just headlines). Extract specific details:
 
 ## Output as:
 
+Start with: > Sources: X articles from Business Line, Y articles from The Hindu
+
 ### Market Overview
 Nifty/Sensex direction, % change, key levels, top gainers/losers
 
 ### Actionable Stock Ideas
-| Stock | Signal | Detail |
+| Stock | Signal | Source | Detail |
 Table with ALL stock recommendations, target prices, analyst names
 
 ### Corporate Actions & Deals
 Every investment/acquisition/fundraising with WHO, HOW MUCH, IN WHAT, WHY it matters.
-E.g. "Apollo-led funds invested $500M in Adani Energy Solutions unit"
 
 ### Negative News & Risks
 Every bad news item with WHAT, WHO, HOW BAD, WHAT TO DO.
-E.g. "CBI arrested Darwin Labs co-founder in crypto fraud — avoid related stocks"
 
 ### Sector Themes
 Group 3+ related articles into named themes with affected companies and takeaway
@@ -46,9 +47,9 @@ RBI, inflation, crude, rupee, gold, global cues
 2-3 specific actionable sentences
 
 ## Rules
-- Cover ALL 100+ articles, read bodies not just headlines
+- Cover ALL articles from BOTH sources, read bodies not just headlines
 - Be specific: ₹ amounts, % changes, company names
-- Every company mention = insight (investor AND investee)
+- Cross-reference between BL and TH for consensus/divergence
 - Bad news equally important as good news
 - Connect dots (crude up → paints down, ONGC up)
 - No vague language. Flag urgent items with [ACTION TODAY]

@@ -2447,7 +2447,7 @@ def advisor_chat(body: dict):
 
 @app.get("/api/advisor/articles")
 def get_advisor_articles():
-    """Get raw scraped articles from today's Business Line."""
+    """Get raw scraped articles from Business Line + The Hindu."""
     articles = epaper_service.fetch_todays_articles()
     return [{
         "title": a["title"],
@@ -2455,6 +2455,7 @@ def get_advisor_articles():
         "body": a.get("body", ""),
         "section": a["section"],
         "url": a["url"],
+        "source": a.get("source", "Business Line"),
     } for a in articles]
 
 

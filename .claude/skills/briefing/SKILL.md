@@ -1,11 +1,11 @@
 ---
 name: briefing
-description: Generate a comprehensive daily market briefing from Business Line articles. Use when user asks for market news, daily briefing, stock recommendations, or financial analysis.
+description: Generate a comprehensive daily market briefing from Business Line and The Hindu articles. Use when user asks for market news, daily briefing, stock recommendations, or financial analysis.
 ---
 
 # Daily Market Briefing
 
-Generate a comprehensive, detailed market briefing from today's Business Line articles.
+Generate a comprehensive, detailed market briefing from today's Business Line + The Hindu articles.
 
 ## Steps
 
@@ -13,7 +13,7 @@ Generate a comprehensive, detailed market briefing from today's Business Line ar
    ```bash
    curl -s http://localhost:8000/api/advisor/articles
    ```
-   This returns a JSON array of scraped articles with fields: title, summary, body, section, url.
+   Returns a JSON array with fields: title, summary, body, section, url, source ("Business Line" or "The Hindu").
 
 2. **Fetch portfolio holdings** for context:
    ```bash
@@ -42,18 +42,22 @@ Generate a comprehensive, detailed market briefing from today's Business Line ar
 
 ## Output Format
 
+Start with a source summary line:
+> Sources: X articles from Business Line, Y articles from The Hindu
+
 ### Market Overview
 - Nifty/Sensex direction, % change, key index levels
 - FII/DII flow direction if mentioned
 - Top gainers and losers by name
 
 ### Actionable Stock Ideas
-| Stock | Signal | Detail |
-|-------|--------|--------|
+| Stock | Signal | Source | Detail |
+|-------|--------|--------|--------|
 List ALL stocks mentioned with specific recommendations. Include:
 - Price targets if mentioned
 - Analyst house (Jefferies, CLSA, etc.) if mentioned
 - Reason for the call (order win, earnings, sector tailwind)
+- Source column: BL or TH
 
 ### Corporate Actions & Deals
 For EVERY article about investments, acquisitions, fundraising, partnerships:
@@ -102,11 +106,12 @@ Cover EVERY sector that has news:
 
 ## Critical Guidelines
 - **Read article bodies, not just headlines** — the detail is in the body text
-- **Cover ALL articles** — every single one. Don't skip any section
+- **Cover ALL articles from BOTH sources** — Business Line AND The Hindu
 - **Be specific** — include ₹ amounts, % changes, company names, analyst names
 - **Every company mention = potential insight** — if Company A invests in Company B, BOTH are relevant
 - **Bad news is as important as good news** — frauds, arrests, downgrades, supply disruptions
 - **No vague language** — don't say "markets may move", say "Nifty fell 1.2% to 21,850"
 - **Connect the dots** — if crude rises, mention which companies benefit (ONGC, Oil India) AND which suffer (paints, airlines, logistics)
+- **Cross-reference between sources** — if both BL and TH cover same topic, note the consensus or divergence
 - Use INR for all currency references
 - Flag items needing immediate action with **[ACTION TODAY]**
