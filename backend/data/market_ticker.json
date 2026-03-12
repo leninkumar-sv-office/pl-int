@@ -79,7 +79,7 @@
     "label": "SGD/INR",
     "type": "forex",
     "unit": "",
-    "price": 72.2,
+    "price": 72.21,
     "change": 0.58,
     "change_pct": 0.81,
     "source": "yahoo/google"

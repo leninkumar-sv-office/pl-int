@@ -733,13 +733,15 @@ function matchesPreset(stock, colId, preset) {
   }
 }
 
-/* ── Sort by % p.a. support ───────────────────────────── */
-const PA_SORT_FIELDS = new Set([
+/* ── Sort by ₹ / % total / % p.a. support ─────────────── */
+const PL_SORT_FIELDS = new Set([
   'unrealized_profit', 'ltcg_unrealized_profit', 'stcg_unrealized_profit',
   'unrealized_loss', 'ltcg_unrealized_loss', 'stcg_unrealized_loss',
   'unrealized_pl', 'ltcg_unrealized_pl', 'stcg_unrealized_pl',
   'realized_pl', 'ltcg_realized_pl', 'stcg_realized_pl',
 ]);
+const SORT_MODES = ['inr', 'pct', 'pa'];
+const SORT_MODE_LABELS = { inr: '₹', pct: '%', pa: '% p.a.' };
 
 function sortPaVal(stock, field) {
   let val;
@@ -796,6 +798,39 @@ function sortPaVal(stock, field) {
   }
   if (invested <= 0 || diffDays <= 0) return val >= 0 ? -Infinity : Infinity;
   return (Math.pow(1 + val / invested, 365 / diffDays) - 1) * 100;
+}
+
+function sortPctVal(stock, field) {
+  let val;
+  switch (field) {
+    case 'unrealized_profit': val = stock.unrealized_profit || 0; break;
+    case 'ltcg_unrealized_profit': val = stock.ltcg_unrealized_profit || 0; break;
+    case 'stcg_unrealized_profit': val = stock.stcg_unrealized_profit || 0; break;
+    case 'unrealized_loss': val = stock.unrealized_loss || 0; break;
+    case 'ltcg_unrealized_loss': val = stock.ltcg_unrealized_loss || 0; break;
+    case 'stcg_unrealized_loss': val = stock.stcg_unrealized_loss || 0; break;
+    case 'unrealized_pl': val = (stock.unrealized_profit || 0) + (stock.unrealized_loss || 0); break;
+    case 'ltcg_unrealized_pl': val = (stock.ltcg_unrealized_profit || 0) + (stock.ltcg_unrealized_loss || 0); break;
+    case 'stcg_unrealized_pl': val = (stock.stcg_unrealized_profit || 0) + (stock.stcg_unrealized_loss || 0); break;
+    case 'realized_pl': val = stock.realized_pl || 0; break;
+    case 'ltcg_realized_pl': val = stock.ltcg_realized_pl || 0; break;
+    case 'stcg_realized_pl': val = stock.stcg_realized_pl || 0; break;
+    default: return 0;
+  }
+  const pfx = field.startsWith('ltcg_') ? 'ltcg' : field.startsWith('stcg_') ? 'stcg' : 'total';
+  const isRealized = field.includes('realized') && !field.includes('unrealized');
+  let invested;
+  if (isRealized) {
+    if (pfx === 'ltcg') invested = stock.ltcg_sold_cost || 0;
+    else if (pfx === 'stcg') invested = stock.stcg_sold_cost || 0;
+    else invested = (stock.ltcg_sold_cost || 0) + (stock.stcg_sold_cost || 0);
+  } else {
+    if (pfx === 'ltcg') invested = stock.ltcg_invested || 0;
+    else if (pfx === 'stcg') invested = stock.stcg_invested || 0;
+    else invested = stock.total_invested || 0;
+  }
+  if (invested <= 0) return val >= 0 ? -Infinity : Infinity;
+  return (val / invested) * 100;
 }
 
 const FILTER_INPUT_STYLE = {
@@ -859,8 +894,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     try { const s = localStorage.getItem('stockColumnFilters'); return s ? JSON.parse(s) : {}; } catch { return {}; }
   });
 
-  // ── Sort by % p.a. toggle ──
-  const [sortByPa, setSortByPa] = useState(false);
+  // ── Sort mode toggle: inr → pct → pa ──
+  const [sortMode, setSortMode] = useState('inr');
+  const cycleSortMode = () => setSortMode(prev => SORT_MODES[(SORT_MODES.indexOf(prev) + 1) % SORT_MODES.length]);
 
   const toggleCol = (id) => {
     setVisibleCols(prev => {
@@ -1004,9 +1040,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
   const sorted = [...filtered].sort((a, b) => {
     let aVal, bVal;
-    if (sortByPa && PA_SORT_FIELDS.has(sortField)) {
+    if (sortMode === 'pa' && PL_SORT_FIELDS.has(sortField)) {
       aVal = sortPaVal(a, sortField);
       bVal = sortPaVal(b, sortField);
+    } else if (sortMode === 'pct' && PL_SORT_FIELDS.has(sortField)) {
+      aVal = sortPctVal(a, sortField);
+      bVal = sortPctVal(b, sortField);
     } else switch (sortField) {
       case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
       case 'total_held_qty': aVal = a.total_held_qty; bVal = b.total_held_qty; break;
@@ -1131,6 +1170,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   }, 0);
   const selectedCost = selectedItems.reduce((sum, item) => sum + item.holding.buy_price * item.holding.quantity, 0);
   const selectedPLPct = selectedCost > 0 ? (selectedPL / selectedCost * 100) : 0;
+  const selectedEarliestDate = selectedItems.reduce((min, item) => {
+    const d = item.holding.buy_date;
+    return d && d < min ? d : min;
+  }, '9999-12-31');
+  const selectedDays = selectedEarliestDate !== '9999-12-31' ? Math.floor((Date.now() - new Date(selectedEarliestDate + 'T00:00:00').getTime()) / 86400000) : 0;
+  const selectedPLPa = selectedDays > 0 && selectedCost > 0 ? (Math.pow(1 + selectedPL / selectedCost, 365 / selectedDays) - 1) * 100 : null;
 
   return (
     <div className="section">
@@ -1485,35 +1530,35 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
                 <span
-                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
-                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
-                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
-                >{sortByPa ? '% p.a.' : '₹'}</span>
+                  onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
+                >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
               {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ minWidth: '120px' }}>Status</th>}
               {col('unrealizedLoss') && <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
                 <span
-                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
-                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
-                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
-                >{sortByPa ? '% p.a.' : '₹'}</span>
+                  onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
+                >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
               {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
                 <span
-                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
-                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
-                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
-                >{sortByPa ? '% p.a.' : '₹'}</span>
+                  onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
+                >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
               {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
                 <span
-                  onClick={(e) => { e.stopPropagation(); setSortByPa(v => !v); }}
-                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortByPa ? 'var(--blue)' : 'var(--bg-input)', color: sortByPa ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
-                  title={sortByPa ? 'Sorting by % p.a. — click for ₹' : 'Sorting by ₹ — click for % p.a.'}
-                >{sortByPa ? '% p.a.' : '₹'}</span>
+                  onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
+                >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
               {col('dividends') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
                 Dividends<SortIcon field="total_dividend" />
@@ -2200,7 +2245,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             onClick={handleBulkSell}
             style={{ fontWeight: 600, padding: '8px 24px' }}
           >
-            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} share{selectedQty !== 1 ? 's' : ''}{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)} (${selectedPLPct >= 0 ? '+' : ''}${selectedPLPct.toFixed(2)}%)` : ''})
+            Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} share{selectedQty !== 1 ? 's' : ''}{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)} (${selectedPLPct >= 0 ? '+' : ''}${selectedPLPct.toFixed(2)}%${selectedPLPa !== null ? `, ${selectedPLPa >= 0 ? '+' : ''}${selectedPLPa.toFixed(1)}% p.a.` : ''})` : ''})
           </button>
         </div>
       )}
