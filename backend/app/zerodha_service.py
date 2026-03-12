@@ -35,6 +35,9 @@ _API_VERSION = "3"
 _api_key: str = os.getenv("ZERODHA_API_KEY", "").strip()
 _api_secret: str = os.getenv("ZERODHA_API_SECRET", "").strip()
 _access_token: str = os.getenv("ZERODHA_ACCESS_TOKEN", "").strip()
+_user_id: str = os.getenv("ZERODHA_USER_ID", "").strip()
+_password: str = os.getenv("ZERODHA_PASSWORD", "").strip()
+_totp_secret: str = os.getenv("ZERODHA_TOTP_SECRET", "").strip()
 
 # Log what we loaded (masked)
 if _api_key:
@@ -95,10 +98,27 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
             _auth_failed = True
             _last_error = f"Auth failed (403): {resp.text[:200]}"
             print(f"[Zerodha] {_last_error}")
-            print(f"[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
             with _lock:
                 global _session_valid
                 _session_valid = False
+            # Try auto-login if credentials are available
+            if can_auto_login() and not _auto_login_in_progress:
+                print("[Zerodha] Token expired — attempting auto-login...")
+                if auto_login():
+                    # Retry the original request with new token
+                    try:
+                        retry_resp = requests.get(
+                            f"{_BASE_URL}{path}",
+                            headers=_headers(),
+                            params=params,
+                            timeout=(5, 10),
+                        )
+                        if retry_resp.status_code == 200:
+                            return retry_resp.json()
+                    except Exception:
+                        pass
+            else:
+                print(f"[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
             return None
         else:
             _last_error = f"API error {resp.status_code}: {resp.text[:100]}"
@@ -205,6 +225,119 @@ def _update_env(key: str, value: str):
             f.writelines(lines)
     except Exception as e:
         print(f"[Zerodha] Failed to update .env: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+#  AUTO-LOGIN (TOTP-based)
+# ═══════════════════════════════════════════════════════════
+
+_auto_login_lock = threading.Lock()
+_auto_login_in_progress = False
+
+
+def can_auto_login() -> bool:
+    """Check if we have credentials for automated login."""
+    return bool(_api_key and _api_secret and _user_id and _password and _totp_secret)
+
+
+def auto_login() -> bool:
+    """Automatically login to Zerodha using stored credentials + TOTP.
+
+    Flow:
+      1. POST kite.zerodha.com/api/login with user_id + password → request_id
+      2. Generate TOTP code from secret
+      3. POST kite.zerodha.com/api/twofa with request_id + totp → session
+      4. GET connect/login URL with session cookies → redirect with request_token
+      5. Exchange request_token → access_token via generate_session()
+
+    Returns True if new access_token was obtained.
+    """
+    global _auto_login_in_progress, _access_token, _session_valid, _auth_failed, _conn_failed
+
+    if not can_auto_login():
+        print("[Zerodha] Auto-login not possible — missing credentials")
+        return False
+
+    with _auto_login_lock:
+        if _auto_login_in_progress:
+            return False
+        _auto_login_in_progress = True
+
+    try:
+        import pyotp
+        session = requests.Session()
+
+        # Step 1: Login with user_id + password
+        print("[Zerodha] Auto-login: posting credentials...")
+        login_resp = session.post(
+            "https://kite.zerodha.com/api/login",
+            data={"user_id": _user_id, "password": _password},
+            timeout=15,
+        )
+        if login_resp.status_code != 200:
+            print(f"[Zerodha] Auto-login: login failed ({login_resp.status_code}): {login_resp.text[:200]}")
+            return False
+
+        login_data = login_resp.json()
+        request_id = login_data.get("data", {}).get("request_id", "")
+        if not request_id:
+            print(f"[Zerodha] Auto-login: no request_id in response: {login_data}")
+            return False
+
+        # Step 2: Generate TOTP and submit 2FA
+        totp = pyotp.TOTP(_totp_secret)
+        totp_code = totp.now()
+        print(f"[Zerodha] Auto-login: submitting TOTP...")
+
+        # Use the 2FA type from login response (usually "app_code" for TOTP)
+        twofa_type = login_data.get("data", {}).get("twofa_type", "app_code")
+        twofa_resp = session.post(
+            "https://kite.zerodha.com/api/twofa",
+            data={
+                "user_id": _user_id,
+                "request_id": request_id,
+                "twofa_value": totp_code,
+                "twofa_type": twofa_type,
+            },
+            timeout=15,
+        )
+        if twofa_resp.status_code != 200:
+            print(f"[Zerodha] Auto-login: 2FA failed ({twofa_resp.status_code}): {twofa_resp.text[:200]}")
+            return False
+
+        # Step 3: Hit the Kite Connect login URL with session cookies
+        # Follow all redirects (login → /connect/finish → callback with request_token)
+        connect_url = f"https://kite.zerodha.com/connect/login?v={_API_VERSION}&api_key={_api_key}"
+        print("[Zerodha] Auto-login: fetching connect login for request_token...")
+
+        connect_resp = session.get(connect_url, allow_redirects=True, timeout=15)
+        final_url = connect_resp.url
+
+        # Extract request_token from final redirect URL
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(final_url)
+        params = parse_qs(parsed.query)
+        request_token = params.get("request_token", [None])[0]
+
+        if not request_token:
+            print(f"[Zerodha] Auto-login: request_token not found in final URL: {final_url[:200]}")
+            return False
+
+        # Step 4: Exchange request_token for access_token
+        print(f"[Zerodha] Auto-login: exchanging request_token for access_token...")
+        success = generate_session(request_token)
+        if success:
+            print("[Zerodha] Auto-login: SUCCESS — new access token obtained")
+        else:
+            print("[Zerodha] Auto-login: token exchange failed")
+        return success
+
+    except Exception as e:
+        print(f"[Zerodha] Auto-login error: {e}")
+        return False
+    finally:
+        with _auto_login_lock:
+            _auto_login_in_progress = False
 
 
 # ═══════════════════════════════════════════════════════════

@@ -58,6 +58,10 @@ export default function App() {
   const [marketTicker, setMarketTicker] = useState([]);
   const [tickerLastUpdated, setTickerLastUpdated] = useState(null);
   const [refreshInterval, setRefreshInterval] = useState(300); // seconds
+  const [pageRefreshInterval, setPageRefreshInterval] = useState(() => {
+    const saved = localStorage.getItem('pageRefreshInterval');
+    return saved ? Number(saved) : 600; // default 10 min
+  });
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -236,6 +240,23 @@ export default function App() {
     const interval = setInterval(liveRefresh, refreshInterval * 1000);
     return () => clearInterval(interval);
   }, [liveRefresh, refreshInterval]);
+
+  // Page auto-refresh: full data reload at chosen interval (persisted)
+  const [pageRefreshCountdown, setPageRefreshCountdown] = useState(pageRefreshInterval);
+  useEffect(() => {
+    if (pageRefreshInterval <= 0) return; // disabled
+    setPageRefreshCountdown(pageRefreshInterval);
+    const tick = setInterval(() => {
+      setPageRefreshCountdown(prev => {
+        if (prev <= 1) {
+          loadData();
+          return pageRefreshInterval;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [pageRefreshInterval, loadData]);
 
   // Re-fetch Zerodha status + data when user returns to this tab
   // (e.g. after completing Zerodha login in another tab)
@@ -919,6 +940,12 @@ export default function App() {
     }
   };
 
+  const handlePageRefreshChange = (e) => {
+    const val = Number(e.target.value);
+    setPageRefreshInterval(val);
+    localStorage.setItem('pageRefreshInterval', String(val));
+  };
+
   const handleSetToken = async () => {
     if (!tokenInput.trim()) return;
     try {
@@ -1160,13 +1187,32 @@ export default function App() {
               className="refresh-select"
               value={refreshInterval}
               onChange={handleIntervalChange}
-              title="Auto-refresh interval"
+              title="Price refresh interval (live fetch from Zerodha)"
             >
               <option value={60}>1 min</option>
               <option value={120}>2 min</option>
               <option value={300}>5 min</option>
               <option value={600}>10 min</option>
             </select>
+          </div>
+          <div className="refresh-control" title="Full page data reload interval">
+            <select
+              className="refresh-select"
+              value={pageRefreshInterval}
+              onChange={handlePageRefreshChange}
+              style={{ minWidth: 90 }}
+            >
+              <option value={0}>Off</option>
+              <option value={300}>5 min</option>
+              <option value={600}>10 min</option>
+              <option value={900}>15 min</option>
+              <option value={1800}>30 min</option>
+            </select>
+            {pageRefreshInterval > 0 && (
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 4 }}>
+                {Math.floor(pageRefreshCountdown / 60)}:{String(pageRefreshCountdown % 60).padStart(2, '0')}
+              </span>
+            )}
           </div>
           <button className="btn btn-ghost" onClick={handleRefresh} disabled={loading}>
             {loading ? '⟳ Loading...' : '⟳ Refresh'}

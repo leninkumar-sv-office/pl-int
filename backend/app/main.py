@@ -74,11 +74,27 @@ def on_startup():
     except Exception as e:
         print(f"[App] Pre-warm error (non-fatal): {e}")
 
-    # Check Zerodha connection
+    # Check Zerodha connection — auto-login if token expired/missing
     if zerodha_service.is_configured():
         if zerodha_service.is_session_valid():
-            print(f"[App] Zerodha configured — API key: {zerodha_service._api_key[:4]}..., "
-                  f"access token: {'set' if zerodha_service._access_token else 'NOT SET'}")
+            # Validate existing token
+            valid = zerodha_service.validate_session()
+            if valid:
+                print(f"[App] Zerodha configured — session valid, API key: {zerodha_service._api_key[:4]}...")
+            elif zerodha_service.can_auto_login():
+                print("[App] Zerodha token expired — attempting auto-login...")
+                if zerodha_service.auto_login():
+                    print("[App] Zerodha auto-login successful!")
+                else:
+                    print("[App] Zerodha auto-login failed — visit /api/zerodha/login")
+            else:
+                print("[App] Zerodha token invalid — visit /api/zerodha/login-url or POST /api/zerodha/set-token")
+        elif zerodha_service.can_auto_login():
+            print("[App] Zerodha no access token — attempting auto-login...")
+            if zerodha_service.auto_login():
+                print("[App] Zerodha auto-login successful!")
+            else:
+                print("[App] Zerodha auto-login failed — visit /api/zerodha/login")
         else:
             print("[App] Zerodha API key configured but no access token — "
                   "visit /api/zerodha/login-url or POST /api/zerodha/set-token")
