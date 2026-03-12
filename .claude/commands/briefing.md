@@ -1,70 +1,62 @@
-Generate a comprehensive daily market briefing from Business Line + The Hindu articles.
+Generate a CONCISE daily market briefing dashboard from Business Line + The Hindu articles.
 
 ## Steps
 
 1. Fetch articles: `curl -s http://localhost:8000/api/advisor/articles`
-   - Returns articles with `source` field: "Business Line" or "The Hindu"
 2. Fetch portfolio: `curl -s http://localhost:8000/api/portfolio/stock-summary`
 3. Fetch insights: `curl -s http://localhost:8000/api/advisor/insights`
-4. Fetch market ticker (GIFT Nifty, Sensex, crude, gold, etc.): `curl -s http://localhost:8000/api/market-ticker`
+4. Fetch market ticker: `curl -s http://localhost:8000/api/market-ticker`
 5. If empty, refresh: `curl -s -X POST http://localhost:8000/api/advisor/refresh`
 
-Read the BODY of every article (not just headlines). Extract specific details:
-- Investment amounts, deal sizes, company names
-- Analyst recommendations with target prices
-- Bad news: frauds, arrests, downgrades, supply disruptions
-- Government policy changes and affected companies
+Read article BODIES for data extraction, but keep OUTPUT concise.
 
-## Output as:
+## CRITICAL: BREVITY
 
-Start with: > Sources: X articles from Business Line, Y articles from The Hindu
+This is a DASHBOARD, not an article. Rules:
+- Bullets: MAX 10-15 words each
+- Table Detail cells: MAX 12 words each
+- No sentences in tables — use fragments: "USFDA clearance. Holding Rs.1.57L"
+- Numbers over prose: "Rs.3.6L cr fiscal hit" not "the fiscal burden could increase..."
+
+## Output format:
+
+> Sources: X from Business Line, Y from The Hindu
 
 ### Market Overview
-- **GIFT Nifty**: Level, change vs Nifty close, gap up/down signal for next session
-- Nifty/Sensex direction, % change, key levels, top gainers/losers
+Short bullets: "GIFT Nifty: 23,718 (-0.9%). +79 pts premium. Flat open signal."
 
 ### Actionable Stock Ideas
-| Stock | Signal | Action | Source | Detail |
-Table with ALL stock recommendations, target prices, analyst names. Action column = BUY/SELL/HOLD/ADD/TRIM/EXIT/AVOID/WATCH for every row.
+| Stock | Signal | Action | Source | Detail (12-20 words with specific catalyst + target) |
 
 ### Corporate Actions & Deals
-Every investment/acquisition/fundraising with WHO, HOW MUCH, IN WHAT, WHY it matters.
+| WHO (full names) | WHAT (specific action) | HOW MUCH | WHY IT MATTERS (10-15 words, investor impact) |
 
 ### Negative News & Risks
-Every bad news item with WHAT, WHO, HOW BAD, WHAT TO DO.
-
-### Sector Themes
-Group 3+ related articles into named themes with affected companies and takeaway
+| WHAT (specific event) | WHO (name companies) | HOW BAD (quantify) | ACTION (verdict + stocks) |
 
 ### Sector Impacts
-Cover every sector with news: Oil, Banking, IT, Pharma, Defence, Auto, FMCG, Metals, Infra, etc.
+One-line bullets: "- Oil/Energy: CRISIS. Brent $100+. OMCs crushed. Upstream surging."
 
-### MF / SIP / Investment Products
-New launches, SIP trends, IPO reviews, rate changes
+### MF / SIP / IPO
+| Item | Detail (MAX 12 words) |
 
 ### Macro & Geopolitical
-RBI, inflation, crude, rupee, gold, global cues
+One-line bullets: "- Crude: $100.27 (+9%). Iran tanker attacks. IEA 400M bbl release."
 
-### Portfolio Impact Assessment
-Cross-reference recommendations against user's actual holdings (from stock-summary API):
-- **Holdings with news**: table showing held stock, holding value, signal, news, action (HOLD/ADD/TRIM/EXIT)
-- **New opportunities**: stocks with BUY/BULLISH signals user doesn't hold
-- **Holdings with no news**: brief list so user knows nothing was missed
+### Portfolio Impact
+| Stock | Value | Signal | Action | Why (MAX 8 words) |
+Sort by urgency: TRIM/EXIT first, then ADD, HOLD, WATCH.
+Skip no-news holdings — just list names at end.
 
 ### Key Takeaway
-2-3 specific actionable sentences
+1-2 sentences MAX. What to DO, not what happened.
 
 ## PDF Generation
-After producing the briefing, generate a PDF by posting the markdown to:
-`curl -s -X POST http://localhost:8000/api/advisor/briefing-pdf -H "Content-Type: application/json" -d '{"markdown": "<briefing>"}'`
-Report the saved PDF path to the user.
+After producing briefing: `curl -s -X POST http://localhost:8000/api/advisor/briefing-pdf -H "Content-Type: application/json" -d '{"markdown": "<briefing>"}'`
 
 ## Rules
-- Cover ALL articles from BOTH sources, read bodies not just headlines
-- Be specific: ₹ amounts, % changes, company names
-- Cross-reference between BL and TH for consensus/divergence
-- Bad news equally important as good news
-- Connect dots (crude up → paints down, ONGC up)
-- No vague language. Flag urgent items with [ACTION TODAY]
-- Every stock/sector mention must have a clear BUY/SELL/HOLD/AVOID/WATCH verdict
-- GIFT Nifty is mandatory in Market Overview as the first indicator
+- BREVITY IS MANDATORY — dashboard for quick scanning
+- Cover ALL articles from BOTH sources
+- Every stock = clear verdict (BUY/SELL/HOLD/AVOID/WATCH)
+- Flag urgent items with [ACTION TODAY]
+- GIFT Nifty mandatory as first indicator

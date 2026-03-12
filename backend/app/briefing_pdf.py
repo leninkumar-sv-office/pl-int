@@ -57,12 +57,14 @@ _SECTOR_BAR_CFG = {
 _TABLE_LAYOUTS = {
     # Stock | Signal | Action | Source | Detail
     ("stock", "signal", "action", "source", "detail"): [26, 28, 18, 14, 104],
+    # Stock | Value | Signal | Action | Why
+    ("stock", "value", "signal", "action", "why"): [28, 20, 26, 18, 98],
     # Stock | Signal | Source | Detail (legacy 4-col)
     ("stock", "signal", "source", "detail"): [28, 32, 14, 116],
     # WHO | WHAT | HOW MUCH | WHY IT MATTERS
-    ("who", "what", "how much", "why it matters"): [36, 44, 36, 74],
+    ("who", "what", "how much", "why it matters"): [38, 46, 24, 82],
     # WHAT | WHO | HOW BAD | ACTION
-    ("what", "who", "how bad", "action"): [50, 32, 54, 54],
+    ("what", "who", "how bad", "action"): [52, 40, 44, 54],
     # Item | Detail
     ("item", "detail"): [35, 155],
 }
@@ -126,61 +128,78 @@ def _extract_metrics(lines):
     text = " ".join(lines)
     metrics = []
 
-    # Sensex: "plunged 1.08% to 76,034" or "rose 0.5% to 77,000"
-    m = re.search(r'Sensex.*?(\d+\.?\d*)\s*%\s*to\s*([\d,]+)', text)
-    if m:
-        chg = float(m.group(1))
-        val = m.group(2)
-        # Check direction from verb
-        pre = text[:text.find(m.group(1))]
-        if re.search(r'(plunged|fell|dropped|declined|lost|slipped|down)', pre, re.IGNORECASE):
-            chg = -chg
-        metrics.append(("SENSEX", val, chg))
+    def _parse_index(label, pattern_name, text):
+        """Parse index value and change% from verbose or concise formats."""
+        # Concise: "Sensex: 76,034 (-1.08%)" or "Nifty: 23,639 (-0.95%)"
+        m = re.search(pattern_name + r'[:\s]+([\d,]+)\s*\(([+-]?\d+\.?\d*)%\)', text)
+        if m:
+            return (label, m.group(1), float(m.group(2)))
+        # Verbose: "plunged 1.08% to 76,034"
+        m = re.search(pattern_name + r'.*?(\d+\.?\d*)\s*%\s*to\s*([\d,]+)', text)
+        if m:
+            chg = float(m.group(1))
+            pre = text[:text.find(m.group(1))]
+            if re.search(r'(plunged|fell|dropped|declined|lost|slipped|down)', pre, re.IGNORECASE):
+                chg = -chg
+            return (label, m.group(2), chg)
+        return None
 
-    # Nifty50: "dropped 0.95% to 23,639"
-    m = re.search(r'Nifty\s*50.*?(\d+\.?\d*)\s*%\s*to\s*([\d,]+)', text)
-    if m:
-        chg = float(m.group(1))
-        val = m.group(2)
-        pre = text[:text.find(m.group(1))]
-        if re.search(r'(plunged|fell|dropped|declined|lost|slipped|down)', pre, re.IGNORECASE):
-            chg = -chg
-        metrics.append(("NIFTY 50", val, chg))
+    r = _parse_index("SENSEX", r'Sensex', text)
+    if r:
+        metrics.append(r)
 
-    # Brent crude: "$100/bbl (+9%)"
-    m = re.search(r'[Bb]rent[^$]*?\$([\d.]+)', text)
+    r = _parse_index("NIFTY 50", r'Nifty(?:\s*50)?', text)
+    if r:
+        metrics.append(r)
+
+    # GIFT Nifty: "GIFT Nifty: 23,718 (-0.9%)"
+    m = re.search(r'GIFT\s*Nifty[:\s]+([\d,]+)\s*\(([+-]?\d+\.?\d*)%\)', text)
     if m:
-        chg_m = re.search(r'[Bb]rent[^)]*?\(([+-]?\d+\.?\d*)%\)', text)
+        metrics.append(("GIFT NIFTY", m.group(1), float(m.group(2))))
+
+    # Brent crude: "$100/bbl (+9%)" or "Brent: $100 (+9%)" or "Crude: $100.27 (+9%)"
+    m = re.search(r'(?:[Bb]rent|[Cc]rude)[^$]*?\$([\d.]+)', text)
+    if m:
+        chg_m = re.search(r'(?:[Bb]rent|[Cc]rude)[^)]*?\(([+-]?\d+\.?\d*)%\)', text)
         chg = float(chg_m.group(1)) if chg_m else 0
         metrics.append(("BRENT", "$" + m.group(1), chg))
 
-    # Gold: "$5,154/oz (-0.4%)"
+    # Gold: "$5,154/oz (-0.4%)" or "Gold: $5,154 (-0.4%)"
     m = re.search(r'Gold.*?\$([\d,]+)', text)
     if m:
         chg_m = re.search(r'Gold[^)]*?\(([+-]?\d+\.?\d*)%\)', text)
         chg = float(chg_m.group(1)) if chg_m else 0
         metrics.append(("GOLD", "$" + m.group(1), chg))
 
-    # Rupee: "settled at 92.17" or just first number
-    m = re.search(r'Rupee.*?settled.*?(\d+\.\d+)', text)
+    # Rupee: "INR/USD: 92.17 (-1%)" or "Rupee: 92.17" or "settled at 92.17"
+    m = re.search(r'(?:INR/USD|Rupee)[:\s]+([\d.]+)', text)
     if not m:
-        m = re.search(r'Rupee.*?(\d+\.\d+)', text)
+        m = re.search(r'Rupee.*?settled.*?(\d+\.\d+)', text)
     if m:
-        metrics.append(("INR/USD", m.group(1), -1))
+        chg_m = re.search(r'(?:INR/USD|Rupee)[^)]*?\(([+-]?\d+\.?\d*)%\)', text)
+        chg = float(chg_m.group(1)) if chg_m else -1
+        metrics.append(("INR/USD", m.group(1), chg))
 
     return metrics
 
 
 def _fetch_ticker_data():
-    """Fetch live ticker data from the market-ticker API."""
-    try:
-        import urllib.request
-        import json
-        req = urllib.request.urlopen("http://localhost:8000/api/market-ticker", timeout=5)
-        data = json.loads(req.read())
-        return data.get("tickers", [])
-    except Exception:
-        return []
+    """Fetch live ticker data from the market-ticker API with retry."""
+    import urllib.request
+    import json
+    import time
+    for attempt in range(3):
+        try:
+            req = urllib.request.urlopen("http://localhost:8000/api/market-ticker", timeout=8)
+            data = json.loads(req.read())
+            tickers = data.get("tickers", [])
+            if tickers:
+                return tickers
+        except Exception:
+            pass
+        if attempt < 2:
+            time.sleep(1)
+    return []
 
 
 def _build_dashboard_metrics(tickers, text_metrics):
@@ -312,6 +331,162 @@ def _draw_dashboard(pdf, metrics):
     pdf.set_text_color(*_BLACK)
 
 
+# ─── Action Summary Cards ────────────────────────────────────────
+
+# Action → (bg_color, text_color, label)
+_ACTION_CARD_STYLES = {
+    "TRIM":  ((255, 220, 210), (180, 40, 0),  "TRIM"),
+    "SELL":  ((255, 200, 200), (160, 0, 0),   "SELL"),
+    "EXIT":  ((255, 200, 200), (160, 0, 0),   "EXIT"),
+    "ADD":   ((210, 240, 210), (0, 100, 0),   "ADD"),
+    "BUY":   ((210, 240, 210), (0, 100, 0),   "BUY"),
+    "WATCH": ((255, 245, 210), (140, 100, 0), "WATCH"),
+}
+
+
+def _extract_actions(lines):
+    """Scan markdown for table rows with Action column, extract stock-action pairs."""
+    actions = {}  # action -> [(stock, detail)]
+    in_table = False
+    action_col = -1
+    stock_col = 0
+    detail_col = -1
+    value_col = -1
+
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("|"):
+            in_table = False
+            continue
+        if re.match(r"^\|[\s\-:|]+\|$", line):
+            continue
+
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+
+        if not in_table:
+            # Header row — find Action column
+            lower_cells = [c.lower() for c in cells]
+            for j, h in enumerate(lower_cells):
+                if h == "action":
+                    action_col = j
+                elif "stock" in h or h == "held stock":
+                    stock_col = j
+                elif "detail" in h or "why" in h or "news" in h:
+                    detail_col = j
+                elif "value" in h:
+                    value_col = j
+            in_table = True
+            continue
+
+        if action_col < 0 or action_col >= len(cells):
+            continue
+
+        action = cells[action_col].strip().upper()
+        stock = cells[stock_col].strip() if stock_col < len(cells) else ""
+        # Clean markdown
+        stock = re.sub(r"\*\*|\[ACTION TODAY\]", "", stock).strip()
+
+        if action in _ACTION_CARD_STYLES and stock:
+            val = ""
+            if value_col >= 0 and value_col < len(cells):
+                val = cells[value_col].strip()
+
+            label = f"{stock} ({val})" if val else stock
+            actions.setdefault(action, []).append((stock, label))
+
+    # Deduplicate: prefer version with value, keep unique stock names
+    deduped = {}
+    for act, pairs in actions.items():
+        seen = {}
+        for stock_name, label in pairs:
+            base = stock_name.split("(")[0].strip()[:12]
+            if base not in seen or "(" in label:
+                seen[base] = label
+        deduped[act] = list(seen.values())
+
+    return deduped
+
+
+def _draw_action_summary(pdf, lines):
+    """Render a quick-glance action summary with colored cards."""
+    actions = _extract_actions(lines)
+    if not actions:
+        return
+
+    # Order: TRIM/SELL/EXIT first, then ADD/BUY, then WATCH
+    order = ["TRIM", "SELL", "EXIT", "ADD", "BUY", "WATCH"]
+    items = []
+    for act in order:
+        if act in actions:
+            items.append((act, actions[act]))
+
+    if not items:
+        return
+
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_text_color(60, 60, 60)
+    pdf.cell(0, 5, "TODAY'S ACTIONS", ln=True)
+    pdf.ln(1)
+
+    y = pdf.get_y()
+    x = 10
+
+    for action, stocks in items:
+        bg, tc, label = _ACTION_CARD_STYLES[action]
+
+        # Action badge
+        badge_w = pdf.get_string_width(label) + 6
+        card_h = 6 + len(stocks) * 4.2
+
+        # Check if card fits on current line
+        if x + max(badge_w, 38) + 2 > 200:
+            x = 10
+            y = pdf.get_y() + 1
+
+        card_w = 38
+        # Calculate needed width from stock names
+        pdf.set_font("Helvetica", "", 6)
+        max_sw = max(pdf.get_string_width(s) for s in stocks) + 4
+        card_w = max(card_w, min(max_sw, 62))
+
+        if pdf.get_y() + card_h > 270:
+            pdf.add_page()
+            y = pdf.get_y()
+            x = 10
+
+        # Card background
+        pdf.set_fill_color(*bg)
+        pdf.set_draw_color(*bg)
+        pdf.rect(x, y, card_w, card_h, style="F")
+
+        # Action label
+        pdf.set_xy(x + 1, y + 0.5)
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_text_color(*tc)
+        pdf.cell(card_w - 2, 4.5, label, align="L")
+
+        # Stock names
+        pdf.set_font("Helvetica", "", 5.5)
+        pdf.set_text_color(40, 40, 40)
+        for si, s in enumerate(stocks[:6]):
+            pdf.set_xy(x + 1.5, y + 5.5 + si * 4)
+            s_clean = _clean(s)
+            if pdf.get_string_width(s_clean) > card_w - 3:
+                while len(s_clean) > 5 and pdf.get_string_width(s_clean + "..") > card_w - 3:
+                    s_clean = s_clean[:-1]
+                s_clean += ".."
+            pdf.cell(card_w - 3, 3.5, s_clean)
+
+        x += card_w + 2
+        if x > 160:
+            x = 10
+            y = y + card_h + 2
+            pdf.set_y(y)
+
+    pdf.set_y(max(y + card_h + 3, pdf.get_y() + 3))
+    pdf.set_text_color(*_BLACK)
+
+
 # ─── Sector Impact Bars ──────────────────────────────────────────
 
 def _parse_sector_bullets(bullet_lines):
@@ -427,6 +602,18 @@ def _find_colored_cols(header):
     return cols
 
 
+def _set_row_fill(pdf, is_action_row, row_tint, alt_fill):
+    """Set fill color based on priority: action row > row_tint > alt fill."""
+    if is_action_row:
+        pdf.set_fill_color(255, 245, 230)
+    elif row_tint:
+        pdf.set_fill_color(*row_tint)
+    elif alt_fill:
+        pdf.set_fill_color(245, 248, 255)
+    else:
+        pdf.set_fill_color(255, 255, 255)
+
+
 def _render_table(pdf, rows):
     """Render a table with smart column widths and color-coded signals."""
     if not rows:
@@ -474,34 +661,93 @@ def _render_table(pdf, rows):
 
     _draw_header()
 
-    # Identify the last (widest) column — use multi_cell for wrapping
     last_col = n_cols - 1
+    line_h = 3.5  # line height inside multi_cell
 
-    def _calc_row_height(txt, w):
-        """Calculate how many lines text will need in multi_cell."""
+    def _count_lines(txt, w, font_size=7, font_style=""):
+        """Count how many wrapped lines text needs in a given width."""
         if not txt:
-            return row_h
-        pdf.set_font("Helvetica", "", 7)
-        text_w = pdf.get_string_width(txt)
-        n_lines = max(1, int(text_w / (w - 2)) + 1)
-        return max(row_h, n_lines * 3.5)
+            return 1
+        pdf.set_font("Helvetica", font_style, font_size)
+        words = txt.split()
+        lines = 1
+        cur_line = ""
+        for word in words:
+            test = (cur_line + " " + word).strip()
+            if pdf.get_string_width(test) > w - 2:
+                lines += 1
+                cur_line = word
+            else:
+                cur_line = test
+        return lines
+
+    def _calc_full_row_height(row):
+        """Calculate row height from the tallest cell across ALL columns."""
+        max_lines = 1
+        for j in range(n_cols):
+            w = col_widths[j]
+            txt = _clean(row[j]) if j < len(row) else ""
+            if j in colored_cols:
+                n = _count_lines(txt, w, 6.5, "B")
+            else:
+                n = _count_lines(txt, w, 7, "")
+            if n > max_lines:
+                max_lines = n
+        return max(row_h, max_lines * line_h + 1)
+
+    def _draw_wrapped_cell(x, y, w, rh, txt, fill, font_style="", font_size=7,
+                           bg=None, tc=None):
+        """Draw a cell with wrapped text inside a bordered rectangle."""
+        pdf.set_xy(x, y)
+        if bg:
+            pdf.set_fill_color(*bg)
+        pdf.cell(w, rh, "", border=1, fill=fill)
+        # Overlay wrapped text
+        if tc:
+            pdf.set_text_color(*tc)
+        pdf.set_font("Helvetica", font_style, font_size)
+        pdf.set_xy(x + 0.5, y + 0.5)
+        pdf.multi_cell(w - 1, line_h, txt)
+        pdf.set_x(pdf.l_margin)
+
+    # Find action column index for row tinting
+    action_col_idx = -1
+    for j, h in enumerate(header):
+        if h.lower().strip() == "action":
+            action_col_idx = j
+            break
+
+    # Action -> row background tint
+    _ROW_TINTS = {
+        "TRIM": (255, 240, 235), "SELL": (255, 235, 235), "EXIT": (255, 235, 235),
+        "ADD": (235, 248, 235), "BUY": (235, 248, 235),
+        "WATCH": (255, 252, 240),
+        "HOLD": (245, 248, 255), "AVOID": (255, 240, 240),
+    }
 
     pdf.set_font("Helvetica", "", 7)
     for row_idx, row in enumerate(data):
-        if pdf.get_y() > 255:
+        # Pre-calculate row height from ALL columns
+        rh = _calc_full_row_height(row)
+
+        if pdf.get_y() + rh > 270:
             pdf.add_page()
             _draw_header()
             pdf.set_font("Helvetica", "", 7)
 
-        alt_fill = row_idx % 2 == 0
         row_text = " ".join(row)
         is_action_row = "[ACTION TODAY]" in row_text
 
-        # Pre-calculate row height based on last column text
-        last_txt = _clean(row[last_col]) if last_col < len(row) else ""
-        rh = _calc_row_height(last_txt, col_widths[last_col])
+        # Determine row tint from action column
+        row_action = ""
+        if action_col_idx >= 0 and action_col_idx < len(row):
+            row_action = row[action_col_idx].strip().upper()
+        row_tint = _ROW_TINTS.get(row_action)
+        alt_fill = row_idx % 2 == 0
+        should_fill = is_action_row or row_tint or alt_fill
 
         row_y = pdf.get_y()
+        cur_x = pdf.l_margin
 
         for j in range(n_cols):
             w = col_widths[j]
@@ -509,44 +755,17 @@ def _render_table(pdf, rows):
 
             if j in colored_cols:
                 bg, tc = _get_signal_style(txt)
-                pdf.set_fill_color(*bg)
-                pdf.set_text_color(*tc)
-                pdf.set_font("Helvetica", "B", 6.5)
-                txt = _truncate(txt, w, "B")
-                pdf.set_xy(pdf.get_x(), row_y)
-                pdf.cell(w, rh, txt, border=1, fill=True)
-                pdf.set_font("Helvetica", "", 7)
+                _draw_wrapped_cell(cur_x, row_y, w, rh, txt, True,
+                                   font_style="B", font_size=6.5, bg=bg, tc=tc)
                 pdf.set_text_color(*_BLACK)
-            elif j == last_col:
-                # Last column: wrap text with multi_cell
-                if is_action_row:
-                    pdf.set_fill_color(255, 245, 230)
-                elif alt_fill:
-                    pdf.set_fill_color(245, 248, 255)
-                else:
-                    pdf.set_fill_color(255, 255, 255)
-                x_before = pdf.get_x()
-                pdf.set_xy(x_before, row_y)
-                # Draw border rect first, then text
-                pdf.rect(x_before, row_y, w, rh, style="D")
-                # Fill
-                fill_c = pdf.fill_color
-                pdf.rect(x_before + 0.2, row_y + 0.2, w - 0.4, rh - 0.4, style="F")
-                pdf.set_xy(x_before + 0.5, row_y + 0.5)
-                pdf.multi_cell(w - 1, 3.5, txt)
-                pdf.set_x(pdf.l_margin)
             else:
-                if is_action_row:
-                    pdf.set_fill_color(255, 245, 230)
-                elif alt_fill:
-                    pdf.set_fill_color(245, 248, 255)
-                else:
-                    pdf.set_fill_color(255, 255, 255)
-                txt = _truncate(txt, w)
-                pdf.set_xy(pdf.get_x(), row_y)
-                pdf.cell(w, rh, txt, border=1, fill=True if is_action_row else alt_fill)
+                _set_row_fill(pdf, is_action_row, row_tint, alt_fill)
+                _draw_wrapped_cell(cur_x, row_y, w, rh, txt, bool(should_fill),
+                                   font_style="", font_size=7)
 
-        pdf.set_y(row_y + rh)
+            cur_x += w
+
+        pdf.set_xy(pdf.l_margin, row_y + rh)
 
 
 # ─── Main generator ──────────────────────────────────────────────
@@ -582,6 +801,9 @@ def generate_briefing_pdf(markdown_text: str) -> str:
     dashboard = _build_dashboard_metrics(tickers, text_metrics)
     if dashboard:
         _draw_dashboard(pdf, dashboard)
+
+    # ── Action summary cards (extract from all tables) ──
+    _draw_action_summary(pdf, lines)
 
     # ── Track current section for special rendering ──
     current_section = ""

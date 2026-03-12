@@ -64,101 +64,68 @@ Generate a comprehensive, detailed market briefing from today's Business Line + 
 
 ## Output Format
 
-Start with a source summary line:
+**CRITICAL: Be CONCISE. This is a dashboard, not an article. Max 10-15 words per bullet. Max 12 words per table cell. Use numbers and symbols, not sentences.**
+
+Start with:
 > Sources: X articles from Business Line, Y articles from The Hindu
 
 ### Market Overview
-- **GIFT Nifty**: Current level, change % vs Nifty50 close, and what it signals for next session (gap up/down/flat). GIFT Nifty is the lead indicator — always mention it first.
-- Nifty/Sensex direction, % change, key index levels
-- FII/DII flow direction if mentioned
-- Top gainers and losers by name
+SHORT bullets only. No prose. Format: "METRIC: VALUE (CHANGE%)"
+- **GIFT Nifty**: 23,718 (-0.9%) — +79 pts premium to Nifty close. GAP UP/DOWN/FLAT signal.
+- Sensex: VALUE (CHANGE%). Nifty: VALUE (CHANGE%).
+- Rupee: VALUE. Brent: VALUE.
+- Top gainers: 3-4 names with %. Top losers: 3-4 names with %.
+- FII/DII: one line with Rs. figure.
 
 ### Actionable Stock Ideas
 | Stock | Signal | Action | Source | Detail |
 |-------|--------|--------|--------|--------|
-List ALL stocks mentioned with specific recommendations. Include:
-- **Action column**: Every row MUST have a clear action — BUY, SELL, HOLD, ADD, TRIM, EXIT, AVOID, WATCH. Never leave this blank. Derive from the signal, analyst recommendation, and news context. If uncertain, use WATCH.
-- Price targets if mentioned
-- Analyst house (Jefferies, CLSA, etc.) if mentioned
-- Reason for the call (order win, earnings, sector tailwind)
-- Source column: BL or TH
+- **Detail column: 12-20 words.** Include: specific catalyst, target price, holding value if held. "USFDA VAI clearance for Andhra plant. Holding Rs.1.57L. Target Rs.1,400"
+- Signal: single word or short phrase (BULLISH, BEARISH, NEUTRAL, BUY PUT, BOOK PROFIT)
+- Action: BUY, SELL, HOLD, ADD, TRIM, EXIT, AVOID, WATCH — always filled
+- Include ALL stocks with recommendations
 
 ### Corporate Actions & Deals
-For EVERY article about investments, acquisitions, fundraising, partnerships:
-- WHO is investing/acquiring
-- HOW MUCH (₹ or $ amount)
-- IN WHAT (target company/unit)
-- WHY it matters for investors
-Example: "Apollo-led funds invested $500M in Adani Energy Solutions' transmission unit — signals institutional confidence in India's power infra buildout"
+| WHO | WHAT | HOW MUCH | WHY IT MATTERS |
+- **WHO**: Full entity names, not abbreviations. "Apollo Global Mgmt -> Adani Energy Solutions" not "Apollo -> Adani"
+- **WHAT**: Specific action with context. "Secured notes for transmission unit refinancing" not "Secured notes financing"
+- **HOW MUCH**: Always include currency + amount. "$500M" or "Rs.1,500 cr"
+- **WHY IT MATTERS**: 10-15 words. Impact on investors/sector. "Signals institutional confidence in India power infra buildout"
 
 ### Negative News & Risks
-For EVERY article about bad news, fraud, regulatory action, earnings miss:
-- WHAT happened
-- WHO is affected
-- HOW BAD (quantify if possible — stock drop %, fine amount, etc.)
-- WHAT TO DO (sell/avoid/watch)
-Example: "CBI arrested Darwin Labs co-founder in crypto fraud — avoid related stocks, check exposure to crypto-adjacent companies"
-
-### Sector Themes
-Group related articles into themes. For each theme with 3+ articles:
-- Name the theme (e.g., "Oil Crisis Impact", "Jal Jeevan Mission Beneficiaries")
-- List ALL affected companies with specific context
-- Actionable takeaway
+| WHAT | WHO | HOW BAD | ACTION |
+- **WHAT**: Specific event description. "US Section 301 trade probe on imports from 16 countries" not "Section 301 probe"
+- **WHO**: Name affected companies/sectors explicitly. "Textiles (Welspun, Page), Auto (Tata Motors), Steel (JSW, Tata Steel)"
+- **HOW BAD**: Quantify impact. "Rs.3.6L cr fiscal hit. CAD widens to 2% GDP" not just "fiscal hit"
+- **ACTION**: WATCH/AVOID/TRIM + specific stocks and reason
 
 ### Sector Impacts
-Cover EVERY sector that has news:
-- Oil/Energy, Banking/NBFC, IT, Pharma, Defence, Auto/EV, FMCG, Metals, Infra, Real Estate, Insurance, Hospitality
-- For each: what happened, which companies, direction (bullish/bearish)
+Bullet format: "- Sector: DIRECTION. Key fact. Affected stocks."
+- One line per sector. MAX 15 words per line.
+- Cover: Oil/Energy, Auto, Pharma, Banking, Paints, IT, Infra, Metals, Insurance, Electronics
 
-### Mutual Fund / SIP / Investment Products
-- New fund launches (name, NAV, type)
-- SIP trend data
-- AMC-specific news
-- IPO reviews with subscribe/avoid recommendation
-- FD/RD rate changes if any
+### MF / SIP / IPO
+| Item | Detail |
+- One row per item. Detail MAX 12 words.
 
 ### Macro & Geopolitical
-- RBI policy, inflation data
-- Crude oil price and direction
-- Rupee level and trend
-- Gold/Silver prices
-- Global cues (US, China, EU)
-- Geopolitical events with market impact
+Bullet format only. One line per item. "- Crude: $100.27 (+9%). Iran tanker attacks."
 
-### Portfolio Impact Assessment
-Cross-reference today's news and recommendations against the user's actual holdings (from stock-summary API).
-
-**Holdings with news today** — table format:
-| Held Stock | Holding Value | Today's Signal | News Summary | Action |
-|------------|-------------|----------------|--------------|--------|
-For each stock the user HOLDS that appears in today's articles:
-- Show current holding value from portfolio data
-- Show the signal (BULLISH/BEARISH/NEUTRAL etc.)
-- Summarize the relevant news
-- Give specific action: HOLD, ADD, TRIM, EXIT, WATCH
-
-**New opportunities (not held)** — table format:
-| Stock | Signal | Why | Risk |
-|-------|--------|-----|------|
-For stocks with BUY/BULLISH signals that the user does NOT currently hold:
-- Why it's interesting (deal win, sector tailwind, analyst target)
-- Key risk to watch
-
-**Holdings with NO news** — brief list of held stocks with no mentions in today's articles. Just note "No news today" so the user knows nothing was missed.
+### Portfolio Impact
+| Stock | Value | Signal | Action | Why (max 8 words) |
+- ONLY stocks with news. Skip holdings with no news — just list names at the end.
+- Sort by action urgency: TRIM/EXIT first, then ADD, then HOLD, then WATCH.
 
 ### Key Takeaway
-2-3 sentences: What should an investor DO today? Be specific.
+1-2 sentences MAX. What to DO today, not what happened.
 
 ## Critical Guidelines
-- **Read article bodies, not just headlines** — the detail is in the body text
-- **Cover ALL articles from BOTH sources** — Business Line AND The Hindu
-- **Be specific** — include ₹ amounts, % changes, company names, analyst names
-- **Every company mention = potential insight** — if Company A invests in Company B, BOTH are relevant
-- **Bad news is as important as good news** — frauds, arrests, downgrades, supply disruptions
-- **No vague language** — don't say "markets may move", say "Nifty fell 1.2% to 21,850"
-- **Every mention needs a verdict** — for every stock/sector discussed, state a clear BUY/SELL/HOLD/AVOID/WATCH sentiment. Never describe news without telling the reader what to DO about it.
-- **Connect the dots** — if crude rises, mention which companies benefit (ONGC, Oil India) AND which suffer (paints, airlines, logistics)
-- **Cross-reference between sources** — if both BL and TH cover same topic, note the consensus or divergence
-- Use INR for all currency references
-- Flag items needing immediate action with **[ACTION TODAY]**
-- **GIFT Nifty is mandatory** — always include GIFT Nifty in Market Overview as the FIRST indicator. It forecasts next-session direction.
+- **BREVITY IS MANDATORY** — this is a dashboard for quick scanning, not a research report. If you can say it in 5 words, don't use 15.
+- Read article bodies for data extraction, but OUTPUT must be concise
+- Cover ALL articles from BOTH sources
+- Numbers over words: "Rs.3.6L cr fiscal hit" not "the fiscal burden could increase by approximately..."
+- Every stock/sector = clear verdict (BUY/SELL/HOLD/AVOID/WATCH)
+- Connect dots (crude up -> paints down, ONGC up) but in SHORT form
+- Flag urgent items with **[ACTION TODAY]**
+- **GIFT Nifty is mandatory** as first Market Overview indicator
+- **Table cells must be SHORT** — max 12 words. Truncate ruthlessly. Data density over explanation.
