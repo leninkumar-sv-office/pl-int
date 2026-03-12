@@ -14,7 +14,7 @@ import json
 import time
 import threading
 import xml.etree.ElementTree as ET
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from email.utils import parsedate_to_datetime
 from typing import List, Dict, Optional
 import requests
@@ -47,8 +47,11 @@ _TH_SECTIONS = [
     ("business", "TH-Business"),
 ]
 
+# Lookback window for article fetching
+_LOOKBACK_DAYS = 7
+
 # Cache
-_articles_cache: Dict[str, list] = {}  # date_str → [articles]
+_articles_cache: Dict[str, list] = {}  # key → [articles]
 _insights_cache: Dict[str, list] = {}  # date_str → [insights]
 _cache_lock = threading.Lock()
 
@@ -57,50 +60,121 @@ _cache_lock = threading.Lock()
 #  ARTICLE SCRAPING
 # ═══════════════════════════════════════════════════════════
 
-def _fetch_section_articles(section_path: str, section_name: str) -> List[dict]:
-    """Scrape article headlines + summaries from a BL section page."""
-    url = f"{_BL_BASE}/{section_path}/"
+def _fetch_section_articles(section_path: str, section_name: str, max_pages: int = 4) -> List[dict]:
+    """Scrape article headlines + summaries from BL section pages (with pagination)."""
+    all_articles = []
+    seen_urls = set()
+
+    for page_num in range(1, max_pages + 1):
+        if page_num == 1:
+            url = f"{_BL_BASE}/{section_path}/"
+        else:
+            url = f"{_BL_BASE}/{section_path}/?page={page_num}"
+
+        try:
+            resp = requests.get(url, headers=_HEADERS, timeout=15)
+            if resp.status_code != 200:
+                break
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            page_articles = []
+            for tag in soup.find_all(["h2", "h3"]):
+                a = tag.find("a", href=True)
+                if not a:
+                    continue
+                title = a.get_text(strip=True)
+                href = a["href"]
+                if not title or len(title) < 15 or "/article" not in href:
+                    continue
+                if href.startswith("/"):
+                    href = f"{_BL_BASE}{href}"
+                if href in seen_urls:
+                    continue
+                seen_urls.add(href)
+
+                summary = ""
+                parent = tag.parent
+                if parent:
+                    p = parent.find("p")
+                    if p:
+                        summary = p.get_text(strip=True)[:200]
+
+                page_articles.append({
+                    "title": title,
+                    "summary": summary,
+                    "section": section_name,
+                    "url": href,
+                })
+
+            if not page_articles:
+                break  # No more articles on this page
+
+            all_articles.extend(page_articles)
+            print(f"[EPaper] {section_name} page {page_num}: {len(page_articles)} articles")
+        except Exception as e:
+            print(f"[EPaper] Error scraping {section_name} page {page_num}: {e}")
+            break
+
+        time.sleep(0.3)
+
+    return all_articles
+
+
+def _fetch_bl_rss_articles(section_path: str, section_name: str, lookback_days: int = 7) -> List[dict]:
+    """Fetch articles from Business Line RSS feed for a section (past N days)."""
+    url = f"{_BL_BASE}/{section_path}/feeder/default.rss"
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         if resp.status_code != 200:
-            print(f"[EPaper] Section {section_name} failed: {resp.status_code}")
             return []
-        soup = BeautifulSoup(resp.text, "html.parser")
 
+        root = ET.fromstring(resp.content)
         articles = []
-        seen_urls = set()
-        for tag in soup.find_all(["h2", "h3"]):
-            a = tag.find("a", href=True)
-            if not a:
-                continue
-            title = a.get_text(strip=True)
-            href = a["href"]
-            if not title or len(title) < 15 or "/article" not in href:
-                continue
-            # Make absolute URL
-            if href.startswith("/"):
-                href = f"{_BL_BASE}{href}"
-            if href in seen_urls:
-                continue
-            seen_urls.add(href)
+        cutoff = date.today() - timedelta(days=lookback_days)
 
-            # Try to get summary from nearby <p> or sibling
+        for item in root.findall(".//item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            desc_el = item.find("description")
+            pub_el = item.find("pubDate")
+
+            if title_el is None or link_el is None:
+                continue
+
+            title = title_el.text.strip() if title_el.text else ""
+            link = link_el.text.strip() if link_el.text else ""
+
+            if not title or len(title) < 15 or "/article" not in link:
+                continue
+
+            # Filter to lookback window
+            art_date = None
+            if pub_el is not None and pub_el.text:
+                try:
+                    pub_date = parsedate_to_datetime(pub_el.text)
+                    art_date = pub_date.date().isoformat()
+                    if pub_date.date() < cutoff:
+                        continue
+                except Exception:
+                    pass
+
             summary = ""
-            parent = tag.parent
-            if parent:
-                p = parent.find("p")
-                if p:
-                    summary = p.get_text(strip=True)[:200]
+            if desc_el is not None and desc_el.text:
+                soup = BeautifulSoup(desc_el.text, "html.parser")
+                summary = soup.get_text(strip=True)[:200]
 
             articles.append({
                 "title": title,
                 "summary": summary,
                 "section": section_name,
-                "url": href,
+                "url": link,
+                "source": "Business Line",
+                "date": art_date or date.today().isoformat(),
             })
+
         return articles
     except Exception as e:
-        print(f"[EPaper] Error scraping {section_name}: {e}")
+        print(f"[EPaper] Error fetching BL RSS {section_name}: {e}")
         return []
 
 
@@ -142,8 +216,8 @@ def _fetch_article_body(url: str) -> str:
 #  THE HINDU SCRAPING (RSS + article body)
 # ═══════════════════════════════════════════════════════════
 
-def _fetch_th_rss_articles(section_path: str, section_name: str) -> List[dict]:
-    """Fetch articles from The Hindu RSS feed for a section."""
+def _fetch_th_rss_articles(section_path: str, section_name: str, lookback_days: int = 7) -> List[dict]:
+    """Fetch articles from The Hindu RSS feed for a section (past N days)."""
     url = f"{_TH_BASE}/{section_path}/feeder/default.rss"
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
@@ -153,7 +227,7 @@ def _fetch_th_rss_articles(section_path: str, section_name: str) -> List[dict]:
 
         root = ET.fromstring(resp.content)
         articles = []
-        today_str = date.today().strftime("%d %b %Y")  # e.g. "12 Mar 2026"
+        cutoff = date.today() - timedelta(days=lookback_days)
 
         for item in root.findall(".//item"):
             title_el = item.find("title")
@@ -170,18 +244,19 @@ def _fetch_th_rss_articles(section_path: str, section_name: str) -> List[dict]:
             if not title or len(title) < 15 or "/article" not in link:
                 continue
 
-            # Filter to today's articles only
+            # Filter to lookback window
+            art_date = None
             if pub_el is not None and pub_el.text:
                 try:
                     pub_date = parsedate_to_datetime(pub_el.text)
-                    if pub_date.date() != date.today():
+                    art_date = pub_date.date().isoformat()
+                    if pub_date.date() < cutoff:
                         continue
                 except Exception:
                     pass
 
             summary = ""
             if desc_el is not None and desc_el.text:
-                # RSS description may contain HTML
                 soup = BeautifulSoup(desc_el.text, "html.parser")
                 summary = soup.get_text(strip=True)[:200]
 
@@ -191,6 +266,7 @@ def _fetch_th_rss_articles(section_path: str, section_name: str) -> List[dict]:
                 "section": section_name,
                 "url": link,
                 "source": "The Hindu",
+                "date": art_date or date.today().isoformat(),
             })
 
         return articles
@@ -236,46 +312,62 @@ def _fetch_th_article_body(url: str) -> str:
 #  COMBINED ARTICLE FETCHING
 # ═══════════════════════════════════════════════════════════
 
-def fetch_todays_articles(force_refresh: bool = False) -> List[dict]:
-    """Fetch all articles from Business Line + The Hindu. Cached per day."""
+def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOOKBACK_DAYS) -> List[dict]:
+    """Fetch articles from Business Line + The Hindu for the past N days. Cached per day."""
     today = date.today().isoformat()
+    cache_key = f"{today}_d{lookback_days}"
 
     with _cache_lock:
-        if not force_refresh and today in _articles_cache:
-            return _articles_cache[today]
+        if not force_refresh and cache_key in _articles_cache:
+            return _articles_cache[cache_key]
 
     all_articles = []
     seen_urls = set()
 
-    # --- Business Line ---
-    print(f"[EPaper] Scraping Business Line articles for {today}...")
+    # --- Business Line (RSS feeds for historical + page scraping for latest) ---
+    print(f"[EPaper] Fetching Business Line articles (past {lookback_days} days)...")
+
+    # RSS feeds first (covers historical articles)
     for section_path, section_name in _BL_SECTIONS:
-        articles = _fetch_section_articles(section_path, section_name)
-        for art in articles:
+        rss_articles = _fetch_bl_rss_articles(section_path, section_name, lookback_days)
+        for art in rss_articles:
+            if art["url"] not in seen_urls:
+                seen_urls.add(art["url"])
+                all_articles.append(art)
+        time.sleep(0.3)
+
+    rss_count = len(all_articles)
+    print(f"[EPaper] Business Line RSS: {rss_count} articles")
+
+    # Page scraping as supplement (catches articles RSS may miss)
+    for section_path, section_name in _BL_SECTIONS:
+        page_articles = _fetch_section_articles(section_path, section_name, max_pages=3)
+        for art in page_articles:
             if art["url"] not in seen_urls:
                 art["source"] = "Business Line"
+                art.setdefault("date", today)
                 seen_urls.add(art["url"])
                 all_articles.append(art)
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     bl_count = len(all_articles)
-    print(f"[EPaper] Business Line: {bl_count} articles")
+    print(f"[EPaper] Business Line total: {bl_count} articles (RSS: {rss_count}, pages: {bl_count - rss_count})")
 
-    # --- The Hindu ---
-    print(f"[EPaper] Scraping The Hindu Business articles for {today}...")
+    # --- The Hindu (RSS feeds with lookback) ---
+    print(f"[EPaper] Fetching The Hindu Business articles (past {lookback_days} days)...")
     for section_path, section_name in _TH_SECTIONS:
-        articles = _fetch_th_rss_articles(section_path, section_name)
+        articles = _fetch_th_rss_articles(section_path, section_name, lookback_days)
         for art in articles:
             if art["url"] not in seen_urls:
                 seen_urls.add(art["url"])
                 all_articles.append(art)
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     th_count = len(all_articles) - bl_count
     print(f"[EPaper] The Hindu: {th_count} articles")
-    print(f"[EPaper] Total: {len(all_articles)} articles from both sources")
+    print(f"[EPaper] Total: {len(all_articles)} articles from both sources (past {lookback_days} days)")
 
-    # Fetch full body for all articles
+    # Fetch full body for all articles (throttled)
     bodies_found = 0
     for i, art in enumerate(all_articles):
         source = art.get("source", "Business Line")
@@ -288,11 +380,11 @@ def fetch_todays_articles(force_refresh: bool = False) -> List[dict]:
             bodies_found += 1
         if (i + 1) % 20 == 0:
             print(f"[EPaper] Fetched body for {i+1}/{len(all_articles)} articles ({bodies_found} with content)...")
-        time.sleep(0.5)
+        time.sleep(0.3)
     print(f"[EPaper] Total articles with body: {bodies_found}/{len(all_articles)}")
 
     with _cache_lock:
-        _articles_cache[today] = all_articles
+        _articles_cache[cache_key] = all_articles
 
     return all_articles
 

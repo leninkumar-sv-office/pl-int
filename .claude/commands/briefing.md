@@ -1,8 +1,8 @@
-Generate a CONCISE daily market briefing dashboard from Business Line + The Hindu articles.
+Generate a CONCISE daily market briefing dashboard from past 7 days of Business Line + The Hindu articles.
 
 ## Steps
 
-1. Fetch articles: `curl -s http://localhost:8000/api/advisor/articles`
+1. Fetch articles (past 7 days): `curl -s http://localhost:8000/api/advisor/articles`
 2. Fetch portfolio: `curl -s http://localhost:8000/api/portfolio/stock-summary`
 3. Fetch insights: `curl -s http://localhost:8000/api/advisor/insights`
 4. Fetch market ticker: `curl -s http://localhost:8000/api/market-ticker`

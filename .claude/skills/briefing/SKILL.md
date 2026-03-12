@@ -5,15 +5,16 @@ description: Generate a comprehensive daily market briefing from Business Line a
 
 # Daily Market Briefing
 
-Generate a comprehensive, detailed market briefing from today's Business Line + The Hindu articles.
+Generate a comprehensive, detailed market briefing from the past 7 days of Business Line + The Hindu articles. Focus on today's actionable items but include context from the week.
 
 ## Steps
 
-1. **Fetch articles** from the backend:
+1. **Fetch articles** from the backend (past 7 days from both sources):
    ```bash
    curl -s http://localhost:8000/api/advisor/articles
    ```
-   Returns a JSON array with fields: title, summary, body, section, url, source ("Business Line" or "The Hindu").
+   Returns a JSON array with fields: title, summary, body, section, url, source ("Business Line" or "The Hindu"), date (ISO format).
+   Articles span the past 7 days via RSS feeds + page scraping.
 
 2. **Fetch portfolio holdings** for context:
    ```bash
