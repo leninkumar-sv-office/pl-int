@@ -31,8 +31,8 @@ const loadSaved = () => {
 
 const savePlan = (rows) => {
   const data = rows
-    .filter(r => (parseInt(r.buyQty) || 0) > 0 || (parseInt(r.ltSellQty) || 0) > 0 || (parseInt(r.stSellQty) || 0) > 0)
-    .map(r => ({ symbol: r.symbol, exchange: r.exchange, buyQty: r.buyQty || '', ltSellQty: r.ltSellQty || '', stSellQty: r.stSellQty || '' }));
+    .filter(r => (parseInt(r.buyQty) || 0) > 0 || (parseInt(r.sellQty) || 0) > 0)
+    .map(r => ({ symbol: r.symbol, exchange: r.exchange, buyQty: r.buyQty || '', sellQty: r.sellQty || '', ltSellQty: r.ltSellQty || '', stSellQty: r.stSellQty || '' }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
 
@@ -90,7 +90,7 @@ export default function TradePlanner() {
         totalInvested: s.total_invested || 0, ltcgInvested: s.ltcg_invested || 0, stcgInvested: s.stcg_invested || 0,
         ltcgEarliestDate: s.ltcg_earliest_date || '', stcgEarliestDate: s.stcg_earliest_date || '',
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
-        buyQty: sv?.buyQty || '', ltSellQty: sv?.ltSellQty || '', stSellQty: sv?.stSellQty || '',
+        buyQty: sv?.buyQty || '', sellQty: sv?.sellQty || '', ltSellQty: sv?.ltSellQty || '', stSellQty: sv?.stSellQty || '',
         ltAvail: ltQty, stAvail: stQty,
       };
     });
@@ -101,7 +101,7 @@ export default function TradePlanner() {
       const placeholders = remaining.map(s => ({
         symbol: s.symbol, exchange: s.exchange, name: s.symbol,
         onHand: 0, low: 0, current: 0, high: 0,
-        buyQty: s.buyQty || '', ltSellQty: s.ltSellQty || '', stSellQty: s.stSellQty || '',
+        buyQty: s.buyQty || '', sellQty: s.sellQty || '', ltSellQty: s.ltSellQty || '', stSellQty: s.stSellQty || '',
         ltAvail: 0, stAvail: 0,
       }));
       setRows([...placeholders, ...initial]);
@@ -126,8 +126,8 @@ export default function TradePlanner() {
   }, [rows]);
 
   const sortedRows = [...rows].sort((a, b) => {
-    const aHas = (parseInt(a.buyQty) || 0) > 0 || (parseInt(a.ltSellQty) || 0) > 0 || (parseInt(a.stSellQty) || 0) > 0 ? 0 : 1;
-    const bHas = (parseInt(b.buyQty) || 0) > 0 || (parseInt(b.ltSellQty) || 0) > 0 || (parseInt(b.stSellQty) || 0) > 0 ? 0 : 1;
+    const aHas = (parseInt(a.buyQty) || 0) > 0 || (parseInt(a.sellQty) || 0) > 0 ? 0 : 1;
+    const bHas = (parseInt(b.buyQty) || 0) > 0 || (parseInt(b.sellQty) || 0) > 0 ? 0 : 1;
     return aHas - bHas;
   });
 
@@ -163,10 +163,10 @@ export default function TradePlanner() {
       const price = await fetchStockPrice(result.symbol, result.exchange);
       setRows(prev => [{ symbol: result.symbol, exchange: result.exchange, name: price.name || result.name,
         onHand: 0, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
-        buyQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
+        buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
     } catch {
       setRows(prev => [{ symbol: result.symbol, exchange: result.exchange, name: result.name,
-        onHand: 0, low: 0, current: 0, high: 0, buyQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
+        onHand: 0, low: 0, current: 0, high: 0, buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
     } finally { setFetchingPrice(null); }
   };
 
@@ -174,12 +174,22 @@ export default function TradePlanner() {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
   };
 
+  const updateSellQty = (idx, value) => {
+    setRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r;
+      const total = parseInt(value) || 0;
+      const lt = Math.min(total, r.ltAvail || 0);
+      const st = Math.min(total - lt, r.stAvail || 0);
+      return { ...r, sellQty: value, ltSellQty: lt > 0 ? String(lt) : '', stSellQty: st > 0 ? String(st) : '' };
+    }));
+  };
+
   const removeRow = (idx) => {
     setRows(prev => prev.filter((_, i) => i !== idx));
   };
 
   const clearAllQty = () => {
-    setRows(prev => prev.map(r => ({ ...r, buyQty: '', ltSellQty: '', stSellQty: '' })));
+    setRows(prev => prev.map(r => ({ ...r, buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '' })));
     localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -221,8 +231,8 @@ export default function TradePlanner() {
   };
 
   const buyTotal = rows.reduce((sum, r) => sum + (parseInt(r.buyQty) || 0) * r.current, 0);
-  const sellTotal = rows.reduce((sum, r) => sum + ((parseInt(r.ltSellQty) || 0) + (parseInt(r.stSellQty) || 0)) * r.current, 0);
-  const rowsWithQty = rows.filter(r => (parseInt(r.buyQty) || 0) > 0 || (parseInt(r.ltSellQty) || 0) > 0 || (parseInt(r.stSellQty) || 0) > 0);
+  const sellTotal = rows.reduce((sum, r) => sum + (parseInt(r.sellQty) || 0) * r.current, 0);
+  const rowsWithQty = rows.filter(r => (parseInt(r.buyQty) || 0) > 0 || (parseInt(r.sellQty) || 0) > 0);
   const hasAnyQty = rowsWithQty.length > 0;
 
   // ── PNG tEXt chunk helpers ──
@@ -275,7 +285,7 @@ export default function TradePlanner() {
       const dateStr = new Date().toISOString().split('T')[0];
       const planData = rowsWithQty.map(r => ({
         symbol: r.symbol, exchange: r.exchange,
-        buyQty: parseInt(r.buyQty) || 0, ltSellQty: parseInt(r.ltSellQty) || 0, stSellQty: parseInt(r.stSellQty) || 0,
+        buyQty: parseInt(r.buyQty) || 0, sellQty: parseInt(r.sellQty) || 0,
       }));
       const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       const pngBuf = new Uint8Array(await pngBlob.arrayBuffer());
@@ -303,23 +313,21 @@ export default function TradePlanner() {
     setRows(prev => { currentRows = prev; return prev; });
     const newStocks = [];
     for (const entry of planData) {
-      const { symbol, exchange = 'NSE', buyQty, ltSellQty, stSellQty, sellQty } = entry;
+      const { symbol, exchange = 'NSE', buyQty, sellQty, ltSellQty, stSellQty } = entry;
       if (!symbol) continue;
       const bq = String(parseInt(buyQty) || 0);
-      // Support legacy plans with single sellQty
-      const lsq = String(parseInt(ltSellQty) || (sellQty ? parseInt(sellQty) : 0) || 0);
-      const ssq = String(parseInt(stSellQty) || 0);
+      const sq = String(parseInt(sellQty) || (parseInt(ltSellQty) || 0) + (parseInt(stSellQty) || 0) || 0);
       const exists = currentRows.some(r => r.symbol === symbol && r.exchange === exchange)
         || newStocks.some(r => r.symbol === symbol && r.exchange === exchange);
       if (exists) {
-        newStocks.push({ symbol, exchange, buyQty: bq, ltSellQty: lsq, stSellQty: ssq, existingOnly: true });
+        newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: true });
       } else {
         try {
           const price = await fetchStockPrice(symbol, exchange);
-          newStocks.push({ symbol, exchange, buyQty: bq, ltSellQty: lsq, stSellQty: ssq, existingOnly: false,
+          newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: false,
             name: price.name || symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0 });
         } catch {
-          newStocks.push({ symbol, exchange, buyQty: bq, ltSellQty: lsq, stSellQty: ssq, existingOnly: false,
+          newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: false,
             name: symbol, low: 0, current: 0, high: 0 });
         }
       }
@@ -329,9 +337,16 @@ export default function TradePlanner() {
       const toAdd = [];
       for (const s of newStocks) {
         const idx = updated.findIndex(r => r.symbol === s.symbol && r.exchange === s.exchange);
-        if (idx >= 0) { updated[idx] = { ...updated[idx], buyQty: s.buyQty, ltSellQty: s.ltSellQty, stSellQty: s.stSellQty }; }
-        else { toAdd.push({ symbol: s.symbol, exchange: s.exchange, name: s.name, onHand: 0,
-          low: s.low, current: s.current, high: s.high, buyQty: s.buyQty, ltSellQty: s.ltSellQty, stSellQty: s.stSellQty, ltAvail: 0, stAvail: 0 }); }
+        if (idx >= 0) {
+          const r = updated[idx];
+          const total = parseInt(s.sellQty) || 0;
+          const lt = Math.min(total, r.ltAvail || 0);
+          const st = Math.min(total - lt, r.stAvail || 0);
+          updated[idx] = { ...r, buyQty: s.buyQty, sellQty: s.sellQty, ltSellQty: lt > 0 ? String(lt) : '', stSellQty: st > 0 ? String(st) : '' };
+        } else {
+          toAdd.push({ symbol: s.symbol, exchange: s.exchange, name: s.name, onHand: 0,
+            low: s.low, current: s.current, high: s.high, buyQty: s.buyQty, sellQty: s.sellQty, ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 });
+        }
       }
       return [...toAdd, ...updated];
     });
@@ -420,8 +435,9 @@ export default function TradePlanner() {
               <th style={{ ...thStyle, textAlign: 'right' }}>CMP</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>52W High</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Buy Qty</th>
-              <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>LT Sell</th>
-              <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>ST Sell</th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Sell Qty</th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>LT</th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>ST</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Est. Amount</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>LT P&L</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>ST P&L</th>
@@ -471,16 +487,23 @@ export default function TradePlanner() {
                     <input type="number" min="0" value={row.buyQty} onChange={(e) => updateQty(idx, 'buyQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                    <div>
-                      <input type="number" min="0" max={row.ltAvail || undefined} value={row.ltSellQty} onChange={(e) => updateQty(idx, 'ltSellQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
-                      {row.ltAvail > 0 && <div style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '1px' }}>/{row.ltAvail}</div>}
-                    </div>
+                    <input type="number" min="0" max={(row.ltAvail || 0) + (row.stAvail || 0) || undefined} value={row.sellQty} onChange={(e) => updateSellQty(idx, e.target.value)} placeholder="0" style={qtyInputStyle} />
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                    <div>
-                      <input type="number" min="0" max={row.stAvail || undefined} value={row.stSellQty} onChange={(e) => updateQty(idx, 'stSellQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
-                      {row.stAvail > 0 && <div style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '1px' }}>/{row.stAvail}</div>}
-                    </div>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                    {ltSq > 0 ? (
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{ltSq}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>/{row.ltAvail || 0}</div>
+                      </div>
+                    ) : row.ltAvail > 0 ? <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>/{row.ltAvail}</span> : ''}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                    {stSq > 0 ? (
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{stSq}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>/{row.stAvail || 0}</div>
+                      </div>
+                    ) : row.stAvail > 0 ? <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>/{row.stAvail}</span> : ''}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: hasQty ? 600 : 400, fontVariantNumeric: 'tabular-nums' }}>
                     {hasQty ? (
@@ -525,7 +548,7 @@ export default function TradePlanner() {
                 </tr>
                 {isExpanded && (
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td colSpan={13} style={{ padding: 0 }}>
+                    <td colSpan={14} style={{ padding: 0 }}>
                       <div style={{ display: 'flex', background: 'var(--surface)', borderLeft: `3px solid ${chartColor}`, minHeight: '220px' }}>
                         {/* Left: price info */}
                         <div style={{ padding: '16px 20px', minWidth: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
@@ -607,7 +630,7 @@ export default function TradePlanner() {
               );
             })}
             {filteredRows.length === 0 && searchQuery.trim() && (
-              <tr><td colSpan={13} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+              <tr><td colSpan={14} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
                 No matching stocks — select from dropdown to add new</td></tr>
             )}
             {filteredRows.length > 0 && (() => {
@@ -624,7 +647,7 @@ export default function TradePlanner() {
               const totalRealizedPL = totalLtPL + totalStPL;
               return (
               <tr style={{ borderTop: '2px solid var(--border)' }}>
-                <td colSpan={8} style={{ ...tdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
+                <td colSpan={9} style={{ ...tdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                   {buyTotal > 0 && <div style={{ color: 'var(--red)' }}>-{formatINR(buyTotal)}</div>}
                   {sellTotal > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(sellTotal)}</div>}
@@ -683,8 +706,9 @@ export default function TradePlanner() {
                   <th style={{ ...capThStyle, textAlign: 'right' }}>CMP</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>52W High</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>Buy</th>
-                  <th style={{ ...capThStyle, textAlign: 'right' }}>LT Sell</th>
-                  <th style={{ ...capThStyle, textAlign: 'right' }}>ST Sell</th>
+                  <th style={{ ...capThStyle, textAlign: 'right' }}>Sell</th>
+                  <th style={{ ...capThStyle, textAlign: 'right' }}>LT</th>
+                  <th style={{ ...capThStyle, textAlign: 'right' }}>ST</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>Amount</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>LT P&L</th>
                   <th style={{ ...capThStyle, textAlign: 'right' }}>ST P&L</th>
@@ -716,8 +740,9 @@ export default function TradePlanner() {
                       <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600 }}>{formatINR(row.current)}</td>
                       <td style={{ ...capTdStyle, textAlign: 'right' }}>{row.high ? formatINR(row.high) : '--'}</td>
                       <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600, color: bq ? '#4ade80' : '#888' }}>{bq || '--'}</td>
-                      <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600, color: ltSq ? '#f87171' : '#888' }}>{ltSq || '--'}</td>
-                      <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600, color: stSq ? '#f87171' : '#888' }}>{stSq || '--'}</td>
+                      <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600, color: totalSq ? '#f87171' : '#888' }}>{totalSq || '--'}</td>
+                      <td style={{ ...capTdStyle, textAlign: 'right', color: ltSq ? '#f87171' : '#888', fontSize: '12px' }}>{ltSq || '--'}</td>
+                      <td style={{ ...capTdStyle, textAlign: 'right', color: stSq ? '#f87171' : '#888', fontSize: '12px' }}>{stSq || '--'}</td>
                       <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 600 }}>
                         {bq > 0 && <div style={{ color: '#f87171' }}>-{formatINR(bq * row.current)}</div>}
                         {totalSq > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(totalSq * row.current)}</div>}
@@ -764,7 +789,7 @@ export default function TradePlanner() {
                   const capTotalPL = capLtPL + capStPL;
                   return (
                 <tr style={{ borderTop: '2px solid #333355' }}>
-                  <td colSpan={8} style={{ ...capTdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
+                  <td colSpan={9} style={{ ...capTdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
                   <td style={{ ...capTdStyle, textAlign: 'right', fontWeight: 700, fontSize: '14px' }}>
                     {buyTotal > 0 && <div style={{ color: '#f87171' }}>-{formatINR(buyTotal)}</div>}
                     {sellTotal > 0 && <div style={{ color: '#4ade80' }}>+{formatINR(sellTotal)}</div>}
