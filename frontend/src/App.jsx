@@ -1187,7 +1187,7 @@ export default function App() {
             </div>
           )}
           <div className="refresh-control">
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginRight: 4 }}>Prices</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Prices</span>
             <select
               className="refresh-select"
               value={refreshInterval}
@@ -1201,7 +1201,7 @@ export default function App() {
             </select>
           </div>
           <div className="refresh-control" title="Full page data reload interval">
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginRight: 4 }}>Reload</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Reload</span>
             <select
               className="refresh-select"
               value={pageRefreshInterval}
