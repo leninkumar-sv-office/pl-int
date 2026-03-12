@@ -72,13 +72,37 @@ def _headers() -> dict:
     }
 
 
+def _try_auto_login_and_retry(path: str, params: dict = None) -> Optional[dict]:
+    """Attempt auto-login and retry the failed request."""
+    if not can_auto_login() or _auto_login_in_progress:
+        return None
+    print("[Zerodha] Attempting auto-login...")
+    if auto_login():
+        try:
+            retry_resp = requests.get(
+                f"{_BASE_URL}{path}",
+                headers=_headers(),
+                params=params,
+                timeout=(5, 10),
+            )
+            if retry_resp.status_code == 200:
+                return retry_resp.json()
+        except Exception:
+            pass
+    return None
+
+
 def _api_get(path: str, params: dict = None) -> Optional[dict]:
     """Make authenticated GET request to Kite API."""
     global _auth_failed, _last_error, _conn_failed, _conn_fail_time
-    if not _api_key or not _access_token:
+    if not _api_key:
         return None
-    if _auth_failed:
-        return None  # Don't keep retrying after 403
+    # If no token or auth failed, try auto-login before giving up
+    if not _access_token or _auth_failed:
+        result = _try_auto_login_and_retry(path, params)
+        if result is not None:
+            return result
+        return None
     # Skip if connection recently failed (retry after 60s)
     if _conn_failed and (time.time() - _conn_fail_time) < 60:
         return None
@@ -101,24 +125,11 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
             with _lock:
                 global _session_valid
                 _session_valid = False
-            # Try auto-login if credentials are available
-            if can_auto_login() and not _auto_login_in_progress:
-                print("[Zerodha] Token expired — attempting auto-login...")
-                if auto_login():
-                    # Retry the original request with new token
-                    try:
-                        retry_resp = requests.get(
-                            f"{_BASE_URL}{path}",
-                            headers=_headers(),
-                            params=params,
-                            timeout=(5, 10),
-                        )
-                        if retry_resp.status_code == 200:
-                            return retry_resp.json()
-                    except Exception:
-                        pass
-            else:
-                print(f"[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
+            # Try auto-login and retry
+            result = _try_auto_login_and_retry(path, params)
+            if result is not None:
+                return result
+            print("[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
             return None
         else:
             _last_error = f"API error {resp.status_code}: {resp.text[:100]}"
@@ -142,8 +153,17 @@ def is_configured() -> bool:
 
 
 def is_session_valid() -> bool:
-    """Check if we have a valid access token (and it hasn't been rejected)."""
-    return bool(_api_key and _access_token and not _auth_failed)
+    """Check if we have a valid access token (and it hasn't been rejected).
+    If session is invalid but auto-login credentials are available, attempts auto-login.
+    """
+    if _api_key and _access_token and not _auth_failed:
+        return True
+    # Try auto-login if credentials are available
+    if can_auto_login() and not _auto_login_in_progress:
+        print("[Zerodha] Session invalid — attempting auto-login...")
+        if auto_login():
+            return True
+    return False
 
 
 def get_login_url(redirect_url: str = "http://localhost:8000/api/zerodha/callback") -> str:

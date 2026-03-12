@@ -57,7 +57,10 @@ export default function App() {
   const [bulkSellDoneKey, setBulkSellDoneKey] = useState(0); // increments to signal selection clear
   const [marketTicker, setMarketTicker] = useState([]);
   const [tickerLastUpdated, setTickerLastUpdated] = useState(null);
-  const [refreshInterval, setRefreshInterval] = useState(300); // seconds
+  const [refreshInterval, setRefreshInterval] = useState(() => {
+    const saved = localStorage.getItem('priceRefreshInterval');
+    return saved ? Number(saved) : 300;
+  });
   const [pageRefreshInterval, setPageRefreshInterval] = useState(() => {
     const saved = localStorage.getItem('pageRefreshInterval');
     return saved ? Number(saved) : 600; // default 10 min
@@ -933,6 +936,7 @@ export default function App() {
   const handleIntervalChange = async (e) => {
     const newInterval = Number(e.target.value);
     setRefreshInterval(newInterval);
+    localStorage.setItem('priceRefreshInterval', String(newInterval));
     try {
       await apiSetRefreshInterval(newInterval);
     } catch (err) {
