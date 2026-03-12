@@ -69,9 +69,9 @@
     "label": "Nikkei",
     "type": "index",
     "unit": "",
-    "price": 54358.19,
-    "change": -1262.65,
-    "change_pct": -2.27,
+    "price": 54367.3,
+    "change": -1253.54,
+    "change_pct": -2.25,
     "source": "yahoo/google"
   },
   {
