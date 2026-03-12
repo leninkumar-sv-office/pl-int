@@ -422,12 +422,12 @@
   "WABAG.NSE": {
     "price": 1279.5,
     "name": "Va Tech Wabag Ltd",
-    "week_52_high": 0.0,
-    "week_52_low": 0.0,
+    "week_52_high": 1680,
+    "week_52_low": 1033,
     "day_change": 27.6,
     "day_change_pct": 2.2,
-    "week_change_pct": 0.0,
-    "month_change_pct": 0.0,
+    "week_change_pct": 5.12,
+    "month_change_pct": -2.37,
     "volume": 869900,
     "previous_close": 1251.9
   },
