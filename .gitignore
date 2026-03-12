@@ -27,6 +27,9 @@ __pycache__/
 node_modules/
 .vite/
 
+# Data dumps
+backend/dumps/
+
 # Env
 .env
 .env.local
