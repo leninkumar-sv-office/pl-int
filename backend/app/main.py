@@ -2459,6 +2459,19 @@ def get_advisor_articles():
     } for a in articles]
 
 
+@app.post("/api/advisor/briefing-pdf")
+async def generate_briefing_pdf(request: Request):
+    """Generate a PDF from markdown briefing text. Body: {"markdown": "..."}"""
+    from .briefing_pdf import generate_briefing_pdf as gen_pdf
+    body = await request.json()
+    md = body.get("markdown", "")
+    if not md:
+        return {"error": "No markdown provided"}
+    filepath = gen_pdf(md)
+    filename = os.path.basename(filepath)
+    return {"path": filepath, "filename": filename}
+
+
 # ══════════════════════════════════════════════════════════
 #  STATIC FILE SERVING (Production)
 # ══════════════════════════════════════════════════════════
