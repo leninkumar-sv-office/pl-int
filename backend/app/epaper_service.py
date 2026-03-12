@@ -95,22 +95,28 @@ def _fetch_article_body(url: str) -> str:
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         if resp.status_code != 200:
+            print(f"[EPaper] Body fetch HTTP {resp.status_code}: {url[-50:]}")
             return ""
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # BL article body is in various containers
+        # BL article body — primary container is div.contentbody#ControlPara
         body_parts = []
-        for selector in ["div.paywall", "div.article-body", "article"]:
-            tag_name = selector.split(".")[0] if "." in selector else selector
-            class_name = selector.split(".")[1] if "." in selector else None
-            el = soup.find(tag_name, class_=class_name) if class_name else soup.find(tag_name)
-            if el:
-                for p in el.find_all("p"):
-                    text = p.get_text(strip=True)
-                    if text and len(text) > 20:
-                        body_parts.append(text)
-                if body_parts:
+        el = soup.find("div", class_="contentbody")
+        if not el:
+            el = soup.find("div", id="ControlPara")
+        if not el:
+            # Fallback to other selectors
+            for selector in ["div.paywall", "div.article-body", "article"]:
+                tag_name = selector.split(".")[0] if "." in selector else selector
+                class_name = selector.split(".")[1] if "." in selector else None
+                el = soup.find(tag_name, class_=class_name) if class_name else soup.find(tag_name)
+                if el:
                     break
+        if el:
+            for p in el.find_all("p"):
+                text = p.get_text(strip=True)
+                if text and len(text) > 20:
+                    body_parts.append(text)
 
         return "\n\n".join(body_parts)[:3000]  # Cap at 3000 chars per article
     except Exception as e:
@@ -140,10 +146,17 @@ def fetch_todays_articles(force_refresh: bool = False) -> List[dict]:
 
     print(f"[EPaper] Scraped {len(all_articles)} articles from {len(_SECTIONS)} sections")
 
-    # Fetch full body for top articles (limit to 30 to avoid overloading)
-    for art in all_articles[:30]:
-        art["body"] = _fetch_article_body(art["url"])
-        time.sleep(0.3)
+    # Fetch full body for all articles
+    bodies_found = 0
+    for i, art in enumerate(all_articles):
+        body = _fetch_article_body(art["url"])
+        art["body"] = body
+        if body:
+            bodies_found += 1
+        if (i + 1) % 20 == 0:
+            print(f"[EPaper] Fetched body for {i+1}/{len(all_articles)} articles ({bodies_found} with content)...")
+        time.sleep(0.5)  # Generous delay to avoid rate limiting
+    print(f"[EPaper] Total articles with body: {bodies_found}/{len(all_articles)}")
 
     with _cache_lock:
         _articles_cache[today] = all_articles

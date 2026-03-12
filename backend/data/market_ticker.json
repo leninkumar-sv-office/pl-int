@@ -59,9 +59,9 @@
     "label": "SGX STI",
     "type": "index",
     "unit": "",
-    "price": 4864.23,
-    "change": 17.67,
-    "change_pct": 0.36,
+    "price": 4838.21,
+    "change": -8.35,
+    "change_pct": -0.17,
     "source": "yahoo/google"
   },
   {
@@ -69,9 +69,9 @@
     "label": "Nikkei",
     "type": "index",
     "unit": "",
-    "price": 54316.7,
-    "change": -1304.14,
-    "change_pct": -2.34,
+    "price": 54177.15,
+    "change": -1443.69,
+    "change_pct": -2.6,
     "source": "yahoo/google"
   },
   {
@@ -79,9 +79,9 @@
     "label": "SGD/INR",
     "type": "forex",
     "unit": "",
-    "price": 72.29,
-    "change": 0.67,
-    "change_pct": 0.93,
+    "price": 72.26,
+    "change": 0.64,
+    "change_pct": 0.89,
     "source": "yahoo/google"
   },
   {

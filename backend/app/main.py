@@ -2449,10 +2449,10 @@ def advisor_chat(body: dict):
 def get_advisor_articles():
     """Get raw scraped articles from today's Business Line."""
     articles = epaper_service.fetch_todays_articles()
-    # Strip body to reduce payload
     return [{
         "title": a["title"],
         "summary": a.get("summary", ""),
+        "body": a.get("body", ""),
         "section": a["section"],
         "url": a["url"],
     } for a in articles]
