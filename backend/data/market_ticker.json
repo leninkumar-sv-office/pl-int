@@ -59,9 +59,9 @@
     "label": "SGX STI",
     "type": "index",
     "unit": "",
-    "price": 4866.34,
-    "change": 19.78,
-    "change_pct": 0.41,
+    "price": 4866.17,
+    "change": 19.61,
+    "change_pct": 0.4,
     "source": "yahoo/google"
   },
   {
@@ -69,9 +69,9 @@
     "label": "Nikkei",
     "type": "index",
     "unit": "",
-    "price": 54687.1,
-    "change": -933.74,
-    "change_pct": -1.68,
+    "price": 54689.82,
+    "change": -931.02,
+    "change_pct": -1.67,
     "source": "yahoo/google"
   },
   {
