@@ -132,5 +132,17 @@
     "SGDINR": 72.36,
     "USDINR": 91.99,
     "CRUDEOIL": 7403.0
+  },
+  "2026-03-13": {
+    "SENSEX": 76034.42,
+    "NIFTY50": 23639.15,
+    "GIFTNIFTY": 23718.0,
+    "GOLD": 16124.5,
+    "SILVER": 274.7,
+    "SGX": 4855.33,
+    "NIKKEI": 54452.96,
+    "SGDINR": 72.29,
+    "USDINR": 92.28,
+    "CRUDEOIL": 8886.0
   }
 }

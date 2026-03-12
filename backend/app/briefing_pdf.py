@@ -58,7 +58,7 @@ _TABLE_LAYOUTS = {
     # Stock | Signal | Action | Source | Detail
     ("stock", "signal", "action", "source", "detail"): [26, 28, 18, 14, 104],
     # Stock | Value | Signal | Action | Why
-    ("stock", "value", "signal", "action", "why"): [28, 20, 26, 18, 98],
+    ("stock", "value", "signal", "action", "why"): [24, 16, 22, 16, 112],
     # Stock | Signal | Source | Detail (legacy 4-col)
     ("stock", "signal", "source", "detail"): [28, 32, 14, 116],
     # WHO | WHAT | HOW MUCH | WHY IT MATTERS

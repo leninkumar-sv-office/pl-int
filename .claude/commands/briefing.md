@@ -44,7 +44,7 @@ One-line bullets: "- Oil/Energy: CRISIS. Brent $100+. OMCs crushed. Upstream sur
 One-line bullets: "- Crude: $100.27 (+9%). Iran tanker attacks. IEA 400M bbl release."
 
 ### Portfolio Impact
-| Stock | Value | Signal | Action | Why (MAX 8 words) |
+| Stock | Value | Signal | Action | Why (15-25 words, specific catalyst + quantified impact) |
 Sort by urgency: TRIM/EXIT first, then ADD, HOLD, WATCH.
 Skip no-news holdings — just list names at end.
 

@@ -112,7 +112,8 @@ Bullet format: "- Sector: DIRECTION. Key fact. Affected stocks."
 Bullet format only. One line per item. "- Crude: $100.27 (+9%). Iran tanker attacks."
 
 ### Portfolio Impact
-| Stock | Value | Signal | Action | Why (max 8 words) |
+| Stock | Value | Signal | Action | Why (15-25 words, specific detail) |
+- **Why column**: Include the specific catalyst, quantified impact, and source. "Brent >$100 destroys refining margins. -4% today. Moody's flagged margin volatility" not just "OMC crushed"
 - ONLY stocks with news. Skip holdings with no news — just list names at the end.
 - Sort by action urgency: TRIM/EXIT first, then ADD, then HOLD, then WATCH.
 
