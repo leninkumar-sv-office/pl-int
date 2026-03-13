@@ -211,13 +211,14 @@ def _parse_rd_xlsx(filepath: Path) -> dict:
     }
 
 
-def _parse_all_xlsx() -> list:
+def _parse_all_xlsx(xlsx_dir: Path = None) -> list:
     """Parse all xlsx files from dumps/RD/ directory."""
+    xlsx_dir = xlsx_dir or RD_XLSX_DIR
     results = []
-    if not RD_XLSX_DIR.exists():
+    if not xlsx_dir.exists():
         return results
 
-    for f in sorted(RD_XLSX_DIR.glob("*.xlsx")):
+    for f in sorted(xlsx_dir.glob("*.xlsx")):
         if f.name.startswith("~$"):
             continue
         if "_Archive" in str(f):
@@ -236,10 +237,11 @@ def _parse_all_xlsx() -> list:
 
 def _create_rd_xlsx(name: str, bank: str, monthly_amount: float,
                     rate_pct: float, tenure_months: int, start_date: str,
-                    frequency: int = 4):
+                    frequency: int = 4, xlsx_dir: Path = None):
     """Create an xlsx file following the RD template structure."""
-    RD_XLSX_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = RD_XLSX_DIR / f"{name}.xlsx"
+    xlsx_dir = xlsx_dir or RD_XLSX_DIR
+    xlsx_dir.mkdir(parents=True, exist_ok=True)
+    filepath = xlsx_dir / f"{name}.xlsx"
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -305,20 +307,23 @@ def _create_rd_xlsx(name: str, bank: str, monthly_amount: float,
 #  JSON LOAD / SAVE (manual entries)
 # ═══════════════════════════════════════════════════════════
 
-def _load_json() -> list:
-    if not RD_JSON_FILE.exists():
+def _load_json(json_file: Path = None) -> list:
+    json_file = json_file or RD_JSON_FILE
+    if not json_file.exists():
         return []
     try:
-        with open(RD_JSON_FILE, "r") as f:
+        with open(json_file, "r") as f:
             data = json.load(f)
             return data if isinstance(data, list) else []
     except (json.JSONDecodeError, Exception):
         return []
 
 
-def _save_json(data: list):
-    DUMPS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(RD_JSON_FILE, "w") as f:
+def _save_json(data: list, json_file: Path = None, dumps_dir: Path = None):
+    dumps_dir = dumps_dir or DUMPS_DIR
+    json_file = json_file or RD_JSON_FILE
+    dumps_dir.mkdir(parents=True, exist_ok=True)
+    with open(json_file, "w") as f:
         json.dump(data, f, indent=2)
 
 
@@ -422,11 +427,13 @@ def _enrich_json_item(item: dict) -> dict:
 #  PUBLIC API
 # ═══════════════════════════════════════════════════════════
 
-def get_all() -> list:
+def get_all(base_dir=None) -> list:
     """Return all RDs: xlsx-parsed + JSON manual entries."""
+    xlsx_dir = (Path(base_dir) / "RD") if base_dir else RD_XLSX_DIR
+    json_file = (Path(base_dir) / "recurring_deposits.json") if base_dir else RD_JSON_FILE
     with _lock:
-        xlsx_items = _parse_all_xlsx()
-        json_items = _load_json()
+        xlsx_items = _parse_all_xlsx(xlsx_dir=xlsx_dir)
+        json_items = _load_json(json_file=json_file)
 
     for item in json_items:
         _enrich_json_item(item)
@@ -434,9 +441,9 @@ def get_all() -> list:
     return xlsx_items + json_items
 
 
-def get_dashboard() -> dict:
+def get_dashboard(base_dir=None) -> dict:
     """Aggregate RD summary for dashboard."""
-    items = get_all()
+    items = get_all(base_dir=base_dir)
     active = [i for i in items if i.get("status") == "Active"]
 
     monthly_commitment = sum(i.get("monthly_amount", 0) for i in active)
@@ -454,8 +461,9 @@ def get_dashboard() -> dict:
     }
 
 
-def add(data: dict) -> dict:
+def add(data: dict, base_dir=None) -> dict:
     """Add a new RD — creates xlsx file + JSON entry."""
+    xlsx_dir = (Path(base_dir) / "RD") if base_dir else RD_XLSX_DIR
     monthly = data["monthly_amount"]
     rate = data["interest_rate"]
     tenure = data["tenure_months"]
@@ -485,6 +493,7 @@ def add(data: dict) -> dict:
         tenure_months=tenure,
         start_date=start_date,
         frequency=freq,
+        xlsx_dir=xlsx_dir,
     )
 
     return {
@@ -505,10 +514,12 @@ def add(data: dict) -> dict:
     }
 
 
-def update(rd_id: str, data: dict) -> dict:
+def update(rd_id: str, data: dict, base_dir=None) -> dict:
     """Update an existing manual RD."""
+    json_file = (Path(base_dir) / "recurring_deposits.json") if base_dir else RD_JSON_FILE
+    dumps_dir = Path(base_dir) if base_dir else DUMPS_DIR
     with _lock:
-        items = _load_json()
+        items = _load_json(json_file=json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == rd_id), None)
         if idx is None:
             raise ValueError(f"RD {rd_id} not found")
@@ -533,15 +544,18 @@ def update(rd_id: str, data: dict) -> dict:
                 item["maturity_date"] = _calc_maturity_date(item["start_date"], item["tenure_months"])
 
         items[idx] = item
-        _save_json(items)
+        _save_json(items, json_file=json_file, dumps_dir=dumps_dir)
         return item
 
 
-def delete(rd_id: str) -> dict:
+def delete(rd_id: str, base_dir=None) -> dict:
     """Delete an RD — removes xlsx file and/or JSON entry."""
+    xlsx_dir = (Path(base_dir) / "RD") if base_dir else RD_XLSX_DIR
+    json_file = (Path(base_dir) / "recurring_deposits.json") if base_dir else RD_JSON_FILE
+    dumps_dir = Path(base_dir) if base_dir else DUMPS_DIR
     # Try xlsx first
-    if RD_XLSX_DIR.exists():
-        for f in RD_XLSX_DIR.glob("*.xlsx"):
+    if xlsx_dir.exists():
+        for f in xlsx_dir.glob("*.xlsx"):
             if f.name.startswith("~$"):
                 continue
             if _gen_rd_id(f.stem) == rd_id:
@@ -550,19 +564,21 @@ def delete(rd_id: str) -> dict:
 
     # Try JSON
     with _lock:
-        items = _load_json()
+        items = _load_json(json_file=json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == rd_id), None)
         if idx is None:
             raise ValueError(f"RD {rd_id} not found")
         removed = items.pop(idx)
-        _save_json(items)
+        _save_json(items, json_file=json_file, dumps_dir=dumps_dir)
         return {"message": f"RD {rd_id} deleted", "item": removed}
 
 
-def add_installment(rd_id: str, installment: dict) -> dict:
+def add_installment(rd_id: str, installment: dict, base_dir=None) -> dict:
     """Add an installment to a manual RD (for tracking extra payments)."""
+    json_file = (Path(base_dir) / "recurring_deposits.json") if base_dir else RD_JSON_FILE
+    dumps_dir = Path(base_dir) if base_dir else DUMPS_DIR
     with _lock:
-        items = _load_json()
+        items = _load_json(json_file=json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == rd_id), None)
         if idx is None:
             raise ValueError(f"RD {rd_id} not found")
@@ -578,5 +594,5 @@ def add_installment(rd_id: str, installment: dict) -> dict:
         })
 
         items[idx] = item
-        _save_json(items)
+        _save_json(items, json_file=json_file, dumps_dir=dumps_dir)
         return item

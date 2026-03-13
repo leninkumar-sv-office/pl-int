@@ -569,8 +569,9 @@ def _read_xlsx(filepath: Path) -> dict:
 #  PDF IMPORT
 # ═══════════════════════════════════════════════════════════
 
-def _import_from_pdfs():
+def _import_from_pdfs(nps_dir: Path = None):
     """Scan PDF_IMPORT_DIR for NPS statement PDFs, parse, and create xlsx files."""
+    nps_dir = nps_dir or NPS_DIR
     global _imported
     if _imported:
         return
@@ -584,8 +585,8 @@ def _import_from_pdfs():
         return
 
     # Check if we already have xlsx files
-    NPS_DIR.mkdir(parents=True, exist_ok=True)
-    existing = list(NPS_DIR.glob("*.xlsx"))
+    nps_dir.mkdir(parents=True, exist_ok=True)
+    existing = list(nps_dir.glob("*.xlsx"))
     if existing:
         return  # already imported
 
@@ -627,7 +628,7 @@ def _import_from_pdfs():
         "schemes_summary": merged.get("schemes_summary", []),
     }
 
-    xlsx_path = NPS_DIR / f"{pran}.xlsx"
+    xlsx_path = nps_dir / f"{pran}.xlsx"
     _write_xlsx(xlsx_path, account, merged["transactions"])
 
     total_contrib = sum(c["amount"] for c in merged["contributions"])
@@ -672,11 +673,12 @@ def _enrich(account: dict) -> dict:
 #  LOAD / SAVE (xlsx-based)
 # ═══════════════════════════════════════════════════════════
 
-def _load_all_xlsx() -> list:
+def _load_all_xlsx(nps_dir: Path = None) -> list:
     """Load all NPS accounts from xlsx files in NPS_DIR."""
-    NPS_DIR.mkdir(parents=True, exist_ok=True)
+    nps_dir = nps_dir or NPS_DIR
+    nps_dir.mkdir(parents=True, exist_ok=True)
     items = []
-    for xlsx_path in sorted(NPS_DIR.glob("*.xlsx")):
+    for xlsx_path in sorted(nps_dir.glob("*.xlsx")):
         try:
             account = _read_xlsx(xlsx_path)
             account["_xlsx_path"] = str(xlsx_path)
@@ -686,11 +688,12 @@ def _load_all_xlsx() -> list:
     return items
 
 
-def _save_account(account: dict, transactions: list | None = None):
+def _save_account(account: dict, transactions: list | None = None, nps_dir: Path = None):
     """Save an NPS account to its xlsx file."""
+    nps_dir = nps_dir or NPS_DIR
     pran = account.get("pran", "")
     xlsx_name = pran if pran else account.get("id", str(uuid.uuid4())[:8])
-    xlsx_path = Path(account.get("_xlsx_path", str(NPS_DIR / f"{xlsx_name}.xlsx")))
+    xlsx_path = Path(account.get("_xlsx_path", str(nps_dir / f"{xlsx_name}.xlsx")))
 
     if transactions is None:
         # Read existing transactions
@@ -707,20 +710,21 @@ def _save_account(account: dict, transactions: list | None = None):
 #  PUBLIC API
 # ═══════════════════════════════════════════════════════════
 
-def get_all() -> list:
+def get_all(base_dir=None) -> list:
     """Return all NPS accounts with computed fields."""
+    nps_dir = (Path(base_dir) / "NPS") if base_dir else NPS_DIR
     with _lock:
-        _import_from_pdfs()
-        items = _load_all_xlsx()
+        _import_from_pdfs(nps_dir=nps_dir)
+        items = _load_all_xlsx(nps_dir=nps_dir)
 
     for item in items:
         _enrich(item)
     return items
 
 
-def get_dashboard() -> dict:
+def get_dashboard(base_dir=None) -> dict:
     """Aggregate NPS summary for dashboard."""
-    items = get_all()
+    items = get_all(base_dir=base_dir)
     active = [i for i in items if i.get("status") == "Active"]
 
     total_contributed = round(sum(i.get("total_contributed", 0) for i in active), 2)
@@ -738,8 +742,9 @@ def get_dashboard() -> dict:
     }
 
 
-def add(data: dict) -> dict:
+def add(data: dict, base_dir=None) -> dict:
     """Add a new NPS account."""
+    nps_dir = (Path(base_dir) / "NPS") if base_dir else NPS_DIR
     with _lock:
         account = {
             "id": str(uuid.uuid4())[:8],
@@ -754,14 +759,15 @@ def add(data: dict) -> dict:
             "remarks": data.get("remarks", ""),
             "contributions": [],
         }
-        _save_account(account, [])
+        _save_account(account, [], nps_dir=nps_dir)
         return account
 
 
-def update(nps_id: str, data: dict) -> dict:
+def update(nps_id: str, data: dict, base_dir=None) -> dict:
     """Update an existing NPS account."""
+    nps_dir = (Path(base_dir) / "NPS") if base_dir else NPS_DIR
     with _lock:
-        items = _load_all_xlsx()
+        items = _load_all_xlsx(nps_dir=nps_dir)
         item = next((x for x in items if x["id"] == nps_id), None)
         if item is None:
             raise ValueError(f"NPS account {nps_id} not found")
@@ -772,14 +778,15 @@ def update(nps_id: str, data: dict) -> dict:
             if val is not None and key not in ("contributions", "_transactions", "_xlsx_path", "id"):
                 item[key] = val
 
-        _save_account(item, transactions)
+        _save_account(item, transactions, nps_dir=nps_dir)
         return item
 
 
-def delete(nps_id: str) -> dict:
+def delete(nps_id: str, base_dir=None) -> dict:
     """Delete an NPS account."""
+    nps_dir = (Path(base_dir) / "NPS") if base_dir else NPS_DIR
     with _lock:
-        items = _load_all_xlsx()
+        items = _load_all_xlsx(nps_dir=nps_dir)
         item = next((x for x in items if x["id"] == nps_id), None)
         if item is None:
             raise ValueError(f"NPS account {nps_id} not found")
@@ -791,10 +798,11 @@ def delete(nps_id: str) -> dict:
         return {"message": f"NPS {nps_id} deleted", "item": item}
 
 
-def add_contribution(nps_id: str, contribution: dict) -> dict:
+def add_contribution(nps_id: str, contribution: dict, base_dir=None) -> dict:
     """Add a contribution to an NPS account."""
+    nps_dir = (Path(base_dir) / "NPS") if base_dir else NPS_DIR
     with _lock:
-        items = _load_all_xlsx()
+        items = _load_all_xlsx(nps_dir=nps_dir)
         item = next((x for x in items if x["id"] == nps_id), None)
         if item is None:
             raise ValueError(f"NPS account {nps_id} not found")
@@ -818,5 +826,5 @@ def add_contribution(nps_id: str, contribution: dict) -> dict:
             "remarks": contribution.get("remarks", ""),
         })
 
-        _save_account(item, transactions)
+        _save_account(item, transactions, nps_dir=nps_dir)
         return item

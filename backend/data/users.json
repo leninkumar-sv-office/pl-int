@@ -1,0 +1,20 @@
+[
+  {
+    "id": "lenin",
+    "name": "Lenin",
+    "avatar": "L",
+    "color": "#4e7cff"
+  },
+  {
+    "id": "appa",
+    "name": "Appa",
+    "avatar": "A",
+    "color": "#a855f7"
+  },
+  {
+    "id": "amma",
+    "name": "Amma",
+    "avatar": "A",
+    "color": "#4e7cff"
+  }
+]

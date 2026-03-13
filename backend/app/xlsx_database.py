@@ -357,7 +357,7 @@ class XlsxPortfolio:
         self._holding_file: Dict[str, Path] = {}
 
         # Manual prices
-        self._manual_prices_file = Path(stocks_dir).parent.parent / "backend" / "data" / "manual_prices.json"
+        self._manual_prices_file = Path(stocks_dir).parent / "manual_prices.json"
         self._ensure_manual_prices()
 
         # Build file map on init

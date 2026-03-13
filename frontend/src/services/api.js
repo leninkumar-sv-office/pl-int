@@ -7,6 +7,27 @@ const api = axios.create({
   timeout: 60000,  // 60s — handles cold-start scenarios
 });
 
+// Attach X-User-Id header to every request
+api.interceptors.request.use((config) => {
+  const userId = localStorage.getItem('selectedUserId');
+  if (userId) {
+    config.headers['X-User-Id'] = userId;
+  }
+  return config;
+});
+
+// ── Users ─────────────────────────────────────────
+
+export async function getUsers() {
+  const { data } = await api.get('/users');
+  return data;
+}
+
+export async function addUser(name, avatar, color) {
+  const { data } = await api.post('/users', { name, avatar, color });
+  return data;
+}
+
 // ── Portfolio ─────────────────────────────────────────
 
 export async function getPortfolio() {

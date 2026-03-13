@@ -1,7 +1,7 @@
 """
 Stock Portfolio Dashboard - FastAPI Backend
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -13,6 +13,7 @@ import uuid
 import time
 import threading
 import traceback
+import contextvars
 
 from .models import (
     AddStockRequest, SellStockRequest, AddDividendRequest, ManualPriceRequest,
@@ -28,8 +29,9 @@ from .models import (
     CDSLCASUpload, MFImportPayload,
     DividendStatementUpload,
 )
-from .xlsx_database import xlsx_db as db
-from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache
+from .xlsx_database import xlsx_db as db, XlsxPortfolio
+from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache, MFXlsxPortfolio
+from .config import get_users, save_users, get_user_dumps_dir
 from . import stock_service
 from . import zerodha_service
 from . import contract_note_parser
@@ -133,6 +135,108 @@ app.add_middleware(
 )
 
 
+# User context middleware — sets _current_user_id from X-User-Id header
+@app.middleware("http")
+async def user_context_middleware(request: Request, call_next):
+    user_id = request.headers.get("x-user-id", "")
+    token = _current_user_id.set(user_id)
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        _current_user_id.reset(token)
+
+
+# ══════════════════════════════════════════════════════════
+#  USER MANAGEMENT
+# ══════════════════════════════════════════════════════════
+
+# Per-request user context (set by middleware)
+_current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar('_current_user_id', default='')
+
+# Per-user DB instances: {user_id: {"stocks": XlsxPortfolio, "mf": MFXlsxPortfolio}}
+_user_dbs: Dict[str, dict] = {}
+_user_dbs_lock = threading.Lock()
+
+
+def _get_default_user_id() -> str:
+    users = get_users()
+    return users[0]["id"] if users else "lenin"
+
+
+def _get_user_dbs(user_id: str) -> dict:
+    """Get or create DB instances for a user."""
+    with _user_dbs_lock:
+        if user_id in _user_dbs:
+            return _user_dbs[user_id]
+    # Outside lock — create instances (I/O)
+    dumps = get_user_dumps_dir(user_id)
+    from .mf_xlsx_database import MFXlsxPortfolio
+    dbs = {
+        "stocks": XlsxPortfolio(dumps / "Stocks"),
+        "mf": MFXlsxPortfolio(dumps / "Mutual Funds"),
+        "dumps_dir": dumps,
+    }
+    with _user_dbs_lock:
+        _user_dbs[user_id] = dbs
+    return dbs
+
+
+def _resolve_user_id() -> str:
+    """Get the current request's user ID from contextvar."""
+    uid = _current_user_id.get()
+    return uid or _get_default_user_id()
+
+
+def udb():
+    """Get stock DB for the current request's user."""
+    uid = _resolve_user_id()
+    if uid == _get_default_user_id():
+        return db
+    return _get_user_dbs(uid)["stocks"]
+
+
+def umf():
+    """Get MF DB for the current request's user."""
+    uid = _resolve_user_id()
+    if uid == _get_default_user_id():
+        return mf_db
+    return _get_user_dbs(uid)["mf"]
+
+
+def user_dumps_dir():
+    """Get dumps dir for the current request's user."""
+    uid = _resolve_user_id()
+    return get_user_dumps_dir(uid)
+
+
+@app.get("/api/users")
+def list_users():
+    """Get all configured users."""
+    return get_users()
+
+
+class AddUserRequest(BaseModel):
+    name: str
+    avatar: str = ""
+    color: str = "#4e7cff"
+
+
+@app.post("/api/users")
+def add_user(req: AddUserRequest):
+    """Add a new user."""
+    users = get_users()
+    user_id = req.name.lower().replace(" ", "_")
+    if any(u["id"] == user_id for u in users):
+        raise HTTPException(400, f"User '{user_id}' already exists")
+    user = {"id": user_id, "name": req.name, "avatar": req.avatar or req.name[0].upper(), "color": req.color}
+    users.append(user)
+    save_users(users)
+    # Create user's dump directories
+    get_user_dumps_dir(user_id)
+    return user
+
+
 # ══════════════════════════════════════════════════════════
 #  PORTFOLIO ENDPOINTS
 # ══════════════════════════════════════════════════════════
@@ -140,7 +244,7 @@ app.add_middleware(
 @app.get("/api/portfolio", response_model=List[HoldingWithLive])
 def get_portfolio():
     """Get all holdings with cached price data (instant, no network calls)."""
-    holdings = db.get_all_holdings()
+    holdings = udb().get_all_holdings()
     if not holdings:
         return []
 
@@ -218,13 +322,13 @@ def add_stock(req: AddStockRequest):
         notes=req.notes,
     )
 
-    return db.add_holding(holding)
+    return udb().add_holding(holding)
 
 
 @app.post("/api/portfolio/sell")
 def sell_stock(req: SellStockRequest):
     """Sell shares from a holding — inserts a Sell row in the stock's xlsx."""
-    holding = db.get_holding_by_id(req.holding_id)
+    holding = udb().get_holding_by_id(req.holding_id)
     if not holding:
         raise HTTPException(status_code=404, detail="Holding not found")
 
@@ -240,7 +344,7 @@ def sell_stock(req: SellStockRequest):
 
     # Insert a Sell row into the stock's xlsx file
     try:
-        db.add_sell_transaction(
+        udb().add_sell_transaction(
             symbol=holding.symbol,
             exchange=holding.exchange,
             quantity=req.quantity,
@@ -262,7 +366,7 @@ def sell_stock(req: SellStockRequest):
 @app.delete("/api/portfolio/{holding_id}")
 def delete_holding(holding_id: str):
     """Delete a holding without recording a sale."""
-    if db.remove_holding(holding_id):
+    if udb().remove_holding(holding_id):
         return {"message": "Holding deleted"}
     raise HTTPException(status_code=404, detail="Holding not found")
 
@@ -276,7 +380,7 @@ def add_dividend(req: AddDividendRequest):
     """Record a dividend received for a stock."""
     dividend_date = req.dividend_date or str(date.today())
     try:
-        db.add_dividend(
+        udb().add_dividend(
             symbol=req.symbol.upper(),
             exchange=req.exchange,
             amount=req.amount,
@@ -310,8 +414,8 @@ def parse_dividend_statement_preview(req: DividendStatementUpload):
     try:
         result = dividend_parser.parse_dividend_statement(
             pdf_bytes=pdf_bytes,
-            portfolio_name_map=dict(db._name_map),
-            existing_fingerprints_fn=lambda sym: db.get_existing_dividend_fingerprints(sym),
+            portfolio_name_map=dict(udb()._name_map),
+            existing_fingerprints_fn=lambda sym: udb().get_existing_dividend_fingerprints(sym),
         )
     except Exception as e:
         print(f"[DividendImport] PDF parse error: {e}")
@@ -360,7 +464,7 @@ def import_dividends_confirmed(req: dict):
         # Server-side duplicate check
         if symbol not in _fp_cache:
             try:
-                _fp_cache[symbol] = db.get_existing_dividend_fingerprints(symbol)
+                _fp_cache[symbol] = udb().get_existing_dividend_fingerprints(symbol)
             except Exception:
                 _fp_cache[symbol] = set()
 
@@ -370,7 +474,7 @@ def import_dividends_confirmed(req: dict):
             continue
 
         try:
-            db.add_dividend(
+            udb().add_dividend(
                 symbol=symbol,
                 exchange="NSE",
                 amount=amount,
@@ -387,7 +491,7 @@ def import_dividends_confirmed(req: dict):
             errors.append(f"{symbol}: {str(e)[:100]}")
 
     if imported > 0:
-        db.reindex()
+        udb().reindex()
 
     total_amount = sum(d["amount"] for d in details)
     return {
@@ -456,7 +560,7 @@ def parse_contract_note_preview(req: ContractNoteUpload):
         # Lazy-load fingerprints per symbol
         if symbol not in _fp_cache:
             try:
-                _fp_cache[symbol] = db.get_existing_transaction_fingerprints(symbol)
+                _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
             except Exception:
                 _fp_cache[symbol] = (set(), set())
 
@@ -532,7 +636,7 @@ def import_contract_note(req: ContractNoteUpload):
             if symbol:
                 if symbol not in _fp_cache:
                     try:
-                        _fp_cache[symbol] = db.get_existing_transaction_fingerprints(symbol)
+                        _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
                     except Exception:
                         _fp_cache[symbol] = (set(), set())
 
@@ -571,9 +675,9 @@ def import_contract_note(req: ContractNoteUpload):
                 )
 
                 # Use _insert_transaction directly for precise cost control
-                filepath = db._find_file_for_symbol(tx["symbol"])
+                filepath = udb()._find_file_for_symbol(tx["symbol"])
                 if filepath is None:
-                    filepath = db._create_stock_file(
+                    filepath = udb()._create_stock_file(
                         tx["symbol"], tx["exchange"], tx["name"]
                     )
 
@@ -588,8 +692,8 @@ def import_contract_note(req: ContractNoteUpload):
                     stt=tx["stt"],
                     add_chrg=tx["add_charges"],
                 )
-                db._insert_transaction(filepath, buy_tx)
-                db._invalidate_symbol(tx["symbol"])
+                udb()._insert_transaction(filepath, buy_tx)
+                udb()._invalidate_symbol(tx["symbol"])
 
                 imported_buys.append({
                     "symbol": tx["symbol"],
@@ -602,7 +706,7 @@ def import_contract_note(req: ContractNoteUpload):
 
             elif tx["action"] == "Sell":
                 # Insert Sell row — FIFO matching will handle lot assignment
-                filepath = db._find_file_for_symbol(tx["symbol"])
+                filepath = udb()._find_file_for_symbol(tx["symbol"])
                 if filepath is None:
                     errors.append(
                         f"SELL {tx['symbol']}: No existing holding file found. "
@@ -621,8 +725,8 @@ def import_contract_note(req: ContractNoteUpload):
                     stt=tx["stt"],
                     add_chrg=tx["add_charges"],
                 )
-                db._insert_transaction(filepath, sell_tx)
-                db._invalidate_symbol(tx["symbol"])
+                udb()._insert_transaction(filepath, sell_tx)
+                udb()._invalidate_symbol(tx["symbol"])
 
                 imported_sells.append({
                     "symbol": tx["symbol"],
@@ -640,7 +744,7 @@ def import_contract_note(req: ContractNoteUpload):
             traceback.print_exc()
 
     # Reindex to pick up any new files
-    db.reindex()
+    udb().reindex()
 
     if skipped_dups > 0:
         print(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
@@ -707,7 +811,7 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
             if symbol:
                 if symbol not in _fp_cache:
                     try:
-                        _fp_cache[symbol] = db.get_existing_transaction_fingerprints(symbol)
+                        _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
                     except Exception:
                         _fp_cache[symbol] = (set(), set())
 
@@ -733,9 +837,9 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
             remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
 
             if tx["action"] == "Buy":
-                filepath = db._find_file_for_symbol(tx["symbol"])
+                filepath = udb()._find_file_for_symbol(tx["symbol"])
                 if filepath is None:
-                    filepath = db._create_stock_file(
+                    filepath = udb()._create_stock_file(
                         tx["symbol"], tx.get("exchange", "NSE"), tx.get("name", tx["symbol"])
                     )
 
@@ -750,8 +854,8 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
                     stt=tx.get("stt", 0),
                     add_chrg=tx.get("add_charges", 0),
                 )
-                db._insert_transaction(filepath, buy_tx)
-                db._invalidate_symbol(tx["symbol"])
+                udb()._insert_transaction(filepath, buy_tx)
+                udb()._invalidate_symbol(tx["symbol"])
 
                 imported_buys.append({
                     "symbol": tx["symbol"],
@@ -760,7 +864,7 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
                 })
 
             elif tx["action"] == "Sell":
-                filepath = db._find_file_for_symbol(tx["symbol"])
+                filepath = udb()._find_file_for_symbol(tx["symbol"])
                 if filepath is None:
                     errors.append(
                         f"SELL {tx['symbol']}: No existing holding file found."
@@ -778,8 +882,8 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
                     stt=tx.get("stt", 0),
                     add_chrg=tx.get("add_charges", 0),
                 )
-                db._insert_transaction(filepath, sell_tx)
-                db._invalidate_symbol(tx["symbol"])
+                udb()._insert_transaction(filepath, sell_tx)
+                udb()._invalidate_symbol(tx["symbol"])
 
                 imported_sells.append({
                     "symbol": tx["symbol"],
@@ -803,7 +907,7 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
             print(f"[Import] Error: {error_msg}")
             traceback.print_exc()
 
-    db.reindex()
+    udb().reindex()
 
     if skipped_dups > 0:
         print(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
@@ -834,9 +938,9 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
 @app.get("/api/portfolio/stock-summary", response_model=List[StockSummaryItem])
 def get_stock_summary():
     """Get per-stock aggregated data showing held + sold quantities."""
-    holdings = db.get_all_holdings()
-    sold_positions = db.get_all_sold()
-    dividends_by_symbol = db.get_dividends_by_symbol()
+    holdings = udb().get_all_holdings()
+    sold_positions = udb().get_all_sold()
+    dividends_by_symbol = udb().get_dividends_by_symbol()
 
     # Use cached prices (instant, no network calls)
     # Request both BSE and NSE for each symbol so exchange fallback works
@@ -1081,8 +1185,8 @@ def get_symbol_map():
     entries = []
     for filename, primary_symbol in sorted(SYMBOL_MAP.items()):
         derived = sr.derive_symbol(filename)
-        has_primary_files = primary_symbol in db._all_files and len(db._all_files[primary_symbol]) > 0
-        has_derived_files = derived in db._all_files and len(db._all_files[derived]) > 0
+        has_primary_files = primary_symbol in udb()._all_files and len(udb()._all_files[primary_symbol]) > 0
+        has_derived_files = derived in udb()._all_files and len(udb()._all_files[derived]) > 0
         entry = {
             "filename": filename,
             "primary_symbol": primary_symbol,
@@ -1110,7 +1214,7 @@ def get_symbol_map():
 @app.get("/api/transactions", response_model=List[SoldPosition])
 def get_transactions():
     """Get all sold positions / transaction history."""
-    return db.get_all_sold()
+    return udb().get_all_sold()
 
 
 # ══════════════════════════════════════════════════════════
@@ -1198,7 +1302,7 @@ def get_ticker_history(key: str, period: str = "1y"):
 @app.post("/api/stock/manual-price")
 def set_manual_price(req: ManualPriceRequest):
     """Manually set a stock price (fallback when Yahoo is unavailable)."""
-    db.set_manual_price(req.symbol.upper(), req.exchange.upper(), req.price)
+    udb().set_manual_price(req.symbol.upper(), req.exchange.upper(), req.price)
     return {"message": f"Manual price set for {req.symbol}: ₹{req.price}"}
 
 
@@ -1219,10 +1323,10 @@ def get_price_status():
 def _do_price_refresh():
     """Worker: reindex xlsx files then fetch live prices."""
     try:
-        db.reindex()
+        udb().reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
-        holdings = db.get_all_holdings()
+        holdings = udb().get_all_holdings()
         if not holdings:
             return
         symbols = list(set((h.symbol, h.exchange) for h in holdings))
@@ -1239,10 +1343,10 @@ def trigger_price_refresh():
     Re-scans dumps/ for new xlsx files, then fetches live prices synchronously."""
     t0 = time.time()
     try:
-        reindex_result = db.reindex()
+        reindex_result = udb().reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
-        holdings = db.get_all_holdings()
+        holdings = udb().get_all_holdings()
         if not holdings:
             return {"message": "No holdings found", "stocks": 0, "reindex": reindex_result}
         symbols = list(set((h.symbol, h.exchange) for h in holdings))
@@ -1420,9 +1524,9 @@ def validate_zerodha():
 @app.get("/api/dashboard/summary", response_model=PortfolioSummary)
 def get_dashboard_summary():
     """Get aggregated portfolio summary for the dashboard."""
-    holdings = db.get_all_holdings()
-    sold_positions = db.get_all_sold()
-    dividends_map = db.get_dividends_by_symbol()
+    holdings = udb().get_all_holdings()
+    sold_positions = udb().get_all_sold()
+    dividends_map = udb().get_dividends_by_symbol()
 
     if not holdings and not sold_positions:
         return PortfolioSummary(
@@ -1838,20 +1942,20 @@ def update_market_ticker(tickers: List[dict]):
 @app.get("/api/mutual-funds/summary")
 def get_mf_summary():
     """Get per-fund aggregated summary with held/sold lots."""
-    return mf_db.get_fund_summary()
+    return umf().get_fund_summary()
 
 
 @app.get("/api/mutual-funds/dashboard")
 def get_mf_dashboard():
     """Get aggregated MF portfolio summary for the dashboard."""
-    return mf_db.get_dashboard_summary()
+    return umf().get_dashboard_summary()
 
 
 @app.post("/api/mutual-funds/refresh-nav")
 def refresh_mf_nav():
     """Clear MF NAV cache and re-fetch live NAVs."""
     clear_mf_nav_cache()
-    summary = mf_db.get_fund_summary()
+    summary = umf().get_fund_summary()
     with_nav = sum(1 for f in summary if f.get("current_nav", 0) > 0)
     return {"message": f"NAV refreshed: {with_nav}/{len(summary)} funds with live prices"}
 
@@ -1866,7 +1970,7 @@ def search_mf(q: str = "", plan: str = "direct", scheme_type: str = ""):
 def add_mf_holding_endpoint(req: AddMFRequest):
     """Add a mutual fund holding (Buy transaction)."""
     try:
-        result = mf_db.add_mf_holding(
+        result = umf().add_mf_holding(
             fund_code=req.fund_code,
             fund_name=req.fund_name,
             units=req.units,
@@ -1884,7 +1988,7 @@ def redeem_mf_units_endpoint(req: RedeemMFRequest):
     """Redeem mutual fund units (Sell transaction)."""
     sell_date = req.sell_date or datetime.now().strftime("%Y-%m-%d")
     try:
-        result = mf_db.add_mf_sell_transaction(
+        result = umf().add_mf_sell_transaction(
             fund_code=req.fund_code,
             units=req.units,
             nav=req.nav,
@@ -1937,7 +2041,7 @@ def import_cdsl_cas_confirmed(req: MFImportPayload):
             try:
                 action = tx.get("action", "Buy")
                 if action == "Buy":
-                    mf_db.add_mf_holding(
+                    umf().add_mf_holding(
                         fund_code=fund_code,
                         fund_name=fund_name,
                         units=float(tx["units"]),
@@ -1947,7 +2051,7 @@ def import_cdsl_cas_confirmed(req: MFImportPayload):
                     )
                     buys += 1
                 elif action == "Sell":
-                    mf_db.add_mf_sell_transaction(
+                    umf().add_mf_sell_transaction(
                         fund_code=fund_code,
                         units=float(tx["units"]),
                         nav=float(tx["nav"]),
@@ -2030,7 +2134,7 @@ def execute_sip_endpoint(fund_code: str):
         raise HTTPException(status_code=400, detail="SIP is disabled")
 
     # Get current NAV from the fund's Index sheet
-    current_nav = mf_db.get_fund_nav(fund_code)
+    current_nav = umf().get_fund_nav(fund_code)
     if current_nav <= 0:
         raise HTTPException(status_code=400, detail="Current NAV unavailable. Update the fund's xlsx first.")
 
@@ -2039,7 +2143,7 @@ def execute_sip_endpoint(fund_code: str):
     today = datetime.now().strftime("%Y-%m-%d")
 
     try:
-        result = mf_db.add_mf_holding(
+        result = umf().add_mf_holding(
             fund_code=fund_code,
             fund_name=config["fund_name"],
             units=units,
@@ -2070,41 +2174,32 @@ from .fd_database import get_all as fd_get_all, get_dashboard as fd_get_dashboar
 
 @app.get("/api/fixed-deposits/summary")
 def get_fd_summary():
-    """List all Fixed Deposits."""
-    return fd_get_all()
-
+    return fd_get_all(base_dir=user_dumps_dir())
 
 @app.get("/api/fixed-deposits/dashboard")
 def get_fd_dashboard():
-    """Aggregate FD totals for dashboard."""
-    return fd_get_dashboard()
-
+    return fd_get_dashboard(base_dir=user_dumps_dir())
 
 @app.post("/api/fixed-deposits/add")
 def add_fd_endpoint(req: AddFDRequest):
-    """Add a new Fixed Deposit."""
     try:
-        return fd_add(req.dict())
+        return fd_add(req.dict(), base_dir=user_dumps_dir())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.put("/api/fixed-deposits/{fd_id}")
 def update_fd_endpoint(fd_id: str, req: UpdateFDRequest):
-    """Update an existing Fixed Deposit."""
     try:
-        return fd_update(fd_id, req.dict(exclude_none=True))
+        return fd_update(fd_id, req.dict(exclude_none=True), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.delete("/api/fixed-deposits/{fd_id}")
 def delete_fd_endpoint(fd_id: str):
-    """Delete a Fixed Deposit."""
     try:
-        return fd_delete(fd_id)
+        return fd_delete(fd_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -2118,50 +2213,39 @@ from .rd_database import get_all as rd_get_all, get_dashboard as rd_get_dashboar
 
 @app.get("/api/recurring-deposits/summary")
 def get_rd_summary():
-    """List all Recurring Deposits."""
-    return rd_get_all()
-
+    return rd_get_all(base_dir=user_dumps_dir())
 
 @app.get("/api/recurring-deposits/dashboard")
 def get_rd_dashboard():
-    """Aggregate RD totals for dashboard."""
-    return rd_get_dashboard()
-
+    return rd_get_dashboard(base_dir=user_dumps_dir())
 
 @app.post("/api/recurring-deposits/add")
 def add_rd_endpoint(req: AddRDRequest):
-    """Add a new Recurring Deposit."""
     try:
-        return rd_add(req.dict())
+        return rd_add(req.dict(), base_dir=user_dumps_dir())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.put("/api/recurring-deposits/{rd_id}")
 def update_rd_endpoint(rd_id: str, req: UpdateRDRequest):
-    """Update an existing Recurring Deposit."""
     try:
-        return rd_update(rd_id, req.dict(exclude_none=True))
+        return rd_update(rd_id, req.dict(exclude_none=True), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.delete("/api/recurring-deposits/{rd_id}")
-def delete_rd_endpoint(rd_id: str):
-    """Delete a Recurring Deposit."""
+def delete_rd_endpoint(fd_id: str):
     try:
-        return rd_delete(rd_id)
+        return rd_delete(fd_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-
 @app.post("/api/recurring-deposits/{rd_id}/installment")
 def add_rd_installment_endpoint(rd_id: str, req: AddRDInstallmentRequest):
-    """Add an installment to a Recurring Deposit."""
     try:
-        return rd_add_installment(rd_id, req.dict())
+        return rd_add_installment(rd_id, req.dict(), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2177,41 +2261,32 @@ from .insurance_database import get_all as ins_get_all, get_dashboard as ins_get
 
 @app.get("/api/insurance/summary")
 def get_insurance_summary():
-    """List all Insurance Policies."""
-    return ins_get_all()
-
+    return ins_get_all(base_dir=user_dumps_dir())
 
 @app.get("/api/insurance/dashboard")
 def get_insurance_dashboard():
-    """Aggregate Insurance totals for dashboard."""
-    return ins_get_dashboard()
-
+    return ins_get_dashboard(base_dir=user_dumps_dir())
 
 @app.post("/api/insurance/add")
 def add_insurance_endpoint(req: AddInsuranceRequest):
-    """Add a new Insurance Policy."""
     try:
-        return ins_add(req.dict())
+        return ins_add(req.dict(), base_dir=user_dumps_dir())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.put("/api/insurance/{policy_id}")
 def update_insurance_endpoint(policy_id: str, req: UpdateInsuranceRequest):
-    """Update an existing Insurance Policy."""
     try:
-        return ins_update(policy_id, req.dict(exclude_none=True))
+        return ins_update(policy_id, req.dict(exclude_none=True), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.delete("/api/insurance/{policy_id}")
 def delete_insurance_endpoint(policy_id: str):
-    """Delete an Insurance Policy."""
     try:
-        return ins_delete(policy_id)
+        return ins_delete(policy_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -2225,64 +2300,51 @@ from .ppf_database import get_all as ppf_get_all, get_dashboard as ppf_get_dashb
 
 @app.get("/api/ppf/summary")
 def get_ppf_summary():
-    """List all PPF accounts."""
-    return ppf_get_all()
-
+    return ppf_get_all(base_dir=user_dumps_dir())
 
 @app.get("/api/ppf/dashboard")
 def get_ppf_dashboard():
-    """Aggregate PPF totals for dashboard."""
-    return ppf_get_dashboard()
-
+    return ppf_get_dashboard(base_dir=user_dumps_dir())
 
 @app.post("/api/ppf/add")
 def add_ppf_endpoint(req: AddPPFRequest):
-    """Add a new PPF account."""
     try:
-        return ppf_add(req.dict())
+        return ppf_add(req.dict(), base_dir=user_dumps_dir())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.put("/api/ppf/{ppf_id}")
 def update_ppf_endpoint(ppf_id: str, req: UpdatePPFRequest):
-    """Update an existing PPF account."""
     try:
-        return ppf_update(ppf_id, req.dict(exclude_none=True))
+        return ppf_update(ppf_id, req.dict(exclude_none=True), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.delete("/api/ppf/{ppf_id}")
 def delete_ppf_endpoint(ppf_id: str):
-    """Delete a PPF account."""
     try:
-        return ppf_delete(ppf_id)
+        return ppf_delete(ppf_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-
 @app.post("/api/ppf/{ppf_id}/contribution")
 def add_ppf_contribution_endpoint(ppf_id: str, req: AddPPFContributionRequest):
-    """Add a contribution to a PPF account."""
     try:
-        return ppf_add_contribution(ppf_id, req.dict())
+        return ppf_add_contribution(ppf_id, req.dict(), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.post("/api/ppf/{ppf_id}/withdraw")
 def withdraw_ppf_endpoint(ppf_id: str, req: PPFWithdrawRequest):
-    """Withdraw from a PPF account."""
     try:
         data = req.dict()
         if not data.get("date"):
             data["date"] = datetime.now().strftime("%Y-%m-%d")
-        return ppf_withdraw(ppf_id, data)
+        return ppf_withdraw(ppf_id, data, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -2298,50 +2360,39 @@ from .nps_database import get_all as nps_get_all, get_dashboard as nps_get_dashb
 
 @app.get("/api/nps/summary")
 def get_nps_summary():
-    """List all NPS accounts."""
-    return nps_get_all()
-
+    return nps_get_all(base_dir=user_dumps_dir())
 
 @app.get("/api/nps/dashboard")
 def get_nps_dashboard():
-    """Aggregate NPS totals for dashboard."""
-    return nps_get_dashboard()
-
+    return nps_get_dashboard(base_dir=user_dumps_dir())
 
 @app.post("/api/nps/add")
 def add_nps_endpoint(req: AddNPSRequest):
-    """Add a new NPS account."""
     try:
-        return nps_add(req.dict())
+        return nps_add(req.dict(), base_dir=user_dumps_dir())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.put("/api/nps/{nps_id}")
 def update_nps_endpoint(nps_id: str, req: UpdateNPSRequest):
-    """Update an existing NPS account."""
     try:
-        return nps_update(nps_id, req.dict(exclude_none=True))
+        return nps_update(nps_id, req.dict(exclude_none=True), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.delete("/api/nps/{nps_id}")
 def delete_nps_endpoint(nps_id: str):
-    """Delete an NPS account."""
     try:
-        return nps_delete(nps_id)
+        return nps_delete(nps_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-
 @app.post("/api/nps/{nps_id}/contribution")
 def add_nps_contribution_endpoint(nps_id: str, req: AddNPSContributionRequest):
-    """Add a contribution to an NPS account."""
     try:
-        return nps_add_contribution(nps_id, req.dict())
+        return nps_add_contribution(nps_id, req.dict(), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -2357,30 +2408,24 @@ from .si_database import get_all as si_get_all, get_dashboard as si_get_dashboar
 
 @app.get("/api/standing-instructions/summary")
 def get_si_summary():
-    """List all Standing Instructions."""
-    return si_get_all()
-
+    return si_get_all(base_dir=user_dumps_dir())
 
 @app.get("/api/standing-instructions/dashboard")
 def get_si_dashboard():
-    """Aggregate SI totals for dashboard."""
-    return si_get_dashboard()
-
+    return si_get_dashboard(base_dir=user_dumps_dir())
 
 @app.post("/api/standing-instructions/add")
 def add_si_endpoint(req: AddSIRequest):
-    """Add a new Standing Instruction."""
     try:
-        return si_add(req.dict())
+        return si_add(req.dict(), base_dir=user_dumps_dir())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.put("/api/standing-instructions/{si_id}")
 def update_si_endpoint(si_id: str, req: UpdateSIRequest):
-    """Update an existing Standing Instruction."""
     try:
-        return si_update(si_id, req.dict(exclude_none=True))
+        return si_update(si_id, req.dict(exclude_none=True), base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2389,9 +2434,8 @@ def update_si_endpoint(si_id: str, req: UpdateSIRequest):
 
 @app.delete("/api/standing-instructions/{si_id}")
 def delete_si_endpoint(si_id: str):
-    """Delete a Standing Instruction."""
     try:
-        return si_delete(si_id)
+        return si_delete(si_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -2411,7 +2455,7 @@ def get_advisor_insights():
     articles = epaper_service.fetch_todays_articles()
     # Get portfolio symbols for matching
     try:
-        holdings = db.get_all_holdings()
+        holdings = udb().get_all_holdings()
         symbols = list(set(h.symbol for h in holdings))
     except Exception:
         symbols = []
@@ -2429,7 +2473,7 @@ def refresh_advisor():
     """Force re-scrape articles and regenerate insights."""
     articles = epaper_service.fetch_todays_articles(force_refresh=True)
     try:
-        holdings = db.get_all_holdings()
+        holdings = udb().get_all_holdings()
         symbols = list(set(h.symbol for h in holdings))
     except Exception:
         symbols = []
@@ -2455,7 +2499,7 @@ def advisor_chat(body: dict):
         raise HTTPException(status_code=400, detail="message is required")
     articles = epaper_service.fetch_todays_articles()
     try:
-        holdings = db.get_all_holdings()
+        holdings = udb().get_all_holdings()
         symbols = list(set(h.symbol for h in holdings))
     except Exception:
         symbols = []

@@ -27,16 +27,18 @@ _lock = threading.Lock()
 #  LOAD / SAVE
 # ═══════════════════════════════════════════════════════════
 
-def _load() -> list:
-    if not INSURANCE_FILE.exists():
+def _load(json_file: Path = None) -> list:
+    json_file = json_file or INSURANCE_FILE
+    if not json_file.exists():
         return []
-    with open(INSURANCE_FILE, "r") as f:
+    with open(json_file, "r") as f:
         return json.load(f)
 
 
-def _save(data: list):
-    DUMPS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(INSURANCE_FILE, "w") as f:
+def _save(data: list, json_file: Path = None):
+    json_file = json_file or INSURANCE_FILE
+    json_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(json_file, "w") as f:
         json.dump(data, f, indent=2)
 
 
@@ -44,10 +46,11 @@ def _save(data: list):
 #  CRUD
 # ═══════════════════════════════════════════════════════════
 
-def get_all() -> list:
+def get_all(base_dir=None) -> list:
     """Return all policies with computed fields."""
+    json_file = (Path(base_dir) / "insurance_policies.json") if base_dir else INSURANCE_FILE
     with _lock:
-        items = _load()
+        items = _load(json_file)
     today = datetime.now().date()
     for item in items:
         try:
@@ -67,9 +70,9 @@ def get_all() -> list:
     return items
 
 
-def get_dashboard() -> dict:
+def get_dashboard(base_dir=None) -> dict:
     """Aggregate insurance summary for dashboard."""
-    items = get_all()
+    items = get_all(base_dir=base_dir)
     active = [i for i in items if i.get("status") == "Active"]
 
     expiring_soon = sum(1 for i in active if 0 < i.get("days_to_expiry", 0) <= 90)
@@ -83,10 +86,11 @@ def get_dashboard() -> dict:
     }
 
 
-def add(data: dict) -> dict:
+def add(data: dict, base_dir=None) -> dict:
     """Add a new insurance policy."""
+    json_file = (Path(base_dir) / "insurance_policies.json") if base_dir else INSURANCE_FILE
     with _lock:
-        items = _load()
+        items = _load(json_file)
 
         policy = {
             "id": str(uuid.uuid4())[:8],
@@ -104,14 +108,15 @@ def add(data: dict) -> dict:
         }
 
         items.append(policy)
-        _save(items)
+        _save(items, json_file)
         return policy
 
 
-def update(policy_id: str, data: dict) -> dict:
+def update(policy_id: str, data: dict, base_dir=None) -> dict:
     """Update an existing insurance policy."""
+    json_file = (Path(base_dir) / "insurance_policies.json") if base_dir else INSURANCE_FILE
     with _lock:
-        items = _load()
+        items = _load(json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == policy_id), None)
         if idx is None:
             raise ValueError(f"Insurance policy {policy_id} not found")
@@ -122,17 +127,18 @@ def update(policy_id: str, data: dict) -> dict:
                 item[key] = val
 
         items[idx] = item
-        _save(items)
+        _save(items, json_file)
         return item
 
 
-def delete(policy_id: str) -> dict:
+def delete(policy_id: str, base_dir=None) -> dict:
     """Delete an insurance policy."""
+    json_file = (Path(base_dir) / "insurance_policies.json") if base_dir else INSURANCE_FILE
     with _lock:
-        items = _load()
+        items = _load(json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == policy_id), None)
         if idx is None:
             raise ValueError(f"Insurance policy {policy_id} not found")
         removed = items.pop(idx)
-        _save(items)
+        _save(items, json_file)
         return {"message": f"Policy {policy_id} deleted", "item": removed}

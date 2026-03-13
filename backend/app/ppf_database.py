@@ -454,13 +454,14 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     }
 
 
-def _parse_all_xlsx() -> list:
+def _parse_all_xlsx(ppf_dir: Path = None) -> list:
     """Parse all xlsx files from dumps/PPF/ directory."""
+    ppf_dir = ppf_dir or PPF_DIR
     results = []
-    if not PPF_DIR.exists():
+    if not ppf_dir.exists():
         return results
 
-    for f in sorted(PPF_DIR.glob("*.xlsx")):
+    for f in sorted(ppf_dir.glob("*.xlsx")):
         if f.name.startswith("~$"):
             continue
         try:
@@ -480,7 +481,8 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
                      start_date: str, sip_frequency: str = "monthly",
                      sip_end_date: str = None, account_number: str = "",
                      remarks: str = "", overwrite: bool = False,
-                     sip_phases: list = None, contributions: list = None):
+                     sip_phases: list = None, contributions: list = None,
+                     ppf_dir: Path = None):
     """Create an xlsx file following the FD template structure for PPF.
 
     If overwrite=False (default for new entries) and a file with the same name
@@ -490,14 +492,15 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
     sip_phases: optional list of phase dicts stored in K4.
     contributions: optional list of one-time contribution dicts stored in H4.
     """
-    PPF_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = PPF_DIR / f"{name}.xlsx"
+    ppf_dir = ppf_dir or PPF_DIR
+    ppf_dir.mkdir(parents=True, exist_ok=True)
+    filepath = ppf_dir / f"{name}.xlsx"
 
     if not overwrite:
         # Avoid overwriting existing files -- append suffix
         counter = 2
         while filepath.exists():
-            filepath = PPF_DIR / f"{name} ({counter}).xlsx"
+            filepath = ppf_dir / f"{name} ({counter}).xlsx"
             counter += 1
         name = filepath.stem
 
@@ -660,16 +663,18 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
 #  LEGACY JSON MIGRATION
 # ===================================================================
 
-def _migrate_json_to_xlsx():
+def _migrate_json_to_xlsx(ppf_dir: Path = None, json_file: Path = None):
     """One-time migration: convert legacy ppf_accounts.json to xlsx files."""
-    if not PPF_JSON_FILE.exists():
+    ppf_dir = ppf_dir or PPF_DIR
+    json_file = json_file or PPF_JSON_FILE
+    if not json_file.exists():
         return
     try:
-        with open(PPF_JSON_FILE, "r") as f:
+        with open(json_file, "r") as f:
             data = json.load(f)
         if not isinstance(data, list) or len(data) == 0:
             return
-        PPF_DIR.mkdir(parents=True, exist_ok=True)
+        ppf_dir.mkdir(parents=True, exist_ok=True)
         for account in data:
             name = account.get("account_name", "PPF Account")
             bank = account.get("bank", "Post Office")
@@ -714,22 +719,24 @@ def _migrate_json_to_xlsx():
                 remarks=remarks_val,
                 overwrite=True,
                 sip_phases=sip_phases_val,
+                ppf_dir=ppf_dir,
             )
             print(f"[PPF] Migrated '{name}' to xlsx")
 
         # Rename old file so migration doesn't run again
-        PPF_JSON_FILE.rename(PPF_JSON_FILE.with_suffix(".json.bak"))
+        json_file.rename(json_file.with_suffix(".json.bak"))
         print("[PPF] Migration complete, renamed old JSON to .json.bak")
     except Exception as e:
         print(f"[PPF] Migration error: {e}")
 
 
-def _migrate_old_xlsx():
+def _migrate_old_xlsx(ppf_dir: Path = None):
     """Migrate old-format PPF xlsx files (with separate Index/Contributions sheets)
     to the new FD-style format. Detects old format by checking for 'Account Name' in A1."""
-    if not PPF_DIR.exists():
+    ppf_dir = ppf_dir or PPF_DIR
+    if not ppf_dir.exists():
         return
-    for f in sorted(PPF_DIR.glob("*.xlsx")):
+    for f in sorted(ppf_dir.glob("*.xlsx")):
         if f.name.startswith("~$"):
             continue
         try:
@@ -774,6 +781,7 @@ def _migrate_old_xlsx():
                 account_number=account_number,
                 remarks=remarks_val,
                 overwrite=True,
+                ppf_dir=ppf_dir,
             )
             print(f"[PPF] Migrated '{account_name}' to new xlsx format")
 
@@ -781,12 +789,13 @@ def _migrate_old_xlsx():
             print(f"[PPF] Error migrating {f.name}: {e}")
 
 
-def _migrate_h4_to_cols():
+def _migrate_h4_to_cols(ppf_dir: Path = None):
     """One-time migration: if any xlsx has contributions in H4 (legacy JSON)
     but NOT in col 8/9 data rows, re-save the file so the data moves to cols 8-9."""
-    if not PPF_DIR.exists():
+    ppf_dir = ppf_dir or PPF_DIR
+    if not ppf_dir.exists():
         return
-    for f in sorted(PPF_DIR.glob("*.xlsx")):
+    for f in sorted(ppf_dir.glob("*.xlsx")):
         if f.name.startswith("~$"):
             continue
         try:
@@ -816,6 +825,7 @@ def _migrate_h4_to_cols():
                 overwrite=True,
                 sip_phases=account.get("sip_phases"),
                 contributions=contribs,
+                ppf_dir=ppf_dir,
             )
         except Exception as e:
             print(f"[PPF] Error migrating H4 for {f.name}: {e}")
@@ -825,13 +835,15 @@ def _migrate_h4_to_cols():
 #  PUBLIC API
 # ===================================================================
 
-def get_all() -> list:
+def get_all(base_dir=None) -> list:
     """Return all PPF accounts with computed monthly installments."""
+    ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
+    json_file = (Path(base_dir) / "ppf_accounts.json") if base_dir else PPF_JSON_FILE
     with _lock:
-        _migrate_json_to_xlsx()
-        _migrate_old_xlsx()
-        _migrate_h4_to_cols()
-        items = _parse_all_xlsx()
+        _migrate_json_to_xlsx(ppf_dir=ppf_dir, json_file=json_file)
+        _migrate_old_xlsx(ppf_dir=ppf_dir)
+        _migrate_h4_to_cols(ppf_dir=ppf_dir)
+        items = _parse_all_xlsx(ppf_dir=ppf_dir)
 
     for item in items:
         _enrich_withdrawal(item)
@@ -839,9 +851,9 @@ def get_all() -> list:
     return items
 
 
-def get_dashboard() -> dict:
+def get_dashboard(base_dir=None) -> dict:
     """Aggregate PPF summary for dashboard."""
-    items = get_all()
+    items = get_all(base_dir=base_dir)
     active = [i for i in items if i.get("status") == "Active"]
 
     total_deposited = round(sum(i.get("total_deposited", 0) for i in active), 2)
@@ -866,8 +878,9 @@ def get_dashboard() -> dict:
     }
 
 
-def add(data: dict) -> dict:
+def add(data: dict, base_dir=None) -> dict:
     """Add a new PPF account -- creates xlsx file."""
+    ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
     account_name = data.get("account_name", "PPF Account")
     bank = data.get("bank", "Post Office")
     rate = data.get("interest_rate", PPF_DEFAULT_RATE)
@@ -911,21 +924,23 @@ def add(data: dict) -> dict:
         account_number=account_number,
         remarks=remarks_val,
         sip_phases=sip_phases,
+        ppf_dir=ppf_dir,
     )
 
     # Return the freshly parsed result
     return _parse_ppf_xlsx(filepath)
 
 
-def update(ppf_id: str, data: dict) -> dict:
+def update(ppf_id: str, data: dict, base_dir=None) -> dict:
     """Update an existing PPF account -- rewrites xlsx file.
 
     If data contains 'new_sip_phase', the existing phases are preserved
     and a new phase is appended. The last existing phase gets its end date
     set to the new phase's start date.
     """
+    ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
     with _lock:
-        filepath = _find_xlsx(ppf_id)
+        filepath = _find_xlsx(ppf_id, ppf_dir=ppf_dir)
         if filepath is None:
             raise ValueError(f"PPF account {ppf_id} not found")
 
@@ -1027,16 +1042,18 @@ def update(ppf_id: str, data: dict) -> dict:
             overwrite=True,
             sip_phases=sip_phases,
             contributions=existing_contributions,
+            ppf_dir=ppf_dir,
         )
 
-        new_filepath = PPF_DIR / f"{new_name}.xlsx"
+        new_filepath = ppf_dir / f"{new_name}.xlsx"
         return _parse_ppf_xlsx(new_filepath)
 
 
-def delete(ppf_id: str) -> dict:
+def delete(ppf_id: str, base_dir=None) -> dict:
     """Delete a PPF account -- removes xlsx file."""
+    ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
     with _lock:
-        filepath = _find_xlsx(ppf_id)
+        filepath = _find_xlsx(ppf_id, ppf_dir=ppf_dir)
         if filepath is None:
             raise ValueError(f"PPF account {ppf_id} not found")
 
@@ -1048,14 +1065,15 @@ def delete(ppf_id: str) -> dict:
         return {"message": f"PPF {ppf_id} deleted", "item": account}
 
 
-def add_contribution(ppf_id: str, contribution: dict) -> dict:
+def add_contribution(ppf_id: str, contribution: dict, base_dir=None) -> dict:
     """Add a one-time contribution to a PPF account.
 
     The contribution is stored in the H4 JSON array and reflected in the
     installment schedule at the matching month. Validated against yearly limits.
     """
+    ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
     with _lock:
-        filepath = _find_xlsx(ppf_id)
+        filepath = _find_xlsx(ppf_id, ppf_dir=ppf_dir)
         if filepath is None:
             raise ValueError(f"PPF account {ppf_id} not found")
 
@@ -1112,6 +1130,7 @@ def add_contribution(ppf_id: str, contribution: dict) -> dict:
             overwrite=True,
             sip_phases=account.get("sip_phases"),
             contributions=existing_contributions,
+            ppf_dir=ppf_dir,
         )
 
         return _parse_ppf_xlsx(filepath)
@@ -1169,14 +1188,15 @@ def _enrich_withdrawal(item: dict):
         )
 
 
-def withdraw(ppf_id: str, data: dict) -> dict:
+def withdraw(ppf_id: str, data: dict, base_dir=None) -> dict:
     """Withdraw from a PPF account.
 
     Records the withdrawal as a negative contribution in H4 so it is
     reflected in the installment schedule and running balance.
     """
+    ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
     with _lock:
-        filepath = _find_xlsx(ppf_id)
+        filepath = _find_xlsx(ppf_id, ppf_dir=ppf_dir)
         if filepath is None:
             raise ValueError(f"PPF account {ppf_id} not found")
 
@@ -1222,6 +1242,7 @@ def withdraw(ppf_id: str, data: dict) -> dict:
             overwrite=True,
             sip_phases=account.get("sip_phases"),
             contributions=existing_contributions,
+            ppf_dir=ppf_dir,
         )
 
         return _parse_ppf_xlsx(filepath)
@@ -1231,11 +1252,12 @@ def withdraw(ppf_id: str, data: dict) -> dict:
 #  INTERNAL HELPERS (file lookup)
 # ===================================================================
 
-def _find_xlsx(ppf_id: str) -> Path | None:
+def _find_xlsx(ppf_id: str, ppf_dir: Path = None) -> Path | None:
     """Find the xlsx file for a given PPF ID (based on filename hash)."""
-    if not PPF_DIR.exists():
+    ppf_dir = ppf_dir or PPF_DIR
+    if not ppf_dir.exists():
         return None
-    for f in PPF_DIR.glob("*.xlsx"):
+    for f in ppf_dir.glob("*.xlsx"):
         if f.name.startswith("~$"):
             continue
         if _gen_ppf_id(f.stem) == ppf_id:

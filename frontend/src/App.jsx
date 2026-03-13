@@ -31,6 +31,7 @@ import AddSIModal from './components/AddSIModal';
 import MFImportPreviewModal from './components/MFImportPreviewModal';
 import DividendImportPreviewModal from './components/DividendImportPreviewModal';
 import TradePlanner, { openTradePlanner } from './components/BuyPlannerModal';
+import UserSelector from './components/UserSelector';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -42,6 +43,14 @@ export default function App() {
   if (new URLSearchParams(window.location.search).get('view') === 'trade-planner') {
     return <TradePlanner />;
   }
+
+  const [currentUserId, setCurrentUserId] = useState(() => localStorage.getItem('selectedUserId') || 'lenin');
+  const handleUserChange = useCallback((userId) => {
+    localStorage.setItem('selectedUserId', userId);
+    setCurrentUserId(userId);
+    // Reload all data for the new user
+    window.location.reload();
+  }, []);
 
   const [portfolio, setPortfolio] = useState([]);
   const [stockSummary, setStockSummary] = useState([]);
@@ -1162,6 +1171,8 @@ export default function App() {
           <Dashboard summary={summary} mfDashboard={mfDashboard} fdDashboard={fdDashboard} rdDashboard={rdDashboard} ppfDashboard={ppfDashboard} npsDashboard={npsDashboard} loading={loading} />
         </div>
         <div className="header-actions">
+          {/* User selector */}
+          <UserSelector currentUserId={currentUserId} onUserChange={handleUserChange} />
           {/* Zerodha status */}
           {zerodhaStatus && (
             <div className="zerodha-status" title={

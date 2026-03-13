@@ -70,17 +70,19 @@ def _to_date_str(val) -> str:
     return ""
 
 
-def _ensure_file():
+def _ensure_file(si_dir: Path = None, si_file: Path = None):
     """Create the xlsx file with headers if it doesn't exist."""
-    SI_DIR.mkdir(parents=True, exist_ok=True)
-    if SI_FILE.exists():
+    si_dir = si_dir or SI_DIR
+    si_file = si_file or SI_FILE
+    si_dir.mkdir(parents=True, exist_ok=True)
+    if si_file.exists():
         return
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Standing Instructions"
     for i, h in enumerate(_HEADERS, 1):
         ws.cell(1, i, h)
-    wb.save(str(SI_FILE))
+    wb.save(str(si_file))
     wb.close()
 
 
@@ -88,14 +90,15 @@ def _ensure_file():
 #  LOAD / SAVE
 # ═══════════════════════════════════════════════════════════
 
-def _load() -> list:
+def _load(si_file: Path = None) -> list:
     """Read all SI rows from the xlsx file."""
-    if not SI_FILE.exists():
+    si_file = si_file or SI_FILE
+    if not si_file.exists():
         return []
     try:
-        wb = openpyxl.load_workbook(str(SI_FILE), data_only=True)
+        wb = openpyxl.load_workbook(str(si_file), data_only=True)
     except Exception as e:
-        print(f"[SI] Error loading {SI_FILE}: {e}")
+        print(f"[SI] Error loading {si_file}: {e}")
         return []
 
     ws = wb.active
@@ -123,9 +126,11 @@ def _load() -> list:
     return items
 
 
-def _save(items: list):
+def _save(items: list, si_dir: Path = None, si_file: Path = None):
     """Write all SI rows to the xlsx file (full rewrite)."""
-    _ensure_file()
+    si_dir = si_dir or SI_DIR
+    si_file = si_file or SI_FILE
+    _ensure_file(si_dir, si_file)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Standing Instructions"
@@ -157,7 +162,7 @@ def _save(items: list):
         ws.cell(r, _COLS["status"], item["status"])
         ws.cell(r, _COLS["remarks"], item.get("remarks", ""))
 
-    wb.save(str(SI_FILE))
+    wb.save(str(si_file))
     wb.close()
 
 
@@ -165,10 +170,12 @@ def _save(items: list):
 #  CRUD
 # ═══════════════════════════════════════════════════════════
 
-def get_all() -> list:
+def get_all(base_dir=None) -> list:
     """Return all SIs with computed fields."""
+    si_dir = (Path(base_dir) / "Standing Instructions") if base_dir else SI_DIR
+    si_file = si_dir / "Standing Instructions.xlsx"
     with _lock:
-        items = _load()
+        items = _load(si_file)
     today = datetime.now().date()
     for item in items:
         try:
@@ -179,9 +186,9 @@ def get_all() -> list:
     return items
 
 
-def get_dashboard() -> dict:
+def get_dashboard(base_dir=None) -> dict:
     """Aggregate SI summary for dashboard."""
-    items = get_all()
+    items = get_all(base_dir=base_dir)
     active = [i for i in items if i.get("status") == "Active"]
 
     # Normalize all frequencies to monthly equivalent
@@ -213,10 +220,12 @@ def get_dashboard() -> dict:
     }
 
 
-def add(data: dict) -> dict:
+def add(data: dict, base_dir=None) -> dict:
     """Add a new standing instruction."""
+    si_dir = (Path(base_dir) / "Standing Instructions") if base_dir else SI_DIR
+    si_file = si_dir / "Standing Instructions.xlsx"
     with _lock:
-        items = _load()
+        items = _load(si_file)
 
         si = {
             "id": str(uuid.uuid4())[:8],
@@ -235,14 +244,16 @@ def add(data: dict) -> dict:
         }
 
         items.append(si)
-        _save(items)
+        _save(items, si_dir, si_file)
         return si
 
 
-def update(si_id: str, data: dict) -> dict:
+def update(si_id: str, data: dict, base_dir=None) -> dict:
     """Update an existing standing instruction."""
+    si_dir = (Path(base_dir) / "Standing Instructions") if base_dir else SI_DIR
+    si_file = si_dir / "Standing Instructions.xlsx"
     with _lock:
-        items = _load()
+        items = _load(si_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == si_id), None)
         if idx is None:
             raise ValueError(f"Standing instruction {si_id} not found")
@@ -253,17 +264,19 @@ def update(si_id: str, data: dict) -> dict:
                 item[key] = val
 
         items[idx] = item
-        _save(items)
+        _save(items, si_dir, si_file)
         return item
 
 
-def delete(si_id: str) -> dict:
+def delete(si_id: str, base_dir=None) -> dict:
     """Delete a standing instruction."""
+    si_dir = (Path(base_dir) / "Standing Instructions") if base_dir else SI_DIR
+    si_file = si_dir / "Standing Instructions.xlsx"
     with _lock:
-        items = _load()
+        items = _load(si_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == si_id), None)
         if idx is None:
             raise ValueError(f"Standing instruction {si_id} not found")
         removed = items.pop(idx)
-        _save(items)
+        _save(items, si_dir, si_file)
         return {"message": f"SI {si_id} deleted", "item": removed}

@@ -205,13 +205,14 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
     }
 
 
-def _parse_all_xlsx() -> list:
+def _parse_all_xlsx(xlsx_dir: Path = None) -> list:
     """Parse all xlsx files from dumps/FD/ directory."""
+    xlsx_dir = xlsx_dir or FD_XLSX_DIR
     results = []
-    if not FD_XLSX_DIR.exists():
+    if not xlsx_dir.exists():
         return results
 
-    for f in sorted(FD_XLSX_DIR.glob("*.xlsx")):
+    for f in sorted(xlsx_dir.glob("*.xlsx")):
         if f.name.startswith("~$"):
             continue
         try:
@@ -228,10 +229,11 @@ def _parse_all_xlsx() -> list:
 
 def _create_fd_xlsx(name: str, bank: str, principal: float, rate_pct: float,
                     tenure_months: int, start_date: str, interest_payout: str,
-                    fd_type: str = "FD"):
+                    fd_type: str = "FD", xlsx_dir: Path = None):
     """Create an xlsx file following the FD template structure."""
-    FD_XLSX_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = FD_XLSX_DIR / f"{name}.xlsx"
+    xlsx_dir = xlsx_dir or FD_XLSX_DIR
+    xlsx_dir.mkdir(parents=True, exist_ok=True)
+    filepath = xlsx_dir / f"{name}.xlsx"
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -294,19 +296,22 @@ def _create_fd_xlsx(name: str, bank: str, principal: float, rate_pct: float,
 #  JSON LOAD / SAVE (manual entries — fallback)
 # ═══════════════════════════════════════════════════════════
 
-def _load_json() -> list:
-    if not FD_JSON_FILE.exists():
+def _load_json(json_file: Path = None) -> list:
+    json_file = json_file or FD_JSON_FILE
+    if not json_file.exists():
         return []
     try:
-        with open(FD_JSON_FILE, "r") as f:
+        with open(json_file, "r") as f:
             return json.load(f)
     except (json.JSONDecodeError, Exception):
         return []
 
 
-def _save_json(data: list):
-    DUMPS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(FD_JSON_FILE, "w") as f:
+def _save_json(data: list, json_file: Path = None, dumps_dir: Path = None):
+    dumps_dir = dumps_dir or DUMPS_DIR
+    json_file = json_file or FD_JSON_FILE
+    dumps_dir.mkdir(parents=True, exist_ok=True)
+    with open(json_file, "w") as f:
         json.dump(data, f, indent=2)
 
 
@@ -420,11 +425,13 @@ def _enrich_json_item(item: dict) -> dict:
 #  PUBLIC API
 # ═══════════════════════════════════════════════════════════
 
-def get_all() -> list:
+def get_all(base_dir=None) -> list:
     """Return all FDs: xlsx-parsed + JSON manual entries."""
+    xlsx_dir = (Path(base_dir) / "FD") if base_dir else FD_XLSX_DIR
+    json_file = (Path(base_dir) / "fixed_deposits.json") if base_dir else FD_JSON_FILE
     with _lock:
-        xlsx_items = _parse_all_xlsx()
-        json_items = _load_json()
+        xlsx_items = _parse_all_xlsx(xlsx_dir=xlsx_dir)
+        json_items = _load_json(json_file=json_file)
 
     for item in json_items:
         _enrich_json_item(item)
@@ -432,9 +439,9 @@ def get_all() -> list:
     return xlsx_items + json_items
 
 
-def get_dashboard() -> dict:
+def get_dashboard(base_dir=None) -> dict:
     """Aggregate FD summary for dashboard."""
-    items = get_all()
+    items = get_all(base_dir=base_dir)
     active = [i for i in items if i.get("status") == "Active"]
 
     maturing_soon = sum(1 for i in active if 0 < i.get("days_to_maturity", 0) <= 90)
@@ -451,8 +458,9 @@ def get_dashboard() -> dict:
     }
 
 
-def add(data: dict) -> dict:
+def add(data: dict, base_dir=None) -> dict:
     """Add a new FD — creates xlsx file + JSON entry."""
+    xlsx_dir = (Path(base_dir) / "FD") if base_dir else FD_XLSX_DIR
     fd_type = data.get("type", "FD")
     principal = data["principal"]
     rate = data["interest_rate"]
@@ -475,6 +483,7 @@ def add(data: dict) -> dict:
         start_date=start_date,
         interest_payout=interest_payout,
         fd_type=fd_type,
+        xlsx_dir=xlsx_dir,
     )
 
     return {
@@ -496,10 +505,12 @@ def add(data: dict) -> dict:
     }
 
 
-def update(fd_id: str, data: dict) -> dict:
+def update(fd_id: str, data: dict, base_dir=None) -> dict:
     """Update an existing manual FD."""
+    json_file = (Path(base_dir) / "fixed_deposits.json") if base_dir else FD_JSON_FILE
+    dumps_dir = Path(base_dir) if base_dir else DUMPS_DIR
     with _lock:
-        items = _load_json()
+        items = _load_json(json_file=json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == fd_id), None)
         if idx is None:
             raise ValueError(f"FD {fd_id} not found")
@@ -519,25 +530,28 @@ def update(fd_id: str, data: dict) -> dict:
                 item["maturity_date"] = _calc_maturity_date(item["start_date"], item["tenure_months"])
 
         items[idx] = item
-        _save_json(items)
+        _save_json(items, json_file=json_file, dumps_dir=dumps_dir)
         return item
 
 
-def delete(fd_id: str) -> dict:
+def delete(fd_id: str, base_dir=None) -> dict:
     """Delete an FD — removes xlsx file and/or JSON entry."""
+    xlsx_dir = (Path(base_dir) / "FD") if base_dir else FD_XLSX_DIR
+    json_file = (Path(base_dir) / "fixed_deposits.json") if base_dir else FD_JSON_FILE
+    dumps_dir = Path(base_dir) if base_dir else DUMPS_DIR
     # Try xlsx first
-    if FD_XLSX_DIR.exists():
-        for f in FD_XLSX_DIR.glob("*.xlsx"):
+    if xlsx_dir.exists():
+        for f in xlsx_dir.glob("*.xlsx"):
             if _gen_fd_id(f.stem) == fd_id:
                 f.unlink()
                 return {"message": f"FD {fd_id} deleted (xlsx)", "item": {"id": fd_id, "name": f.stem}}
 
     # Try JSON
     with _lock:
-        items = _load_json()
+        items = _load_json(json_file=json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == fd_id), None)
         if idx is None:
             raise ValueError(f"FD {fd_id} not found")
         removed = items.pop(idx)
-        _save_json(items)
+        _save_json(items, json_file=json_file, dumps_dir=dumps_dir)
         return {"message": f"FD {fd_id} deleted", "item": removed}
