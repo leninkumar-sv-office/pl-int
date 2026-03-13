@@ -385,6 +385,9 @@ _KITE_SYMBOL_MAP: Dict[str, str] = {
     "HIGHENERGY.BSE": "BSE:HIGHENE",
     # Historical file still named "Majesco Ltd.xlsx" but company renamed to Aurum
     "MAJESCO.NSE": "NSE:AURUM",
+    # SBI ETF Gold: xlsx has NSE:SBIETF but Kite uses SETFGOLD
+    "SBIETF.NSE": "NSE:SETFGOLD",
+    "SBIETF.BSE": "BSE:SETFGOLD",
 }
 
 
@@ -571,7 +574,13 @@ def _get_instrument_token(symbol: str, exchange: str) -> Optional[int]:
     if not _instrument_tokens_loaded:
         _load_instruments()
     key = f"{symbol.upper()}.{exchange.upper()}"
-    return _instrument_token_cache.get(key)
+    token = _instrument_token_cache.get(key)
+    if token is None and key in _KITE_SYMBOL_MAP:
+        # Try alias: e.g. SBIETF.NSE → SETFGOLD.NSE
+        mapped = _KITE_SYMBOL_MAP[key]  # "NSE:SETFGOLD"
+        exch2, sym2 = mapped.split(":", 1)
+        token = _instrument_token_cache.get(f"{sym2}.{exch2}")
+    return token
 
 
 def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
