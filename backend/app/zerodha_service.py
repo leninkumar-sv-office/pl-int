@@ -388,6 +388,9 @@ _KITE_SYMBOL_MAP: Dict[str, str] = {
     # SBI ETF Gold: xlsx has NSE:SBIETF but Kite uses SETFGOLD
     "SBIETF.NSE": "NSE:SETFGOLD",
     "SBIETF.BSE": "BSE:SETFGOLD",
+    # Nippon Life India AMC: xlsx has NIPPONAMC but Kite uses NAM-INDIA
+    "NIPPONAMC.NSE": "NSE:NAM-INDIA",
+    "NIPPONAMC.BSE": "BSE:NAM-INDIA",
 }
 
 

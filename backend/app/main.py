@@ -1327,9 +1327,13 @@ def _do_price_refresh():
         stock_service.clear_cache()
         stock_service._reset_circuit()
         holdings = udb().get_all_holdings()
-        if not holdings:
+        sold = udb().get_all_sold()
+        if not holdings and not sold:
             return
-        symbols = list(set((h.symbol, h.exchange) for h in holdings))
+        symbols = list(set(
+            [(h.symbol, h.exchange) for h in holdings] +
+            [(s.symbol, s.exchange) for s in sold]
+        ))
         res = stock_service.fetch_multiple(symbols)
         live = sum(1 for v in res.values() if not v.is_manual)
         print(f"[PriceRefresh] Done: {live} live, {len(res)-live} fallback / {len(symbols)} stocks")
@@ -1347,9 +1351,13 @@ def trigger_price_refresh():
         stock_service.clear_cache()
         stock_service._reset_circuit()
         holdings = udb().get_all_holdings()
-        if not holdings:
+        sold = udb().get_all_sold()
+        if not holdings and not sold:
             return {"message": "No holdings found", "stocks": 0, "reindex": reindex_result}
-        symbols = list(set((h.symbol, h.exchange) for h in holdings))
+        symbols = list(set(
+            [(h.symbol, h.exchange) for h in holdings] +
+            [(s.symbol, s.exchange) for s in sold]
+        ))
         res = stock_service.fetch_multiple(symbols)
         live = sum(1 for v in res.values() if not v.is_manual)
         fb = sum(1 for v in res.values() if v.is_manual)

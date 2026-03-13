@@ -859,12 +859,16 @@ def _initial_live_fetch():
     global _last_refresh_time, _last_refresh_status
     try:
         holdings = db.get_all_holdings()
-        if not holdings:
+        sold = db.get_all_sold()
+        if not holdings and not sold:
             with _refresh_lock:
                 _last_refresh_status = "no_holdings"
                 _last_refresh_time = time.time()
             return
-        syms = list(set((h.symbol, h.exchange) for h in holdings))
+        syms = list(set(
+            [(h.symbol, h.exchange) for h in holdings] +
+            [(s.symbol, s.exchange) for s in sold]
+        ))
         with _refresh_lock:
             _last_refresh_status = "refreshing"
         # Don't clear cache — pre-warm data stays available while we fetch
