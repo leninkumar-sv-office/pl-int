@@ -70,8 +70,8 @@
     "type": "index",
     "unit": "",
     "price": 54452.96,
-    "change": -1167.88,
-    "change_pct": -2.1,
+    "change": 1724.24,
+    "change_pct": 3.27,
     "source": "yahoo/google"
   },
   {
@@ -80,8 +80,8 @@
     "type": "forex",
     "unit": "",
     "price": 72.21,
-    "change": 0.58,
-    "change_pct": 0.81,
+    "change": 0.25,
+    "change_pct": 0.35,
     "source": "yahoo/google"
   },
   {

@@ -103,44 +103,57 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
         if result is not None:
             return result
         return None
-    # Skip if connection recently failed (retry after 60s)
-    if _conn_failed and (time.time() - _conn_fail_time) < 60:
+    # Skip if connection recently failed (retry after 10s)
+    if _conn_failed and (time.time() - _conn_fail_time) < 10:
         return None
-    try:
-        resp = requests.get(
-            f"{_BASE_URL}{path}",
-            headers=_headers(),
-            params=params,
-            timeout=(5, 10),  # (connect_timeout, read_timeout)
-        )
-        # Connection succeeded — reset conn_failed
-        _conn_failed = False
-        if resp.status_code == 200:
-            _auth_failed = False  # Reset on success
-            return resp.json()
-        elif resp.status_code == 403:
-            _auth_failed = True
-            _last_error = f"Auth failed (403): {resp.text[:200]}"
-            print(f"[Zerodha] {_last_error}")
-            with _lock:
-                global _session_valid
-                _session_valid = False
-            # Try auto-login and retry
-            result = _try_auto_login_and_retry(path, params)
-            if result is not None:
-                return result
-            print("[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(
+                f"{_BASE_URL}{path}",
+                headers=_headers(),
+                params=params,
+                timeout=(5, 15),  # (connect_timeout, read_timeout)
+            )
+            # Connection succeeded — reset conn_failed
+            _conn_failed = False
+            if resp.status_code == 200:
+                _auth_failed = False  # Reset on success
+                return resp.json()
+            elif resp.status_code == 403:
+                _auth_failed = True
+                _last_error = f"Auth failed (403): {resp.text[:200]}"
+                print(f"[Zerodha] {_last_error}")
+                with _lock:
+                    global _session_valid
+                    _session_valid = False
+                # Try auto-login and retry
+                result = _try_auto_login_and_retry(path, params)
+                if result is not None:
+                    return result
+                print("[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
+                return None
+            elif resp.status_code == 429:
+                # Rate limited — wait and retry
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                _last_error = f"Rate limited (429)"
+                print(f"[Zerodha] {_last_error}")
+                return None
+            else:
+                _last_error = f"API error {resp.status_code}: {resp.text[:100]}"
+                print(f"[Zerodha] {_last_error}")
+                return None
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+                continue
+            _conn_failed = True
+            _conn_fail_time = time.time()
+            _last_error = f"Connection failed: {str(e)[:120]}"
+            print(f"[Zerodha] Request failed: {e}")
             return None
-        else:
-            _last_error = f"API error {resp.status_code}: {resp.text[:100]}"
-            print(f"[Zerodha] {_last_error}")
-            return None
-    except requests.exceptions.RequestException as e:
-        _conn_failed = True
-        _conn_fail_time = time.time()
-        _last_error = f"Connection failed: {str(e)[:120]}"
-        print(f"[Zerodha] Request failed: {e}")
-        return None
 
 
 # ═══════════════════════════════════════════════════════════
@@ -454,6 +467,11 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         batch = instruments[i:i + batch_size]
         params = [("i", inst) for inst in batch]
         data = _api_get("/quote", params)
+        if not data or "data" not in data:
+            # Retry failed batch once
+            print(f"[Zerodha] Quote batch {i//batch_size + 1} failed, retrying...")
+            time.sleep(0.5)
+            data = _api_get("/quote", params)
         if data and "data" in data:
             for inst_key, info in data["data"].items():
                 mapped_keys = inst_to_keys.get(inst_key, [])
@@ -657,10 +675,30 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
     fetched = 0
     failed = 0
 
-    for sym, exch, token in need_fetch:
+    # Use thread pool for parallel fetches (3 workers to stay within rate limits)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    _rate_lock = threading.Lock()
+    _last_req_time = [0.0]
+
+    def _fetch_one(sym, exch, token):
+        # Throttle: minimum 0.35s between requests
+        with _rate_lock:
+            elapsed = time.time() - _last_req_time[0]
+            if elapsed < 0.35:
+                time.sleep(0.35 - elapsed)
+            _last_req_time[0] = time.time()
         key = f"{sym}.{exch}"
         try:
             result = _fetch_historical_52w(token)
+            return (key, result)
+        except Exception as e:
+            print(f"[Zerodha] 52w fetch error for {key}: {e}")
+            return (key, None)
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(_fetch_one, sym, exch, token): (sym, exch) for sym, exch, token in need_fetch}
+        for future in as_completed(futures):
+            key, result = future.result()
             if result:
                 entry = {
                     "week_52_high": round(result["week_52_high"], 2),
@@ -680,12 +718,6 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 fetched += 1
             else:
                 failed += 1
-        except Exception as e:
-            print(f"[Zerodha] 52w fetch error for {key}: {e}")
-            failed += 1
-
-        # Rate limit: ~3 requests/second
-        time.sleep(0.35)
 
     print(f"[Zerodha] 52-week range: {fetched} fetched, {failed} failed")
     return results
