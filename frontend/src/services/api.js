@@ -207,6 +207,12 @@ export async function searchMFInstruments(query, plan = 'direct', schemeType = '
   return data;
 }
 
+export async function getMFHistory(fundCode, period = '1y', name = '') {
+  const { data } = await api.get(`/mf/${encodeURIComponent(fundCode)}/history`,
+    { params: { period, name } });
+  return data;
+}
+
 export async function getMFDashboard() {
   const { data } = await api.get('/mutual-funds/dashboard');
   return data;

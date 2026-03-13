@@ -1968,6 +1968,16 @@ def refresh_mf_nav():
     return {"message": f"NAV refreshed: {with_nav}/{len(summary)} funds with live prices"}
 
 
+@app.get("/api/mf/{fund_code}/history")
+def get_mf_nav_history(fund_code: str, period: str = "1y", name: str = ""):
+    """Get historical NAV data for charting a mutual fund."""
+    from .mf_xlsx_database import get_mf_nav_history as _get_mf_nav_history
+    data = _get_mf_nav_history(fund_code, period, fund_name=name)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"No history for {fund_code} ({period})")
+    return data
+
+
 @app.get("/api/mutual-funds/search")
 def search_mf(q: str = "", plan: str = "direct", scheme_type: str = ""):
     """Search Zerodha MF instruments by name with filters."""

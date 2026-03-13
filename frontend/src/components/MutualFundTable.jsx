@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { getMFHistory } from '../services/api';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -180,6 +182,94 @@ function NavRangeBar({ low, high, current, avg }) {
   );
 }
 
+/* ── MF Chart Periods ──────────────────────────────── */
+const MF_CHART_PERIODS = ['1M', '6M', 'YTD', '1Y', '3Y', '5Y', 'MAX'];
+
+function formatMFChartDate(dateStr, period) {
+  const d = new Date(dateStr);
+  if (period === '1m') return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+/* ── MF NAV Chart ─────────────────────────────────── */
+function MFChart({ fundCode, fundName }) {
+  const [period, setPeriod] = useState('1y');
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async (p) => {
+    setLoading(true);
+    try {
+      const result = await getMFHistory(fundCode, p, fundName || '');
+      setData(result || []);
+    } catch { setData([]); }
+    finally { setLoading(false); }
+  }, [fundCode, fundName]);
+
+  useEffect(() => { fetchData(period); }, []);
+
+  const handlePeriod = (p) => {
+    const lower = p.toLowerCase();
+    setPeriod(lower);
+    fetchData(lower);
+  };
+
+  const chartUp = data.length >= 2 && data[data.length - 1].close >= data[0].close;
+  const chartColor = chartUp ? '#00d26a' : '#ff4757';
+  const gradId = `mf-grad-${fundCode.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  return (
+    <div>
+      {/* Period tabs */}
+      <div style={{ display: 'flex', gap: '2px', marginBottom: '8px' }}>
+        {MF_CHART_PERIODS.map(p => (
+          <button key={p} onClick={() => handlePeriod(p)}
+            style={{
+              padding: '5px 12px', fontSize: '13px', fontWeight: 600, border: 'none', borderRadius: '6px', cursor: 'pointer',
+              background: period === p.toLowerCase() ? 'var(--text)' : 'transparent',
+              color: period === p.toLowerCase() ? 'var(--bg)' : 'var(--text-muted)',
+            }}>
+            {p}
+          </button>
+        ))}
+      </div>
+      {/* Chart */}
+      <div style={{ height: '420px' }}>
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '12px' }}>Loading chart...</div>
+        ) : data.length === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '12px' }}>No data available</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={chartColor} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={chartColor} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false}
+                tickFormatter={(v) => formatMFChartDate(v, period)}
+                interval="preserveStartEnd" minTickGap={60} />
+              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} tickLine={false} axisLine={false}
+                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v.toFixed(1)} width={55} />
+              <Tooltip
+                contentStyle={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '11px' }}
+                labelFormatter={(v) => {
+                  const d = new Date(v);
+                  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                }}
+                formatter={(value) => [formatINR(value), 'NAV']}
+              />
+              <Area type="monotone" dataKey="close" stroke={chartColor} strokeWidth={1.5} fill={`url(#${gradId})`} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Expanded Fund Detail (matches StockDetail) ─────── */
 function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, selectedLots, onToggleLot, onToggleAllLots }) {
   const f = fund;
@@ -233,7 +323,11 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
       background: 'var(--bg)',
       borderTop: '1px solid var(--border)',
       padding: '20px 24px',
+      display: 'flex',
+      gap: '24px',
     }}>
+      {/* Left side: details */}
+      <div style={{ flex: '0 1 auto', minWidth: 0 }}>
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
         {heldLots.length > 0 && (
@@ -629,6 +723,11 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
           No lot or transaction details available.
         </div>
       )}
+      </div>
+      {/* Right side: chart */}
+      <div style={{ flex: '1 1 400px', minWidth: '300px', alignSelf: 'flex-start', position: 'sticky', top: '0' }}>
+        <MFChart fundCode={f.fund_code} fundName={f.name} />
+      </div>
     </div>
   );
 }

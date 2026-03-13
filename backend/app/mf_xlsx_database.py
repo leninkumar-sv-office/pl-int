@@ -209,34 +209,39 @@ def _search_mfapi_scheme(fund_name: str) -> Optional[int]:
     # Clean the fund name for search
     q = fund_name.strip()
     # Remove common suffixes that might differ
-    for suffix in [" - Direct Plan", " Direct Plan", " - Direct", " Direct"]:
+    for suffix in [" - Direct Plan", " Direct Plan", " - Direct", " Direct",
+                   " - Growth", " Growth", " Plan", " Option"]:
         q = q.replace(suffix, "")
-    # Use first few significant words
-    words = q.split()[:5]
-    search_q = " ".join(words)
-    try:
-        resp = _requests.get(
-            f"https://api.mfapi.in/mf/search?q={search_q}",
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            results = resp.json()
-            if results and len(results) > 0:
-                # Try to find "Direct" + "Growth" variant first
-                name_upper = fund_name.upper()
-                for r in results:
-                    rn = r.get("schemeName", "").upper()
-                    if "DIRECT" in rn and "GROWTH" in rn:
-                        return int(r["schemeCode"])
-                # Fall back to first match with "Direct"
-                for r in results:
-                    rn = r.get("schemeName", "").upper()
-                    if "DIRECT" in rn:
-                        return int(r["schemeCode"])
-                # Fall back to first result
-                return int(results[0]["schemeCode"])
-    except Exception as e:
-        print(f"[MF-MFAPI] Search error for '{search_q}': {e}")
+    # Remove hyphens (Mid-Cap → Mid Cap), extra spaces
+    q = q.replace("-", " ")
+    q = " ".join(q.split())
+
+    # Try progressively shorter queries (5 words, then 3, then 2)
+    for word_count in (5, 3, 2):
+        words = q.split()[:word_count]
+        search_q = " ".join(words)
+        try:
+            resp = _requests.get(
+                f"https://api.mfapi.in/mf/search?q={search_q}",
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                results = resp.json()
+                if results and len(results) > 0:
+                    # Try to find "Direct" + "Growth" variant first
+                    for r in results:
+                        rn = r.get("schemeName", "").upper()
+                        if "DIRECT" in rn and "GROWTH" in rn:
+                            return int(r["schemeCode"])
+                    # Fall back to first match with "Direct"
+                    for r in results:
+                        rn = r.get("schemeName", "").upper()
+                        if "DIRECT" in rn:
+                            return int(r["schemeCode"])
+                    # Fall back to first result
+                    return int(results[0]["schemeCode"])
+        except Exception as e:
+            print(f"[MF-MFAPI] Search error for '{search_q}': {e}")
     return None
 
 
@@ -373,6 +378,104 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
 def record_nav_history(live_navs: Dict[str, float]):
     """No-op — kept for compatibility. mfapi.in provides history directly."""
     pass
+
+
+# ═══════════════════════════════════════════════════════════
+#  MF NAV HISTORY FOR CHARTING
+# ═══════════════════════════════════════════════════════════
+
+_nav_history_cache: Dict[str, Tuple[float, list]] = {}  # fund_code → (fetched_at, data)
+_nav_history_cache_lock = threading.Lock()
+_NAV_HISTORY_CACHE_TTL = 3600  # 1 hour
+
+def get_mf_nav_history(fund_code: str, period: str = "1y", fund_name: str = "") -> Optional[list]:
+    """Get historical NAV data for charting.
+    Returns [{date, close}] or None.
+    Periods: 1m, 6m, ytd, 1y, 3y, 5y, max."""
+    from datetime import timedelta
+
+    # Check cache (full history — we filter by period after)
+    now = time.time()
+    with _nav_history_cache_lock:
+        cached = _nav_history_cache.get(fund_code)
+        if cached and (now - cached[0]) < _NAV_HISTORY_CACHE_TTL:
+            all_data = cached[1]
+            return _filter_by_period(all_data, period)
+
+    # Look up scheme code
+    scheme_map = _load_scheme_map()
+    scheme_code = scheme_map.get(fund_code)
+    if not scheme_code and fund_name:
+        scheme_code = _search_mfapi_scheme(fund_name)
+        if scheme_code:
+            scheme_map[fund_code] = scheme_code
+            _save_scheme_map(scheme_map)
+
+    if not scheme_code:
+        return None
+
+    nav_data = _fetch_nav_history_mfapi(scheme_code)
+    if not nav_data:
+        return None
+
+    # Parse into [{date, close}] sorted oldest first
+    all_data = []
+    for entry in nav_data:
+        try:
+            d = datetime.strptime(entry["date"], "%d-%m-%Y").date()
+            nav_val = float(entry["nav"])
+            if nav_val > 0:
+                all_data.append({"date": d.isoformat(), "close": nav_val})
+        except (ValueError, KeyError, TypeError):
+            continue
+
+    all_data.sort(key=lambda x: x["date"])
+
+    # Cache full history
+    with _nav_history_cache_lock:
+        _nav_history_cache[fund_code] = (now, all_data)
+
+    return _filter_by_period(all_data, period)
+
+
+def _filter_by_period(data: list, period: str) -> list:
+    """Filter NAV history by period and downsample if too many points."""
+    from datetime import timedelta
+    if not data:
+        return []
+
+    today = date.today()
+    period = period.lower()
+
+    period_map = {
+        "1m": timedelta(days=30),
+        "6m": timedelta(days=180),
+        "1y": timedelta(days=365),
+        "3y": timedelta(days=3 * 365),
+        "5y": timedelta(days=5 * 365),
+    }
+
+    if period == "ytd":
+        cutoff = date(today.year, 1, 1).isoformat()
+        result = [d for d in data if d["date"] >= cutoff]
+    elif period == "max":
+        result = data
+    elif period in period_map:
+        cutoff = (today - period_map[period]).isoformat()
+        result = [d for d in data if d["date"] >= cutoff]
+    else:
+        cutoff = (today - timedelta(days=365)).isoformat()
+        result = [d for d in data if d["date"] >= cutoff]
+
+    # Downsample if too many points (keep ~300 for chart performance)
+    if len(result) > 500:
+        step = max(1, len(result) // 300)
+        sampled = result[::step]
+        if result[-1] not in sampled:
+            sampled.append(result[-1])
+        return sampled
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
