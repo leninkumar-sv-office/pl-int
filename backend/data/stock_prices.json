@@ -8,7 +8,7 @@
     "day_change_pct": -1.1,
     "week_change_pct": -3.75,
     "month_change_pct": -8.29,
-    "volume": 949143,
+    "volume": 949233,
     "previous_close": 2221.2
   },
   "JWL.NSE": {
@@ -20,19 +20,19 @@
     "day_change_pct": -3.69,
     "week_change_pct": -11.92,
     "month_change_pct": -15.23,
-    "volume": 1546538,
+    "volume": 1547167,
     "previous_close": 272.2
   },
   "KAJARIACER.BSE": {
-    "price": 912.0,
+    "price": 910.1,
     "name": "Kajaria Ceramics Ltd",
     "week_52_high": 1322,
     "week_52_low": 745,
-    "day_change": -28.5,
-    "day_change_pct": -3.03,
+    "day_change": -30.4,
+    "day_change_pct": -3.23,
     "week_change_pct": -2.51,
     "month_change_pct": -4.62,
-    "volume": 75265,
+    "volume": 75274,
     "previous_close": 940.5
   },
   "ITC.BSE": {
@@ -44,7 +44,7 @@
     "day_change_pct": -0.79,
     "week_change_pct": -2.5,
     "month_change_pct": -5.09,
-    "volume": 1109462,
+    "volume": 1109479,
     "previous_close": 303.9
   },
   "BHARTIARTL.BSE": {
@@ -68,19 +68,19 @@
     "day_change_pct": -4.3,
     "week_change_pct": 2.99,
     "month_change_pct": -11.95,
-    "volume": 91702,
+    "volume": 91722,
     "previous_close": 10804.5
   },
   "RVNL.BSE": {
-    "price": 270.7,
+    "price": 271.25,
     "name": "Rail Vikas Nigam",
     "week_52_high": 448,
     "week_52_low": 270.5,
-    "day_change": -8.8,
-    "day_change_pct": -3.15,
+    "day_change": -8.25,
+    "day_change_pct": -2.95,
     "week_change_pct": -5.32,
     "month_change_pct": -14.48,
-    "volume": 231793,
+    "volume": 232054,
     "previous_close": 279.5
   },
   "BEML.NSE": {
@@ -92,7 +92,7 @@
     "day_change_pct": -5.5,
     "week_change_pct": -7.77,
     "month_change_pct": -13.72,
-    "volume": 295084,
+    "volume": 295101,
     "previous_close": 1614.2
   },
   "RELIANCE.NSE": {
@@ -104,7 +104,7 @@
     "day_change_pct": -0.83,
     "week_change_pct": -1.62,
     "month_change_pct": -5.9,
-    "volume": 17264354,
+    "volume": 17265090,
     "previous_close": 1392.2
   },
   "BBTC.NSE": {
@@ -116,7 +116,7 @@
     "day_change_pct": -2.78,
     "week_change_pct": -5.89,
     "month_change_pct": -17.75,
-    "volume": 39308,
+    "volume": 39359,
     "previous_close": 1570.9
   },
   "LGEINDIA.NSE": {
@@ -140,7 +140,7 @@
     "day_change_pct": -4.92,
     "week_change_pct": -3.57,
     "month_change_pct": -13.29,
-    "volume": 136077,
+    "volume": 136132,
     "previous_close": 485.45
   },
   "ADANIPOWER.NSE": {
@@ -152,7 +152,7 @@
     "day_change_pct": -1.7,
     "week_change_pct": 6.19,
     "month_change_pct": -2.19,
-    "volume": 54478679,
+    "volume": 54479845,
     "previous_close": 149.11
   },
   "IRCTC.NSE": {
@@ -164,7 +164,7 @@
     "day_change_pct": -1.7,
     "week_change_pct": -4.49,
     "month_change_pct": -15.97,
-    "volume": 2008336,
+    "volume": 2008646,
     "previous_close": 536.7
   },
   "IREDA.NSE": {
@@ -176,19 +176,19 @@
     "day_change_pct": -1.86,
     "week_change_pct": -1.76,
     "month_change_pct": -9.04,
-    "volume": 11395283,
+    "volume": 11395700,
     "previous_close": 117.03
   },
   "RITES.BSE": {
-    "price": 196.85,
+    "price": 196.95,
     "name": "Rites Ltd",
     "week_52_high": 316.15,
     "week_52_low": 194.65,
-    "day_change": -3.05,
-    "day_change_pct": -1.53,
+    "day_change": -2.95,
+    "day_change_pct": -1.48,
     "week_change_pct": -4.6,
     "month_change_pct": -12.92,
-    "volume": 51664,
+    "volume": 51715,
     "previous_close": 199.9
   },
   "IRCON.BSE": {
@@ -200,7 +200,7 @@
     "day_change_pct": -4.62,
     "week_change_pct": -11.19,
     "month_change_pct": -16.53,
-    "volume": 228167,
+    "volume": 228173,
     "previous_close": 136.5
   },
   "IRFC.NSE": {
@@ -212,7 +212,7 @@
     "day_change_pct": -2.72,
     "week_change_pct": -2.23,
     "month_change_pct": -14.94,
-    "volume": 11412776,
+    "volume": 11414655,
     "previous_close": 99.92
   },
   "JAINREC.NSE": {
@@ -248,7 +248,7 @@
     "day_change_pct": -2.87,
     "week_change_pct": -1.46,
     "month_change_pct": -12.75,
-    "volume": 13320420,
+    "volume": 13328248,
     "previous_close": 242.2
   },
   "ONGC.NSE": {
@@ -260,7 +260,7 @@
     "day_change_pct": -2.38,
     "week_change_pct": -5.29,
     "month_change_pct": -1.53,
-    "volume": 18410014,
+    "volume": 18411729,
     "previous_close": 270.55
   },
   "BHARATCOAL.NSE": {
@@ -272,7 +272,7 @@
     "day_change_pct": 0.81,
     "week_change_pct": 9.46,
     "month_change_pct": -1.64,
-    "volume": 42772455,
+    "volume": 42777382,
     "previous_close": 35.81
   },
   "RAILTEL.NSE": {
@@ -284,7 +284,7 @@
     "day_change_pct": -3.17,
     "week_change_pct": -4.43,
     "month_change_pct": -18.09,
-    "volume": 655553,
+    "volume": 655595,
     "previous_close": 287.1
   },
   "ADANIGREEN.NSE": {
@@ -296,7 +296,7 @@
     "day_change_pct": -0.6,
     "week_change_pct": 0.54,
     "month_change_pct": -13.24,
-    "volume": 6756411,
+    "volume": 6756426,
     "previous_close": 866.55
   },
   "SBILIFE.NSE": {
@@ -308,7 +308,7 @@
     "day_change_pct": -1.8,
     "week_change_pct": -1.69,
     "month_change_pct": -5.8,
-    "volume": 989728,
+    "volume": 989732,
     "previous_close": 1939.4
   },
   "LT.BSE": {
@@ -320,7 +320,7 @@
     "day_change_pct": -7.52,
     "week_change_pct": -12.78,
     "month_change_pct": -17.41,
-    "volume": 1291346,
+    "volume": 1291358,
     "previous_close": 3720.95
   },
   "AFCONS.NSE": {
@@ -332,7 +332,7 @@
     "day_change_pct": 0.13,
     "week_change_pct": -1.25,
     "month_change_pct": -18.3,
-    "volume": 931574,
+    "volume": 931638,
     "previous_close": 278.5
   },
   "LICI.BSE": {
@@ -368,7 +368,7 @@
     "day_change_pct": -2.93,
     "week_change_pct": -7.08,
     "month_change_pct": -11.81,
-    "volume": 255611,
+    "volume": 255631,
     "previous_close": 247.35
   },
   "ITCHOTELS.NSE": {
@@ -380,7 +380,7 @@
     "day_change_pct": -3.06,
     "week_change_pct": -8.56,
     "month_change_pct": -19.0,
-    "volume": 4285211,
+    "volume": 4285565,
     "previous_close": 157.96
   },
   "IOC.NSE": {
@@ -392,7 +392,7 @@
     "day_change_pct": -2.26,
     "week_change_pct": -7.16,
     "month_change_pct": -13.63,
-    "volume": 11956593,
+    "volume": 11958819,
     "previous_close": 160.16
   },
   "KAJARIACER.NSE": {
@@ -404,7 +404,7 @@
     "day_change_pct": -3.18,
     "week_change_pct": -2.74,
     "month_change_pct": -4.99,
-    "volume": 226068,
+    "volume": 226078,
     "previous_close": 940.0
   },
   "ITC.NSE": {
@@ -416,7 +416,7 @@
     "day_change_pct": -0.87,
     "week_change_pct": -2.55,
     "month_change_pct": -5.17,
-    "volume": 25658656,
+    "volume": 25659996,
     "previous_close": 304.1
   },
   "BHARTIARTL.NSE": {
@@ -428,7 +428,7 @@
     "day_change_pct": 0.12,
     "week_change_pct": -3.62,
     "month_change_pct": -10.39,
-    "volume": 8970649,
+    "volume": 8970772,
     "previous_close": 1801.3
   },
   "RVNL.NSE": {
@@ -440,19 +440,19 @@
     "day_change_pct": -2.99,
     "week_change_pct": -5.28,
     "month_change_pct": -14.42,
-    "volume": 4564038,
+    "volume": 4564446,
     "previous_close": 279.6
   },
   "HEROMOTOCO.BSE": {
-    "price": 5203.0,
+    "price": 5204.35,
     "name": "Hero MotoCorp Ltd",
     "week_52_high": 6390,
     "week_52_low": 3322.6,
-    "day_change": -192.6,
-    "day_change_pct": -3.57,
+    "day_change": -191.25,
+    "day_change_pct": -3.54,
     "week_change_pct": -5.54,
     "month_change_pct": -8.42,
-    "volume": 30648,
+    "volume": 30652,
     "previous_close": 5395.6
   },
   "DIXON.NSE": {
@@ -464,7 +464,7 @@
     "day_change_pct": -4.3,
     "week_change_pct": 2.99,
     "month_change_pct": -12.03,
-    "volume": 848285,
+    "volume": 848321,
     "previous_close": 10803.0
   },
   "NATIONALUM.NSE": {
@@ -476,7 +476,7 @@
     "day_change_pct": -5.33,
     "week_change_pct": -2.45,
     "month_change_pct": 5.1,
-    "volume": 28466412,
+    "volume": 28466667,
     "previous_close": 409.15
   },
   "ASIANPAINT.BSE": {
@@ -488,7 +488,7 @@
     "day_change_pct": -1.14,
     "week_change_pct": -3.5,
     "month_change_pct": -8.09,
-    "volume": 56848,
+    "volume": 56887,
     "previous_close": 2221.5
   },
   "JWL.BSE": {
@@ -500,7 +500,7 @@
     "day_change_pct": -3.75,
     "week_change_pct": -12.49,
     "month_change_pct": -15.51,
-    "volume": 199243,
+    "volume": 199260,
     "previous_close": 272.35
   },
   "OIL.NSE": {
@@ -512,7 +512,7 @@
     "day_change_pct": -1.83,
     "week_change_pct": -2.76,
     "month_change_pct": -1.69,
-    "volume": 4296389,
+    "volume": 4296456,
     "previous_close": 479.3
   },
   "BEML.BSE": {
@@ -536,7 +536,7 @@
     "day_change_pct": -4.64,
     "week_change_pct": -11.19,
     "month_change_pct": -16.58,
-    "volume": 3252735,
+    "volume": 3252843,
     "previous_close": 136.55
   },
   "RITES.NSE": {
@@ -548,7 +548,7 @@
     "day_change_pct": -1.41,
     "week_change_pct": -4.76,
     "month_change_pct": -12.98,
-    "volume": 488500,
+    "volume": 488608,
     "previous_close": 199.65
   },
   "AUROPHARMA.NSE": {
@@ -560,7 +560,7 @@
     "day_change_pct": -1.17,
     "week_change_pct": 5.06,
     "month_change_pct": 12.87,
-    "volume": 1634619,
+    "volume": 1634716,
     "previous_close": 1311.9
   },
   "RELIANCE.BSE": {
@@ -572,7 +572,7 @@
     "day_change_pct": -0.81,
     "week_change_pct": -1.65,
     "month_change_pct": -5.89,
-    "volume": 1358131,
+    "volume": 1358137,
     "previous_close": 1391.85
   },
   "HIGHENE.BSE": {
@@ -632,7 +632,7 @@
     "day_change_pct": -1.61,
     "week_change_pct": 6.19,
     "month_change_pct": -2.22,
-    "volume": 2294251,
+    "volume": 2294271,
     "previous_close": 149.1
   },
   "IRCTC.BSE": {
@@ -656,19 +656,19 @@
     "day_change_pct": -7.54,
     "week_change_pct": -12.78,
     "month_change_pct": -17.39,
-    "volume": 10778652,
+    "volume": 10778730,
     "previous_close": 3719.5
   },
   "IREDA.BSE": {
-    "price": 115.35,
+    "price": 114.85,
     "name": "Indian Renewable Energy Dev Agency Ltd",
     "week_52_high": 186.55,
     "week_52_low": 111.75,
-    "day_change": -1.75,
-    "day_change_pct": -1.49,
+    "day_change": -2.25,
+    "day_change_pct": -1.92,
     "week_change_pct": -1.62,
     "month_change_pct": -8.92,
-    "volume": 1035559,
+    "volume": 1035576,
     "previous_close": 117.1
   },
   "LICI.NSE": {
@@ -680,7 +680,7 @@
     "day_change_pct": -3.01,
     "week_change_pct": -5.95,
     "month_change_pct": -11.64,
-    "volume": 1249674,
+    "volume": 1249784,
     "previous_close": 796.65
   },
   "CENTRALBK.NSE": {
@@ -692,7 +692,7 @@
     "day_change_pct": -3.03,
     "week_change_pct": -4.15,
     "month_change_pct": -5.9,
-    "volume": 7379288,
+    "volume": 7380138,
     "previous_close": 36.61
   },
   "PIIND.NSE": {
@@ -704,7 +704,7 @@
     "day_change_pct": -1.9,
     "week_change_pct": -6.41,
     "month_change_pct": -12.16,
-    "volume": 339126,
+    "volume": 339128,
     "previous_close": 2952.4
   },
   "IRB.NSE": {
@@ -716,7 +716,7 @@
     "day_change_pct": -2.37,
     "week_change_pct": 1.91,
     "month_change_pct": -6.46,
-    "volume": 6473830,
+    "volume": 6476141,
     "previous_close": 42.57
   },
   "BIOCON.NSE": {
@@ -728,7 +728,7 @@
     "day_change_pct": -2.21,
     "week_change_pct": -1.46,
     "month_change_pct": 2.61,
-    "volume": 4757832,
+    "volume": 4757886,
     "previous_close": 392.2
   },
   "JIOFIN.BSE": {
@@ -740,7 +740,7 @@
     "day_change_pct": -2.93,
     "week_change_pct": -1.46,
     "month_change_pct": -12.71,
-    "volume": 1220146,
+    "volume": 1221278,
     "previous_close": 242.3
   },
   "JAINREC.BSE": {
@@ -752,7 +752,7 @@
     "day_change_pct": 0.12,
     "week_change_pct": 1.8,
     "month_change_pct": 7.63,
-    "volume": 47359,
+    "volume": 47364,
     "previous_close": 427.6
   },
   "ONGC.BSE": {
@@ -776,19 +776,19 @@
     "day_change_pct": -3.17,
     "week_change_pct": -4.19,
     "month_change_pct": -17.83,
-    "volume": 43948,
+    "volume": 43954,
     "previous_close": 287.0
   },
   "ADANIGREEN.BSE": {
-    "price": 861.9,
+    "price": 860.75,
     "name": "Adani Green Energy Limited",
     "week_52_high": 1179.2,
     "week_52_low": 767,
-    "day_change": -4.05,
-    "day_change_pct": -0.47,
+    "day_change": -5.2,
+    "day_change_pct": -0.6,
     "week_change_pct": 0.34,
     "month_change_pct": -13.34,
-    "volume": 164144,
+    "volume": 164154,
     "previous_close": 865.95
   },
   "SBILIFE.BSE": {
@@ -836,7 +836,7 @@
     "day_change_pct": -3.49,
     "week_change_pct": -5.8,
     "month_change_pct": -8.61,
-    "volume": 496066,
+    "volume": 496250,
     "previous_close": 5394.5
   },
   "ITCHOTELS.BSE": {
@@ -848,7 +848,7 @@
     "day_change_pct": -3.13,
     "week_change_pct": -8.3,
     "month_change_pct": -19.01,
-    "volume": 436590,
+    "volume": 436811,
     "previous_close": 158.1
   },
   "SYNGENE.BSE": {
@@ -864,15 +864,15 @@
     "previous_close": 404.1
   },
   "TRENT.BSE": {
-    "price": 3493.25,
+    "price": 3490.4,
     "name": "Trent",
     "week_52_high": 6259,
     "week_52_low": 3470.7,
-    "day_change": -38.9,
-    "day_change_pct": -1.1,
+    "day_change": -41.75,
+    "day_change_pct": -1.18,
     "week_change_pct": -6.16,
     "month_change_pct": -17.23,
-    "volume": 146190,
+    "volume": 146212,
     "previous_close": 3532.15
   },
   "TMCV.NSE": {
@@ -884,7 +884,7 @@
     "day_change_pct": -4.04,
     "week_change_pct": -10.17,
     "month_change_pct": -12.56,
-    "volume": 11971181,
+    "volume": 11971586,
     "previous_close": 443.55
   },
   "WABAG.BSE": {
@@ -896,7 +896,7 @@
     "day_change_pct": -3.79,
     "week_change_pct": 0.0,
     "month_change_pct": -6.85,
-    "volume": 21326,
+    "volume": 21346,
     "previous_close": 1275.85
   },
   "SBIN.NSE": {
@@ -908,7 +908,7 @@
     "day_change_pct": -3.52,
     "week_change_pct": -8.49,
     "month_change_pct": -11.57,
-    "volume": 15977380,
+    "volume": 15978675,
     "previous_close": 1085.2
   },
   "TRITURBINE.BSE": {
@@ -932,7 +932,7 @@
     "day_change_pct": -1.83,
     "week_change_pct": 5.21,
     "month_change_pct": 5.25,
-    "volume": 961051,
+    "volume": 961099,
     "previous_close": 402.3
   },
   "TATACAP.BSE": {
@@ -944,7 +944,7 @@
     "day_change_pct": -1.73,
     "week_change_pct": -1.49,
     "month_change_pct": -12.27,
-    "volume": 130928,
+    "volume": 130961,
     "previous_close": 318.5
   },
   "TITAGARH.NSE": {
@@ -956,7 +956,7 @@
     "day_change_pct": -2.51,
     "week_change_pct": -5.92,
     "month_change_pct": -19.53,
-    "volume": 561345,
+    "volume": 561395,
     "previous_close": 655.85
   },
   "TATATECH.NSE": {
@@ -968,7 +968,7 @@
     "day_change_pct": -2.08,
     "week_change_pct": -6.33,
     "month_change_pct": -14.01,
-    "volume": 893156,
+    "volume": 893902,
     "previous_close": 551.85
   },
   "TATACHEM.BSE": {
@@ -992,7 +992,7 @@
     "day_change_pct": -1.3,
     "week_change_pct": -6.25,
     "month_change_pct": -17.28,
-    "volume": 1215664,
+    "volume": 1215870,
     "previous_close": 3533.6
   },
   "WABAG.NSE": {
@@ -1004,7 +1004,7 @@
     "day_change_pct": -4.06,
     "week_change_pct": 0.24,
     "month_change_pct": -6.5,
-    "volume": 345171,
+    "volume": 345291,
     "previous_close": 1279.5
   },
   "TRITURBINE.NSE": {
@@ -1028,7 +1028,7 @@
     "day_change_pct": -5.2,
     "week_change_pct": -7.71,
     "month_change_pct": -11.77,
-    "volume": 2091982,
+    "volume": 2093024,
     "previous_close": 193.45
   },
   "TATAPOWER.NSE": {
@@ -1040,7 +1040,7 @@
     "day_change_pct": -1.79,
     "week_change_pct": 5.19,
     "month_change_pct": 5.15,
-    "volume": 9072048,
+    "volume": 9072187,
     "previous_close": 402.15
   },
   "TATACAP.NSE": {
@@ -1052,7 +1052,7 @@
     "day_change_pct": -1.74,
     "week_change_pct": -1.46,
     "month_change_pct": -12.25,
-    "volume": 1180783,
+    "volume": 1181308,
     "previous_close": 318.6
   },
   "TEJASNET.BSE": {
@@ -1064,7 +1064,7 @@
     "day_change_pct": -3.79,
     "week_change_pct": -8.07,
     "month_change_pct": 26.23,
-    "volume": 474034,
+    "volume": 474063,
     "previous_close": 440.8
   },
   "SYNGENE.NSE": {
@@ -1076,7 +1076,7 @@
     "day_change_pct": 4.15,
     "week_change_pct": 5.23,
     "month_change_pct": -7.58,
-    "volume": 9786558,
+    "volume": 9786652,
     "previous_close": 404.1
   },
   "TATACHEM.NSE": {
@@ -1088,7 +1088,7 @@
     "day_change_pct": -1.81,
     "week_change_pct": -4.99,
     "month_change_pct": -5.33,
-    "volume": 339268,
+    "volume": 339368,
     "previous_close": 683.15
   },
   "TMCV.BSE": {
@@ -1100,7 +1100,7 @@
     "day_change_pct": -4.02,
     "week_change_pct": -10.02,
     "month_change_pct": -12.44,
-    "volume": 1666647,
+    "volume": 1667078,
     "previous_close": 443.6
   },
   "SUNTV.NSE": {
@@ -1112,7 +1112,7 @@
     "day_change_pct": -5.14,
     "week_change_pct": -6.51,
     "month_change_pct": -8.51,
-    "volume": 273731,
+    "volume": 273766,
     "previous_close": 593.3
   },
   "IDEA.NSE": {
@@ -1124,7 +1124,7 @@
     "day_change_pct": -3.03,
     "week_change_pct": -6.56,
     "month_change_pct": -20.68,
-    "volume": 570941478,
+    "volume": 570944045,
     "previous_close": 9.56
   },
   "TATASTEEL.NSE": {
@@ -1136,7 +1136,7 @@
     "day_change_pct": -5.15,
     "week_change_pct": -7.78,
     "month_change_pct": -11.84,
-    "volume": 42681296,
+    "volume": 42683952,
     "previous_close": 193.47
   },
   "TMPV.NSE": {
@@ -1148,7 +1148,7 @@
     "day_change_pct": -3.22,
     "week_change_pct": -10.42,
     "month_change_pct": -18.33,
-    "volume": 17072723,
+    "volume": 17073811,
     "previous_close": 324.55
   },
   "TITAGARH.BSE": {
@@ -1172,7 +1172,7 @@
     "day_change_pct": -3.77,
     "week_change_pct": -8.01,
     "month_change_pct": 26.18,
-    "volume": 6625323,
+    "volume": 6625826,
     "previous_close": 441.1
   },
   "TATATECH.BSE": {
@@ -1184,7 +1184,7 @@
     "day_change_pct": -2.23,
     "week_change_pct": -6.3,
     "month_change_pct": -14.0,
-    "volume": 125963,
+    "volume": 126051,
     "previous_close": 552.45
   }
 }

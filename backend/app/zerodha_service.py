@@ -1206,7 +1206,7 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
         "1m":  ("day",      timedelta(days=30)),
         "6m":  ("day",      timedelta(days=180)),
         "1y":  ("day",      timedelta(days=365)),
-        "5y":  ("week",     timedelta(days=5 * 365)),
+        "5y":  ("day",      timedelta(days=5 * 365)),
         "max": ("day",      timedelta(days=20 * 365)),
     }
 
@@ -1232,11 +1232,27 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
         return None
 
     path = f"/instruments/historical/{token}/{interval}"
-    data = _api_get(path, {"from": from_date, "to": to_date})
-    if not data or "data" not in data:
-        return None
 
-    candles = data["data"].get("candles", [])
+    # For MAX period, fetch in 2000-day chunks (Kite limits daily candle range)
+    if period == "max":
+        all_candles = []
+        chunk_days = 2000
+        from_dt = now - timedelta(days=20 * 365)
+        while from_dt < now:
+            chunk_to = min(from_dt + timedelta(days=chunk_days), now)
+            data = _api_get(path, {
+                "from": from_dt.strftime("%Y-%m-%d"),
+                "to": chunk_to.strftime("%Y-%m-%d"),
+            })
+            if data and "data" in data:
+                all_candles.extend(data["data"].get("candles", []))
+            from_dt = chunk_to + timedelta(days=1)
+        candles = all_candles
+    else:
+        data = _api_get(path, {"from": from_date, "to": to_date})
+        if not data or "data" not in data:
+            return None
+        candles = data["data"].get("candles", [])
     if not candles:
         return None
 
@@ -1261,9 +1277,8 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
         })
 
     # Downsample for long periods to keep chart performant
-    if period == "max" and len(result) > 500:
-        # ~monthly: keep every ~20th trading day
-        step = max(1, len(result) // 250)
+    if len(result) > 500 and period in ("5y", "max"):
+        step = max(1, len(result) // 300)
         result = result[::step] + ([result[-1]] if result[-1] not in result[::step] else [])
 
     # Cache result
