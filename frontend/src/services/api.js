@@ -76,6 +76,12 @@ export async function getStockHistory(symbol, exchange = 'NSE', period = '1y') {
   return data;
 }
 
+export async function getTickerHistory(key, period = '1y') {
+  const { data } = await api.get(`/market-ticker/${encodeURIComponent(key)}/history`,
+    { params: { period } });
+  return data;
+}
+
 export async function setManualPrice(symbol, exchange, price) {
   const { data } = await api.post('/stock/manual-price', { symbol, exchange, price });
   return data;

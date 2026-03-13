@@ -1177,6 +1177,24 @@ def get_stock_history(symbol: str, exchange: str = "NSE", period: str = "1y"):
     return data
 
 
+@app.get("/api/market-ticker/{key}/history")
+def get_ticker_history(key: str, period: str = "1y"):
+    """Get historical candle data for a market ticker (SENSEX, NIFTY50, etc.)."""
+    key = key.upper()
+    # Find the ticker's instrument token from current cache
+    with _ticker_lock:
+        ticker = next((t for t in _ticker_cache if t.get("key") == key), None)
+    if not ticker:
+        raise HTTPException(status_code=404, detail=f"Ticker {key} not found")
+    token = ticker.get("instrument_token")
+    if not token:
+        raise HTTPException(status_code=404, detail=f"No instrument token for {key}")
+    data = zerodha_service.fetch_stock_history(key, "TICKER", period, instrument_token=token)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"No history for {key} ({period})")
+    return data
+
+
 @app.post("/api/stock/manual-price")
 def set_manual_price(req: ManualPriceRequest):
     """Manually set a stock price (fallback when Yahoo is unavailable)."""

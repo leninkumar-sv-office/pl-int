@@ -1175,7 +1175,7 @@ _history_cache_lock = threading.Lock()
 _HISTORY_CACHE_TTL = 300  # 5 minutes
 
 
-def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optional[List[dict]]:
+def fetch_stock_history(symbol: str, exchange: str, period: str = "1y", instrument_token: Optional[int] = None) -> Optional[List[dict]]:
     """Fetch OHLCV candle data for charting via Kite Historical Data API.
 
     Period mapping:
@@ -1227,7 +1227,7 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
             return cached["data"]
 
     # Resolve instrument token
-    token = _get_instrument_token(symbol.upper(), exchange.upper())
+    token = instrument_token or _get_instrument_token(symbol.upper(), exchange.upper())
     if not token:
         return None
 
