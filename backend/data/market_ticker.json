@@ -37,9 +37,9 @@
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/g",
-    "price": 15950.0,
-    "change": -77.1,
-    "change_pct": -0.48,
+    "price": 16029.4,
+    "change": 2.3,
+    "change_pct": 0.01,
     "instrument_token": 116433415,
     "source": "zerodha"
   },
@@ -48,9 +48,9 @@
     "label": "Silver",
     "type": "commodity",
     "unit": "\u20b9/g",
-    "price": 270.04,
-    "change": -3.58,
-    "change_pct": -1.31,
+    "price": 273.14,
+    "change": -0.47,
+    "change_pct": -0.17,
     "instrument_token": 117128455,
     "source": "zerodha"
   },
@@ -62,7 +62,7 @@
     "price": 4842.27,
     "change": -5.98,
     "change_pct": -0.12,
-    "source": "cached"
+    "source": "yahoo/google"
   },
   {
     "key": "NIKKEI",
@@ -79,9 +79,9 @@
     "label": "SGD/INR",
     "type": "forex",
     "unit": "",
-    "price": 72.14,
-    "change": 0.19,
-    "change_pct": 0.26,
+    "price": 72.19,
+    "change": 0.23,
+    "change_pct": 0.32,
     "source": "yahoo/google"
   },
   {
@@ -89,9 +89,9 @@
     "label": "USD/INR",
     "type": "forex",
     "unit": "",
-    "price": 92.48,
-    "change": 0.22,
-    "change_pct": 0.24,
+    "price": 92.43,
+    "change": 0.17,
+    "change_pct": 0.18,
     "instrument_token": 579587,
     "source": "zerodha"
   },
@@ -100,9 +100,9 @@
     "label": "Crude Oil",
     "type": "commodity",
     "unit": "\u20b9/bbl",
-    "price": 8793.0,
-    "change": -11.0,
-    "change_pct": -0.12,
+    "price": 8699.0,
+    "change": -105.0,
+    "change_pct": -1.19,
     "instrument_token": 121033991,
     "source": "zerodha"
   }
