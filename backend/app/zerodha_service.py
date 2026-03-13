@@ -1199,6 +1199,7 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
     to_date = now.strftime("%Y-%m-%d")
     period = period.lower()
 
+    # Kite valid intervals: minute, 3minute, 5minute, 10minute, 15minute, 30minute, 60minute, day
     period_map = {
         "1d":  ("5minute",  timedelta(days=1)),
         "5d":  ("15minute", timedelta(days=5)),
@@ -1206,7 +1207,7 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
         "6m":  ("day",      timedelta(days=180)),
         "1y":  ("day",      timedelta(days=365)),
         "5y":  ("week",     timedelta(days=5 * 365)),
-        "max": ("month",    timedelta(days=20 * 365)),
+        "max": ("day",      timedelta(days=20 * 365)),
     }
 
     if period == "ytd":
@@ -1258,6 +1259,12 @@ def fetch_stock_history(symbol: str, exchange: str, period: str = "1y") -> Optio
             "close": round(float(c[4]), 2),
             "volume": int(c[5]),
         })
+
+    # Downsample for long periods to keep chart performant
+    if period == "max" and len(result) > 500:
+        # ~monthly: keep every ~20th trading day
+        step = max(1, len(result) // 250)
+        result = result[::step] + ([result[-1]] if result[-1] not in result[::step] else [])
 
     # Cache result
     with _history_cache_lock:
