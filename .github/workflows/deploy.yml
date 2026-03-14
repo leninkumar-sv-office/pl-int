@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   tag-and-deploy:
     runs-on: self-hosted
@@ -35,16 +38,19 @@ jobs:
         run: |
           # Create deploy dir if first time
           if [ ! -d "$DEPLOY_DIR/.git" ]; then
-            git clone https://github.com/leninkumar-sv-office/pl-int.git "$DEPLOY_DIR"
+            git clone "$GITHUB_WORKSPACE" "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
+            git remote set-url origin https://github.com/leninkumar-sv-office/pl-int.git
           fi
 
           cd "$DEPLOY_DIR"
-          git fetch origin
+          git fetch origin --tags
           git checkout ${{ steps.tag.outputs.tag }}
 
-          # Copy .env if not present (first deploy only)
-          if [ ! -f backend/.env ]; then
-            echo "WARNING: backend/.env not found. Copy it manually."
+          # Copy .env from dev workspace if not present (first deploy only)
+          if [ ! -f backend/.env ] && [ -f /Users/lenin/Desktop/workspace/pl/backend/.env ]; then
+            cp /Users/lenin/Desktop/workspace/pl/backend/.env backend/.env
+            echo "Copied .env from dev workspace"
           fi
 
           # Kill existing server on port 8000
