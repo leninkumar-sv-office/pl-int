@@ -1,0 +1,8 @@
+Collecting pyotp
+  Downloading pyotp-2.9.0-py3-none-any.whl.metadata (9.8 kB)
+Downloading pyotp-2.9.0-py3-none-any.whl (13 kB)
+Installing collected packages: pyotp
+Successfully installed pyotp-2.9.0
+
+[notice] A new release of pip is available: 25.0.1 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip

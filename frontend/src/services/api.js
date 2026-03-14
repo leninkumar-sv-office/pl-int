@@ -4,8 +4,67 @@ const API_BASE = '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 60000,  // 60s — handles cold-start scenarios
 });
+
+// Attach X-User-Id and auth headers to every request
+api.interceptors.request.use((config) => {
+  const userId = localStorage.getItem('selectedUserId');
+  if (userId) {
+    config.headers['X-User-Id'] = userId;
+  }
+  const sessionToken = localStorage.getItem('sessionToken');
+  if (sessionToken) {
+    config.headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
+  return config;
+});
+
+// Redirect to login on 401
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/')) {
+      localStorage.removeItem('sessionToken');
+      window.dispatchEvent(new Event('auth-expired'));
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ── Auth ──────────────────────────────────────────
+
+export async function getAuthStatus() {
+  const { data } = await api.get('/auth/status');
+  return data;
+}
+
+export async function googleLogin(idToken) {
+  const { data } = await api.post('/auth/google', { token: idToken });
+  return data;
+}
+
+export async function googleLoginWithCode(code) {
+  const { data } = await api.post('/auth/google-code', { code });
+  return data;
+}
+
+export async function verifySession() {
+  const { data } = await api.get('/auth/verify');
+  return data;
+}
+
+// ── Users ─────────────────────────────────────────
+
+export async function getUsers() {
+  const { data } = await api.get('/users');
+  return data;
+}
+
+export async function addUser(name, avatar, color) {
+  const { data } = await api.post('/users', { name, avatar, color });
+  return data;
+}
 
 // ── Portfolio ─────────────────────────────────────────
 
@@ -55,8 +114,30 @@ export async function getStockLive(symbol, exchange = 'NSE') {
   return data;
 }
 
+export async function fetchStockPrice(symbol, exchange = 'NSE') {
+  const { data } = await api.get(`/stock/${encodeURIComponent(symbol)}/price`, { params: { exchange } });
+  return data;
+}
+
+export async function lookupStockName(symbol, exchange = 'NSE') {
+  const { data } = await api.get(`/stock/lookup/${encodeURIComponent(symbol)}`, { params: { exchange } });
+  return data;
+}
+
 export async function searchStock(query, exchange = 'NSE') {
   const { data } = await api.get(`/stock/search/${query}`, { params: { exchange } });
+  return data;
+}
+
+export async function getStockHistory(symbol, exchange = 'NSE', period = '1y') {
+  const { data } = await api.get(`/stock/${encodeURIComponent(symbol)}/history`,
+    { params: { exchange, period } });
+  return data;
+}
+
+export async function getTickerHistory(key, period = '1y') {
+  const { data } = await api.get(`/market-ticker/${encodeURIComponent(key)}/history`,
+    { params: { period } });
   return data;
 }
 
@@ -72,9 +153,388 @@ export async function addDividend(dividendData) {
   return data;
 }
 
+// ── Contract Note Import ─────────────────────────────
+
+function _readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const b64 = result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function parseContractNote(file) {
+  const base64 = await _readFileAsBase64(file);
+  const payload = { pdf_base64: base64, filename: file.name };
+  const { data } = await api.post('/portfolio/parse-contract-note', payload, { timeout: 120000 });
+  // Attach the payload so we can reuse it for the confirm step
+  data._payload = payload;
+  return data;
+}
+
+export async function confirmImportContractNote(payload) {
+  const { data } = await api.post('/portfolio/import-contract-note-confirmed', payload, { timeout: 120000 });
+  return data;
+}
+
+// ── Bank Statement Dividend Import ───────────────────
+
+export async function parseDividendStatement(file) {
+  const base64 = await _readFileAsBase64(file);
+  const payload = { pdf_base64: base64, filename: file.name };
+  const { data } = await api.post('/portfolio/parse-dividend-statement', payload, { timeout: 120000 });
+  return data;
+}
+
+export async function confirmDividendImport(payload) {
+  const { data } = await api.post('/portfolio/import-dividends-confirmed', payload, { timeout: 120000 });
+  return data;
+}
+
 // ── Market Ticker ────────────────────────────────────
 
 export async function getMarketTicker() {
   const { data } = await api.get('/market-ticker');
+  return data;
+}
+
+// ── Live Refresh (actual external fetch) ────────────
+
+export async function triggerPriceRefresh() {
+  // Longer timeout: refresh is synchronous — waits for Zerodha to respond
+  const { data } = await api.post('/prices/refresh', null, { timeout: 120000 });
+  return data;
+}
+
+export async function triggerTickerRefresh() {
+  const { data } = await api.post('/market-ticker/refresh');
+  return data;
+}
+
+export async function triggerMFNavRefresh() {
+  const { data } = await api.post('/mutual-funds/refresh-nav', null, { timeout: 120000 });
+  return data;
+}
+
+// ── Settings ────────────────────────────────────────
+
+export async function getRefreshInterval() {
+  const { data } = await api.get('/settings/refresh-interval');
+  return data;
+}
+
+export async function setRefreshInterval(interval) {
+  const { data } = await api.post('/settings/refresh-interval', { interval });
+  return data;
+}
+
+// ── Mutual Funds ────────────────────────────────────
+
+export async function getMFSummary() {
+  const { data } = await api.get('/mutual-funds/summary');
+  return data;
+}
+
+export async function searchMFInstruments(query, plan = 'direct', schemeType = '') {
+  const { data } = await api.get('/mutual-funds/search', { params: { q: query, plan, scheme_type: schemeType } });
+  return data;
+}
+
+export async function getMFHistory(fundCode, period = '1y', name = '') {
+  const { data } = await api.get(`/mf/${encodeURIComponent(fundCode)}/history`,
+    { params: { period, name } });
+  return data;
+}
+
+export async function getMFDashboard() {
+  const { data } = await api.get('/mutual-funds/dashboard');
+  return data;
+}
+
+export async function addMFHolding(payload) {
+  const { data } = await api.post('/mutual-funds/buy', payload);
+  return data;
+}
+
+export async function redeemMFUnits(payload) {
+  const { data } = await api.post('/mutual-funds/redeem', payload);
+  return data;
+}
+
+// ── SIP Configuration ────────────────────────────────
+
+export async function getSIPConfigs() {
+  const { data } = await api.get('/mutual-funds/sip');
+  return data;
+}
+
+export async function addSIPConfig(payload) {
+  const { data } = await api.post('/mutual-funds/sip', payload);
+  return data;
+}
+
+export async function deleteSIPConfig(fundCode) {
+  const { data } = await api.delete(`/mutual-funds/sip/${encodeURIComponent(fundCode)}`);
+  return data;
+}
+
+export async function getPendingSIPs() {
+  const { data } = await api.get('/mutual-funds/sip/pending');
+  return data;
+}
+
+export async function executeSIP(fundCode) {
+  const { data } = await api.post(`/mutual-funds/sip/execute/${encodeURIComponent(fundCode)}`);
+  return data;
+}
+
+// ── CDSL CAS Statement Import ─────────────────────────
+
+export async function parseCDSLCAS(file) {
+  const base64 = await _readFileAsBase64(file);
+  const { data } = await api.post('/mutual-funds/parse-cdsl-cas',
+    { pdf_base64: base64, filename: file.name }, { timeout: 120000 });
+  return data;
+}
+
+export async function confirmCDSLCASImport(payload) {
+  const { data } = await api.post('/mutual-funds/import-cdsl-cas-confirmed',
+    payload, { timeout: 120000 });
+  return data;
+}
+
+// ── Zerodha ────────────────────────────────────────
+
+export async function getZerodhaStatus() {
+  const { data } = await api.get('/zerodha/status');
+  return data;
+}
+
+export async function getZerodhaLoginUrl() {
+  const { data } = await api.get('/zerodha/login-url');
+  return data;
+}
+
+export async function setZerodhaToken(accessToken) {
+  const { data } = await api.post('/zerodha/set-token', { access_token: accessToken });
+  return data;
+}
+
+export async function validateZerodha() {
+  const { data } = await api.get('/zerodha/validate');
+  return data;
+}
+
+// ── Fixed Deposits ────────────────────────────────────
+
+export async function getFDSummary() {
+  const { data } = await api.get('/fixed-deposits/summary');
+  return data;
+}
+
+export async function getFDDashboard() {
+  const { data } = await api.get('/fixed-deposits/dashboard');
+  return data;
+}
+
+export async function addFD(payload) {
+  const { data } = await api.post('/fixed-deposits/add', payload);
+  return data;
+}
+
+export async function updateFD(fdId, payload) {
+  const { data } = await api.put(`/fixed-deposits/${fdId}`, payload);
+  return data;
+}
+
+export async function deleteFD(fdId) {
+  const { data } = await api.delete(`/fixed-deposits/${fdId}`);
+  return data;
+}
+
+// ── Recurring Deposits ────────────────────────────────
+
+export async function getRDSummary() {
+  const { data } = await api.get('/recurring-deposits/summary');
+  return data;
+}
+
+export async function getRDDashboard() {
+  const { data } = await api.get('/recurring-deposits/dashboard');
+  return data;
+}
+
+export async function addRD(payload) {
+  const { data } = await api.post('/recurring-deposits/add', payload);
+  return data;
+}
+
+export async function updateRD(rdId, payload) {
+  const { data } = await api.put(`/recurring-deposits/${rdId}`, payload);
+  return data;
+}
+
+export async function deleteRD(rdId) {
+  const { data } = await api.delete(`/recurring-deposits/${rdId}`);
+  return data;
+}
+
+export async function addRDInstallment(rdId, payload) {
+  const { data } = await api.post(`/recurring-deposits/${rdId}/installment`, payload);
+  return data;
+}
+
+// ── Insurance ────────────────────────────────────────
+
+export async function getInsuranceSummary() {
+  const { data } = await api.get('/insurance/summary');
+  return data;
+}
+
+export async function getInsuranceDashboard() {
+  const { data } = await api.get('/insurance/dashboard');
+  return data;
+}
+
+export async function addInsurance(payload) {
+  const { data } = await api.post('/insurance/add', payload);
+  return data;
+}
+
+export async function updateInsurance(policyId, payload) {
+  const { data } = await api.put(`/insurance/${policyId}`, payload);
+  return data;
+}
+
+export async function deleteInsurance(policyId) {
+  const { data } = await api.delete(`/insurance/${policyId}`);
+  return data;
+}
+
+// ── PPF (Public Provident Fund) ──────────────────────────
+
+export async function getPPFSummary() {
+  const { data } = await api.get('/ppf/summary');
+  return data;
+}
+
+export async function getPPFDashboard() {
+  const { data } = await api.get('/ppf/dashboard');
+  return data;
+}
+
+export async function addPPF(payload) {
+  const { data } = await api.post('/ppf/add', payload);
+  return data;
+}
+
+export async function updatePPF(ppfId, payload) {
+  const { data } = await api.put(`/ppf/${ppfId}`, payload);
+  return data;
+}
+
+export async function deletePPF(ppfId) {
+  const { data } = await api.delete(`/ppf/${ppfId}`);
+  return data;
+}
+
+export async function addPPFContribution(ppfId, payload) {
+  const { data } = await api.post(`/ppf/${ppfId}/contribution`, payload);
+  return data;
+}
+
+export async function withdrawPPF(ppfId, payload) {
+  const { data } = await api.post(`/ppf/${ppfId}/withdraw`, payload);
+  return data;
+}
+
+// ── NPS (National Pension System) ──────────────────────────
+
+export async function getNPSSummary() {
+  const { data } = await api.get('/nps/summary');
+  return data;
+}
+
+export async function getNPSDashboard() {
+  const { data } = await api.get('/nps/dashboard');
+  return data;
+}
+
+export async function addNPS(payload) {
+  const { data } = await api.post('/nps/add', payload);
+  return data;
+}
+
+export async function updateNPS(npsId, payload) {
+  const { data } = await api.put(`/nps/${npsId}`, payload);
+  return data;
+}
+
+export async function deleteNPS(npsId) {
+  const { data } = await api.delete(`/nps/${npsId}`);
+  return data;
+}
+
+export async function addNPSContribution(npsId, payload) {
+  const { data } = await api.post(`/nps/${npsId}/contribution`, payload);
+  return data;
+}
+
+// ── Standing Instructions ──────────────────────────────
+
+export async function getSISummary() {
+  const { data } = await api.get('/standing-instructions/summary');
+  return data;
+}
+
+export async function getSIDashboard() {
+  const { data } = await api.get('/standing-instructions/dashboard');
+  return data;
+}
+
+export async function addSI(payload) {
+  const { data } = await api.post('/standing-instructions/add', payload);
+  return data;
+}
+
+export async function updateSI(siId, payload) {
+  const { data } = await api.put(`/standing-instructions/${siId}`, payload);
+  return data;
+}
+
+export async function deleteSI(siId) {
+  const { data } = await api.delete(`/standing-instructions/${siId}`);
+  return data;
+}
+
+// ── Advisor (Business Line + AI) ────────────────────────
+
+export async function getAdvisorInsights() {
+  const { data } = await api.get('/advisor/insights', { timeout: 120000 });
+  return data;
+}
+
+export async function refreshAdvisor() {
+  const { data } = await api.post('/advisor/refresh', null, { timeout: 120000 });
+  return data;
+}
+
+export async function advisorChat(message, history = []) {
+  const { data } = await api.post('/advisor/chat', { message, history }, { timeout: 60000 });
+  return data;
+}
+
+export async function getAdvisorArticles() {
+  const { data } = await api.get('/advisor/articles', { timeout: 120000 });
+  return data;
+}
+
+export async function getAdvisorStatus() {
+  const { data } = await api.get('/advisor/status');
   return data;
 }

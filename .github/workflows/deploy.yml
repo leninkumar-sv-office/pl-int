@@ -1,0 +1,73 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  tag-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create auto-increment tag
+        id: tag
+        run: |
+          # Find latest prod-N tag
+          latest=$(git tag -l 'prod-*' --sort=-v:refname | head -1)
+          if [ -z "$latest" ]; then
+            next=1
+          else
+            num=${latest#prod-}
+            next=$((num + 1))
+          fi
+          tag="prod-${next}"
+          git tag "$tag"
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Created tag: $tag"
+
+      - name: Deploy to pl-auto
+        env:
+          DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
+        run: |
+          # Create deploy dir if first time
+          if [ ! -d "$DEPLOY_DIR/.git" ]; then
+            git clone https://github.com/leninkumar-sv-office/pl-int.git "$DEPLOY_DIR"
+          fi
+
+          cd "$DEPLOY_DIR"
+          git fetch origin
+          git checkout ${{ steps.tag.outputs.tag }}
+
+          # Copy .env if not present (first deploy only)
+          if [ ! -f backend/.env ]; then
+            echo "WARNING: backend/.env not found. Copy it manually."
+          fi
+
+          # Kill existing server on port 8000
+          lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+          sleep 1
+
+          # Install frontend deps and build
+          cd frontend
+          npm ci --silent
+          npm run build
+          cd ..
+
+          # Install backend deps
+          cd backend
+          python3 -m venv venv 2>/dev/null || true
+          source venv/bin/activate
+          pip install -r requirements.txt --quiet
+
+          # Start server in background
+          nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/pl-auto-server.log 2>&1 &
+          echo "Server started with PID $!"
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -sf http://localhost:8000/api/auth/status && echo "Deploy successful: ${{ steps.tag.outputs.tag }}" || echo "Health check failed"

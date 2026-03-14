@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { lookupStockName } from '../services/api';
 
 export default function AddStockModal({ onAdd, onClose, initialData }) {
   const [form, setForm] = useState({
@@ -11,9 +12,52 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
     notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
+  const debounceRef = useRef(null);
+
+  // Debounced lookup: when symbol changes, fetch company name after 400ms pause
+  useEffect(() => {
+    const sym = form.symbol.trim().toUpperCase();
+    if (!sym || sym.length < 2) {
+      return;
+    }
+
+    // Clear previous timer
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      setLookingUp(true);
+      try {
+        const result = await lookupStockName(sym, form.exchange);
+        if (result.name) {
+          setForm(prev => {
+            // Only update if symbol still matches (user may have typed more)
+            if (prev.symbol.trim().toUpperCase() === sym) {
+              return { ...prev, name: result.name };
+            }
+            return prev;
+          });
+        }
+      } catch {
+        // Silently ignore lookup errors
+      } finally {
+        setLookingUp(false);
+      }
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [form.symbol, form.exchange]);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'symbol') {
+      // Clear name when symbol changes so it gets re-fetched
+      setForm(prev => ({ ...prev, symbol: value, name: '' }));
+    } else {
+      setForm(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -56,12 +100,23 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
           </div>
 
           <div className="form-group">
-            <label>Company Name (auto-fetched if empty)</label>
+            <label>
+              Company Name
+              {lookingUp && (
+                <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Looking up...
+                </span>
+              )}
+            </label>
             <input
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="e.g. Reliance Industries"
+              placeholder={lookingUp ? 'Fetching from Zerodha...' : 'Auto-populated from Zerodha'}
+              style={{
+                borderColor: form.name ? 'var(--green)' : undefined,
+                transition: 'border-color 0.2s',
+              }}
             />
           </div>
 

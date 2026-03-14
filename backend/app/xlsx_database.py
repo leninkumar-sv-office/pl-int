@@ -19,85 +19,33 @@ from openpyxl.styles import Font, PatternFill
 
 from .models import Holding, SoldPosition, Transaction
 
-# ═══════════════════════════════════════════════════════════
-#  SYMBOL ↔ COMPANY-NAME MAP  (from existing dump filenames)
-# ═══════════════════════════════════════════════════════════
 
-SYMBOL_MAP: Dict[str, str] = {
-    "ABB India Ltd": "ABB",
-    "Afcons Infrastructure Ltd": "AFCONS",
-    "Antony Waste Handling Cell Ltd": "ANTONYWASTE",
-    "Apollo Hospitals Enterprise Ltd": "APOLLOHOSP",
-    "Apollo Tyres Ltd": "APOLLOTYRE",
-    "Ashok Leyland Ltd": "ASHOKLEY",
-    "Asian Paints Ltd": "ASIANPAINT",
-    "Aurobindo Pharma Ltd": "AUROPHARMA",
-    "Aurum Proptech Ltd": "AURUMPROP",
-    "Avanti Feeds": "AVANTIFEED",
-    "Avanti Feeds Ltd - Archive": "AVANTIFEED",
-    "Bharat Electronics Ltd": "BEL",
-    "Bharat Wire Ropes Ltd": "BHARATWIRE",
-    "Biocon Ltd": "BIOCON",
-    "Bombay Burmah Trading Corporation Ltd": "BBTC",
-    "Carysil Ltd": "CARYSIL",
-    "Coal India Ltd": "COALINDIA",
-    "Gautam Gems Ltd": "GAUTAMGEM",
-    "Graphite India Ltd": "GRAPHITE",
-    "Hero MotoCorp Ltd": "HEROMOTOCO",
-    "High Energy Batteries (India) Ltd": "HIGHENERGY",
-    "Hindustan Copper Ltd": "HINDCOPPER",
-    "IRB Infra": "IRB",
-    "ITC Hotels Ltd": "ITCHOTELS",
-    "ITC Ltd": "ITC",
-    "Indian Oil Corporation Ltd": "IOC",
-    "Indian Rail Tour Corp Ltd": "IRCTC",
-    "Indian Railway Fin Corp": "IRFC",
-    "Indian Renewable Energy Dev Agency Ltd": "IREDA",
-    "Ircon International Ltd": "IRCON",
-    "Jio Financial Services Ltd": "JIOFIN",
-    "Jio Financial Services Ltd(1)": "JIOFIN",
-    "Kajaria Ceramics Ltd": "KAJARIACER",
-    "LG Electronics India": "LGEELECTRO",
-    "Larsen and Toubro Ltd": "LT",
-    "Majesco Ltd": "MAJESCO",
-    "Manuppuram Finance Ltd": "MANAPPURAM",
-    "Nippon Silver": "NIPPONSILV",
-    "ONGC": "ONGC",
-    "Oil India Ltd": "OIL",
-    "PI Industries Ltd": "PIIND",
-    "PNC Infratech Ltd": "PNCINFRA",
-    "Priti International Ltd": "PRITIINTER",
-    "Rail Vikas Nigam": "RVNL",
-    "Railtel Corporation of India Ltd": "RAILTEL",
-    "Rallis India Ltd": "RALLIS",
-    "Ramco Systems Ltd": "RAMCOSYS",
-    "Reliance Industries Ltd": "RELIANCE",
-    "Rites Ltd": "RITES",
-    "SBI ETF Gold": "SETFGOLD",
-    "SBI Life Insurance Company Ltd": "SBILIFE",
-    "SBI": "SBIN",
-    "Sun TV Network Ltd": "SUNTV",
-    "Suzlon Energy": "SUZLON",
-    "Syngene International Ltd": "SYNGENE",
-    "TATA Capital": "TATACAPITAL",
-    "TATA Power": "TATAPOWER",
-    "Tata Chemicals": "TATACHEM",
-    "Tata Motors Ltd": "TATAMOTORS",
-    "Tata Steel Ltd": "TATASTEEL",
-    "Tata Technologies Ltd": "TATATECH",
-    "Trent": "TRENT",
-    "Union Bank of India Ltd": "UNIONBANK",
-    "Va Tech Wabag Ltd": "WABAG",
-    "Vikas Lifecare Ltd": "VIKASLIFE",
-    "Wipro Ltd": "WIPRO",
-    "Archive_Indian Railway Ctrng nd Trsm Corp Ltd": "IRCTC",
-}
+def _sync_to_drive(filepath: Path):
+    """Notify Drive service that a file was modified (async upload)."""
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass  # Drive sync is best-effort
 
-# Reverse map: symbol → list of possible company names
+# ═══════════════════════════════════════════════════════════
+#  SYMBOL RESOLUTION  (dynamic from Zerodha + NSE, no hardcoding)
+# ═══════════════════════════════════════════════════════════
+#
+# Symbols are resolved dynamically from Zerodha instruments CSV
+# and NSE EQUITY_L.csv via the shared symbol_resolver module.
+# No hardcoded symbol map — all lookups go through Zerodha/NSE.
+#
+from . import symbol_resolver as _sym_resolver
+
+# Resolved symbol map: populated at runtime during _build_file_map().
+# Maps company name (xlsx stem) → trading symbol.
+SYMBOL_MAP: Dict[str, str] = {}
+
+# Reverse map: symbol → company name (for display)
 _REVERSE_MAP: Dict[str, str] = {}
-for _name, _sym in SYMBOL_MAP.items():
-    if _sym not in _REVERSE_MAP:
-        _REVERSE_MAP[_sym] = _name
 
 
 # ═══════════════════════════════════════════════════════════
@@ -111,16 +59,16 @@ def _gen_id(symbol: str, exchange: str, buy_date: str, buy_price: float, row_idx
 
 
 def _parse_date(val) -> Optional[str]:
-    """Convert xlsx cell value to DD-MMM-YYYY string (e.g. 27-JAN-2026)."""
-    _FMT = "%d-%b-%Y"
+    """Convert xlsx cell value to YYYY-MM-DD string (e.g. 2026-01-27)."""
+    _FMT = "%Y-%m-%d"
     if isinstance(val, datetime):
-        return val.strftime(_FMT).upper()
+        return val.strftime(_FMT)
     if isinstance(val, date):
-        return val.strftime(_FMT).upper()
+        return val.strftime(_FMT)
     if isinstance(val, str):
         for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y", "%d-%b-%Y", "%d-%B-%Y"):
             try:
-                return datetime.strptime(val.strip(), fmt).strftime(_FMT).upper()
+                return datetime.strptime(val.strip(), fmt).strftime(_FMT)
             except ValueError:
                 continue
     return None
@@ -222,11 +170,11 @@ def _extract_index_data(wb) -> dict:
 
 
 def _parse_excel_serial_date(val) -> Optional[str]:
-    """Convert Excel serial date number to DD-MMM-YYYY string."""
+    """Convert Excel serial date number to YYYY-MM-DD string."""
     if isinstance(val, (int, float)) and val > 1000:
         from datetime import timedelta
         base = datetime(1899, 12, 30)
-        return (base + timedelta(days=int(val))).strftime("%d-%b-%Y").upper()
+        return (base + timedelta(days=int(val))).strftime("%Y-%m-%d")
     return _parse_date(val)
 
 
@@ -273,16 +221,21 @@ def _find_realised_columns(ws, header_row: int) -> dict:
 
 
 def _parse_trading_history(wb) -> Tuple[list, list, list]:
-    """Parse Buy and Sell rows from Trading History sheet using column layout.
+    """Parse Buy and Sell rows from Trading History sheet.
 
-    The xlsx format tracks sold lots directly in the Realised section:
-      - Core: A=Date, B=Exch, C=Action, D=Qty, E=Price, F=Cost, ...
-      - Realised section (position varies): Price, Date, Gain, Units
+    ALL Buy rows go into held[]; ALL Sell rows go into sell_rows[].
+    Held/sold determination is done purely via FIFO matching of Sell rows
+    against Buy rows (in _parse_and_match_symbol).
+
+    The Realised columns (W–AB) in dump files often have broken formula
+    references (stale row numbers after row insertions) and cannot be
+    trusted for held/sold assignment.  They are still written by the app's
+    add_sell_transaction for display in Excel.
 
     Returns (held_lots, column_sold_lots, sell_rows, dividends):
-      - held_lots: Buy rows WITHOUT Realised data (or partial remaining)
-      - column_sold_lots: Buy rows WITH Realised data tracking sold lots
-      - sell_rows: Explicit Sell action rows (for FIFO matching against held)
+      - held_lots: ALL Buy rows (non-DIV)
+      - column_sold_lots: always empty (FIFO handles sold determination)
+      - sell_rows: ALL Sell action rows
       - dividends: List of {date, amount, remarks} for dividend rows
     """
     held, sold, sell_rows, dividends = [], [], [], []
@@ -302,10 +255,6 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             break
     if header_row is None:
         return held, sold, sell_rows, dividends
-
-    # Dynamically find the Realised section columns
-    rcols = _find_realised_columns(ws, header_row)
-    has_realised_section = rcols["sell_price"] is not None
 
     for row_idx in range(header_row + 1, max_row + 1):
         date_val = ws.cell(row_idx, 1).value        # A: DATE
@@ -338,30 +287,22 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
                 })
             continue
 
-        # Collect Sell rows for FIFO matching against held lots.
-        # IMPORTANT: Original dump files have Sell rows alongside Realised
-        # columns on Buy rows for the SAME sales — these would double-count.
-        # So when a Realised section exists, only collect app-initiated sells
-        # (marked with "APP_SELL" remark). When no Realised section exists,
-        # collect all Sell rows (file was created by app or has no column data).
+        # Collect ALL Sell rows for FIFO matching
         if action == "Sell":
-            remarks_val = str(ws.cell(row_idx, 7).value or "").strip()
-            is_app_sell = remarks_val == "APP_SELL"
-            if not has_realised_section or is_app_sell:
-                tx_date = _parse_date(date_val)
-                if not tx_date:
-                    continue
-                qty_int = _safe_int(qty)
-                price_f = _safe_float(price)
-                if qty_int > 0 and price_f > 0:
-                    exchange = exch if exch in ("NSE", "BSE") else "NSE"
-                    sell_rows.append({
-                        "date": tx_date,
-                        "quantity": qty_int,
-                        "price": price_f,
-                        "exchange": exchange,
-                        "row_idx": row_idx,
-                    })
+            tx_date = _parse_date(date_val)
+            if not tx_date:
+                continue
+            qty_int = _safe_int(qty)
+            price_f = _safe_float(price)
+            if qty_int > 0 and price_f > 0:
+                exchange = exch if exch in ("NSE", "BSE") else "NSE"
+                sell_rows.append({
+                    "date": tx_date,
+                    "quantity": qty_int,
+                    "price": price_f,
+                    "exchange": exchange,
+                    "row_idx": row_idx,
+                })
             continue
 
         # Only process Buy rows
@@ -387,66 +328,16 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
 
         exchange = exch if exch in ("NSE", "BSE") else "NSE"
 
-        # Check Realised section columns for sold data
-        sell_price = 0.0
-        sell_date_val = None
-        sell_gain = 0.0
-        sold_units = 0
-
-        if has_realised_section:
-            if rcols["sell_price"]:
-                sell_price = _safe_float(ws.cell(row_idx, rcols["sell_price"]).value)
-            if rcols["sell_date"]:
-                sell_date_val = ws.cell(row_idx, rcols["sell_date"]).value
-            if rcols["sell_gain"]:
-                sell_gain = _safe_float(ws.cell(row_idx, rcols["sell_gain"]).value)
-            if rcols["sold_units"]:
-                sold_units = _safe_int(ws.cell(row_idx, rcols["sold_units"]).value)
-
-        if sold_units > 0 and sell_price > 0:
-            # This buy lot has been sold (fully or partially)
-            sell_date = _parse_excel_serial_date(sell_date_val)
-            if not sell_date:
-                sell_date = tx_date  # fallback
-
-            realized_pl = sell_gain if sell_gain != 0 else round((sell_price - buy_price) * sold_units, 2)
-
-            sold.append({
-                "buy_date": tx_date,
-                "buy_price": buy_price,
-                "buy_cost": cost_f,
-                "sell_date": sell_date,
-                "sell_price": sell_price,
-                "quantity": sold_units,
-                "realized_pl": round(realized_pl, 2),
-                "exchange": exchange,
-                "row_idx": row_idx,
-            })
-
-            # Check for partial sell (held = D - sold_units)
-            held_qty = qty_int - sold_units
-            if held_qty > 0:
-                per_unit_cost = cost_f / qty_int if qty_int > 0 else buy_price
-                held.append({
-                    "date": tx_date,
-                    "exchange": exchange,
-                    "quantity": held_qty,
-                    "price": buy_price,
-                    "raw_price": price_e,
-                    "cost": round(per_unit_cost * held_qty, 2),
-                    "row_idx": row_idx,
-                })
-        else:
-            # Not sold — entire lot is held
-            held.append({
-                "date": tx_date,
-                "exchange": exchange,
-                "quantity": qty_int,
-                "price": buy_price,
-                "raw_price": price_e,
-                "cost": cost_f,
-                "row_idx": row_idx,
-            })
+        # Every Buy row goes into held; FIFO matching (later) moves sold lots out
+        held.append({
+            "date": tx_date,
+            "exchange": exchange,
+            "quantity": qty_int,
+            "price": buy_price,
+            "raw_price": price_e,
+            "cost": cost_f,
+            "row_idx": row_idx,
+        })
 
     return held, sold, sell_rows, dividends
 
@@ -461,7 +352,7 @@ class XlsxPortfolio:
     def __init__(self, stocks_dir: str | Path):
         self.stocks_dir = Path(stocks_dir)
         self.stocks_dir.mkdir(parents=True, exist_ok=True)
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Reentrant — nested calls OK
 
         # Caches keyed by symbol (combined data from all files)
         self._cache: Dict[str, Tuple[float, List[Holding], List[SoldPosition]]] = {}
@@ -477,7 +368,7 @@ class XlsxPortfolio:
         self._holding_file: Dict[str, Path] = {}
 
         # Manual prices
-        self._manual_prices_file = Path(stocks_dir).parent.parent / "backend" / "data" / "manual_prices.json"
+        self._manual_prices_file = Path(stocks_dir).parent / "manual_prices.json"
         self._ensure_manual_prices()
 
         # Build file map on init
@@ -497,20 +388,32 @@ class XlsxPortfolio:
         Multiple files for the same symbol (main + archive + duplicates)
         are all stored so that transactions can be merged during parsing.
         The non-archive file is treated as the primary (for writes).
+
+        Symbol resolution order (no hardcoded map):
+          1. Zerodha/NSE name→symbol lookup (dynamic, always fresh)
+          2. Index sheet in the xlsx file (has "Code" like "NSE:RELIANCE")
+          3. Derive from filename as last resort
         """
+        # Ensure Zerodha/NSE symbol data is loaded (cached to disk, fast)
+        _sym_resolver.ensure_loaded()
+
         for fp in sorted(self.stocks_dir.glob("*.xlsx")):
             if fp.name.startswith("~") or fp.name.startswith("."):
                 continue
 
             stem = fp.stem
-            # Try SYMBOL_MAP first (fast, no xlsx open)
-            symbol = SYMBOL_MAP.get(stem)
-            if not symbol:
-                clean = stem.replace("Archive_", "").replace(" - Archive", "").strip()
-                symbol = SYMBOL_MAP.get(clean)
 
+            # Skip "(1)" files — they are near-duplicates with rounding diffs
+            if "(1)" in stem:
+                continue
+
+            clean = stem.replace("Archive_", "").replace(" - Archive", "").strip()
+
+            # 1. Dynamic lookup: Zerodha/NSE name → symbol
+            symbol = _sym_resolver.resolve_by_name(clean)
+
+            # 2. Fallback: read Index sheet from xlsx (has Code like "NSE:RELIANCE")
             if not symbol:
-                # Try reading Index sheet
                 try:
                     wb = openpyxl.load_workbook(fp, data_only=True)
                     idx = _extract_index_data(wb)
@@ -519,12 +422,16 @@ class XlsxPortfolio:
                 except Exception:
                     pass
 
+            # 3. Last resort: derive from filename heuristic
             if not symbol:
-                symbol = stem.upper().replace(" LTD", "").replace(" ", "")[:12]
+                symbol = _sym_resolver.derive_symbol(clean)
+                print(f"[XlsxDB] WARNING: Could not resolve '{clean}', derived: {symbol}")
 
-            # Skip "(1)" files — they are near-duplicates with rounding diffs
-            if "(1)" in stem:
-                continue
+            # Populate the runtime SYMBOL_MAP so other modules can reference it
+            if clean not in SYMBOL_MAP:
+                SYMBOL_MAP[clean] = symbol
+                if symbol not in _REVERSE_MAP:
+                    _REVERSE_MAP[symbol] = clean
 
             # Accumulate all files for this symbol
             if symbol not in self._all_files:
@@ -536,10 +443,47 @@ class XlsxPortfolio:
             existing = self._file_map.get(symbol)
             if existing is None or (not is_archive):
                 self._file_map[symbol] = fp
-                clean_name = stem.replace("Archive_", "").replace(" - Archive", "").strip()
-                self._name_map[symbol] = clean_name
+                self._name_map[symbol] = clean
 
-        print(f"[XlsxDB] Indexed {len(self._file_map)} stock files ({sum(len(v) for v in self._all_files.values())} total including archives)")
+            # NOTE: Derived symbol aliases (derive_symbol → first word of name)
+            # were removed because they create wrong cross-stock mappings
+            # (e.g. ITC→ITCHOTELS, TATA→TATACAP). Duplicate detection during
+            # import relies on get_existing_transaction_fingerprints() which
+            # has a glob-based fallback via _find_file_for_symbol().
+        print(f"[XlsxDB] Indexed {len(self._file_map)} stock files "
+              f"({sum(len(v) for v in self._all_files.values())} total including archives)")
+
+    def reindex(self):
+        """Re-scan the dumps folder for new/removed/modified xlsx files.
+
+        Call this periodically (e.g. every refresh cycle) so that newly
+        dropped xlsx files appear without a backend restart.
+        """
+        with self._lock:
+            old_symbols = set(self._file_map.keys())
+            # Clear maps and rebuild
+            self._file_map.clear()
+            self._all_files.clear()
+            self._name_map.clear()
+            self._build_file_map()
+            new_symbols = set(self._file_map.keys())
+
+            added = new_symbols - old_symbols
+            removed = old_symbols - new_symbols
+
+            # Invalidate caches for changed/new/removed symbols
+            # Also invalidate existing symbols whose files may have changed
+            for sym in new_symbols | removed:
+                self._invalidate_symbol(sym)
+
+            if added or removed:
+                parts = []
+                if added:
+                    parts.append(f"+{len(added)}")
+                if removed:
+                    parts.append(f"-{len(removed)}")
+                print(f"[XlsxDB] Reindex: {len(new_symbols)} stocks ({', '.join(parts)} changed)")
+            return {"total": len(new_symbols), "added": list(added), "removed": list(removed)}
 
     def _find_file_for_symbol(self, symbol: str) -> Optional[Path]:
         """Find xlsx file for a given stock symbol."""
@@ -722,13 +666,17 @@ class XlsxPortfolio:
         self._holding_index.clear()
         self._holding_file.clear()
 
-        for symbol in self._file_map:
-            holdings, _, _ = self._get_stock_data(symbol)
-            primary_fp = self._file_map[symbol]
-            for h in holdings:
-                self._holding_index[h.id] = h
-                self._holding_file[h.id] = primary_fp
-            all_holdings.extend(holdings)
+        # Snapshot to avoid "dict changed size during iteration" from bg reindex
+        file_snapshot = dict(self._file_map)
+        for symbol, primary_fp in file_snapshot.items():
+            try:
+                holdings, _, _ = self._get_stock_data(symbol)
+                for h in holdings:
+                    self._holding_index[h.id] = h
+                    self._holding_file[h.id] = primary_fp
+                all_holdings.extend(holdings)
+            except Exception as e:
+                print(f"[XlsxDB] Error reading {symbol}: {e}")
 
         return all_holdings
 
@@ -744,9 +692,14 @@ class XlsxPortfolio:
     def get_all_sold(self) -> List[SoldPosition]:
         """Get all sold positions (FIFO-derived) across every stock file."""
         all_sold: List[SoldPosition] = []
-        for symbol in self._file_map:
-            _, sold, _ = self._get_stock_data(symbol)
-            all_sold.extend(sold)
+        # Snapshot to avoid "dict changed size during iteration" from bg reindex
+        symbols = list(self._file_map.keys())
+        for symbol in symbols:
+            try:
+                _, sold, _ = self._get_stock_data(symbol)
+                all_sold.extend(sold)
+            except Exception as e:
+                print(f"[XlsxDB] Error reading sold for {symbol}: {e}")
         return all_sold
 
     def get_dividends_by_symbol(self) -> dict:
@@ -755,14 +708,19 @@ class XlsxPortfolio:
         Returns {symbol: {"amount": total, "count": n_entries, "units": total_units}}.
         """
         result = {}
-        for symbol in self._file_map:
-            _, _, dividends = self._get_stock_data(symbol)
-            if dividends:
-                result[symbol] = {
-                    "amount": sum(d["amount"] for d in dividends),
-                    "count": len(dividends),
-                    "units": sum(d.get("units", 0) for d in dividends),
-                }
+        # Snapshot to avoid "dict changed size during iteration" from bg reindex
+        symbols = list(self._file_map.keys())
+        for symbol in symbols:
+            try:
+                _, _, dividends = self._get_stock_data(symbol)
+                if dividends:
+                    result[symbol] = {
+                        "amount": sum(d["amount"] for d in dividends),
+                        "count": len(dividends),
+                        "units": sum(d.get("units", 0) for d in dividends),
+                    }
+            except Exception as e:
+                print(f"[XlsxDB] Error reading dividends for {symbol}: {e}")
         return result
 
     # ── Public WRITE API ──────────────────────────────────
@@ -789,7 +747,7 @@ class XlsxPortfolio:
         self._invalidate_symbol(symbol)
 
         # Re-parse to get the proper deterministic ID
-        holdings, _ = self._get_stock_data(symbol)
+        holdings, _, _ = self._get_stock_data(symbol)
         # Find the one we just added (most recent buy matching date+price+qty)
         for h in holdings:
             if (h.buy_date == holding.buy_date and
@@ -803,26 +761,209 @@ class XlsxPortfolio:
 
     def add_sell_transaction(self, symbol: str, exchange: str,
                              quantity: int, price: float, sell_date: str):
-        """Insert a Sell row into the stock's xlsx file.
+        """Write Realised data (columns W–AB) onto BUY rows in FIFO order.
 
-        Marks the row with 'APP_SELL' so the parser knows to FIFO-match it
-        against held lots (as opposed to original Sell rows that are already
-        tracked via Realised columns on Buy rows).
+        For each BUY row being sold, writes computed values into:
+          W: sell price    X: sell date
+          Y: gain %        Z: gain (net of commission)
+          AA: gross         AB: units sold
+
+        Also inserts a Sell record row at the top for tracking.
+        Values are computed to match the original dump formulas:
+          Z  = (1 - commission*2) * ((sell_price * units) - (E * units))
+          AA = (E * units) + Z
+          Y  = Z / SUM(F:I)
+          AB = units
         """
         symbol = symbol.upper()
         filepath = self._find_file_for_symbol(symbol)
         if filepath is None:
             raise FileNotFoundError(f"No xlsx file for symbol {symbol}")
 
-        tx = Transaction(
-            date=sell_date,
-            exchange=exchange,
-            action="Sell",
-            quantity=quantity,
-            price=price,
-            remarks="APP_SELL",
-        )
-        self._insert_transaction(filepath, tx)
+        with self._lock:
+            # Convert Realised formulas → values so insert_rows won't break them
+            self._convert_realised_formulas(filepath)
+
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+            header_row = self._find_header_row(ws)
+
+            # ── Ensure Realised section headers exist ───────────
+            self._ensure_realised_headers(ws, header_row)
+            rcols = _find_realised_columns(ws, header_row)
+
+            col_w = rcols["sell_price"]     # W: Price
+            col_x = rcols["sell_date"]      # X: Date
+            col_z = rcols["sell_gain"]      # Z: Gain
+            col_ab = rcols["sold_units"]    # AB: Units
+
+            # Derive Gain% (between Date and Gain) and Gross (between Gain and Units)
+            col_y = None
+            if col_x and col_z and col_z - col_x == 2:
+                col_y = col_x + 1
+            col_aa = None
+            if col_z and col_ab and col_ab - col_z == 2:
+                col_aa = col_z + 1
+
+            # ── Read commission rate from Index sheet ───────────
+            commission = 0.007  # default
+            if "Index" in wb.sheetnames:
+                idx_ws = wb["Index"]
+                comm_val = idx_ws.cell(2, 6).value  # Index!$F$2
+                if comm_val and isinstance(comm_val, (int, float)):
+                    commission = float(comm_val)
+
+            # ── Step 1: Insert Sell record row at top ───────────
+            max_row_before = ws.max_row or header_row
+            insert_at = header_row + 1
+            ws.insert_rows(insert_at)
+
+            try:
+                sell_dt = datetime.strptime(sell_date, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                sell_dt = datetime.now()
+
+            ws.cell(insert_at, 1, value=sell_dt)                          # A: DATE
+            ws.cell(insert_at, 2, value=exchange)                         # B: EXCH
+            ws.cell(insert_at, 3, value="Sell")                           # C: ACTION
+            ws.cell(insert_at, 4, value=quantity)                         # D: QTY
+            ws.cell(insert_at, 5, value=price)                            # E: PRICE
+            ws.cell(insert_at, 6, value=round(price * quantity, 2))       # F: COST
+            ws.cell(insert_at, 7, value="~")                              # G: REMARKS
+
+            # ── Step 2: Find unsold BUY rows using FIFO matching ──
+            # Must match dashboard logic: ALL Buy rows are candidates,
+            # existing Sell rows consume Buy qty in FIFO order.
+            # Column W (Realised data) is NOT used for determining unsold
+            # rows because dump files often have stale Realised formulas.
+            #
+            # Read from ALL files for this symbol (main + archive) so that
+            # multi-file stocks (like Avanti Feeds + Archive) are handled.
+            all_buys = []
+            all_sells_existing = []
+
+            # Primary file — already open as ws (note: Sell row was inserted at insert_at)
+            for row_idx in range(insert_at + 1, max_row_before + 2):
+                action = ws.cell(row_idx, 3).value
+                exch_val = ws.cell(row_idx, 2).value
+                if not action:
+                    continue
+                action_str = str(action).strip()
+                if exch_val and str(exch_val).strip() == "DIV":
+                    continue
+                dt = _parse_date(ws.cell(row_idx, 1).value)
+                qty_val = _safe_int(ws.cell(row_idx, 4).value)
+                if action_str == "Buy" and qty_val > 0:
+                    all_buys.append({"row": row_idx, "qty": qty_val, "date": dt or "", "primary": True})
+                elif action_str == "Sell" and qty_val > 0:
+                    all_sells_existing.append({"date": dt or "", "qty": qty_val})
+
+            # Archive / additional files — read Buy/Sell rows for FIFO total
+            other_files = [f for f in self._all_files.get(symbol, []) if f != filepath]
+            for other_fp in other_files:
+                try:
+                    other_wb = openpyxl.load_workbook(other_fp, data_only=True)
+                    if "Trading History" not in other_wb.sheetnames:
+                        other_wb.close()
+                        continue
+                    other_ws = other_wb["Trading History"]
+                    other_header = self._find_header_row(other_ws)
+                    for row_idx in range(other_header + 1, (other_ws.max_row or other_header) + 1):
+                        action = other_ws.cell(row_idx, 3).value
+                        exch_val = other_ws.cell(row_idx, 2).value
+                        if not action:
+                            continue
+                        action_str = str(action).strip()
+                        if exch_val and str(exch_val).strip() == "DIV":
+                            continue
+                        dt = _parse_date(other_ws.cell(row_idx, 1).value)
+                        qty_val = _safe_int(other_ws.cell(row_idx, 4).value)
+                        if action_str == "Buy" and qty_val > 0:
+                            all_buys.append({"row": row_idx, "qty": qty_val, "date": dt or "", "primary": False})
+                        elif action_str == "Sell" and qty_val > 0:
+                            all_sells_existing.append({"date": dt or "", "qty": qty_val})
+                    other_wb.close()
+                except Exception as e:
+                    print(f"[XlsxDB] Warning: could not read archive {other_fp.name}: {e}")
+
+            # FIFO-match existing sells against buys to find remaining qty per row
+            buys_remaining = [{"row": b["row"], "qty": b["qty"], "date": b["date"], "primary": b["primary"]} for b in all_buys]
+            buys_remaining.sort(key=lambda x: (x["date"], x["row"]))
+            sells_sorted = sorted(all_sells_existing, key=lambda x: x["date"])
+
+            for s in sells_sorted:
+                sell_left = s["qty"]
+                for b in buys_remaining:
+                    if sell_left <= 0:
+                        break
+                    take = min(b["qty"], sell_left)
+                    b["qty"] -= take
+                    sell_left -= take
+
+            # Unsold = Buy rows with remaining qty > 0
+            unsold = [b for b in buys_remaining if b["qty"] > 0]
+
+            # ── Step 3: FIFO sort (oldest first) and allocate ───
+            unsold.sort(key=lambda x: (x["date"] or "", x["row"]))
+
+            remaining_to_sell = quantity
+            to_fill = []
+            for u in unsold:
+                if remaining_to_sell <= 0:
+                    break
+                sell_qty = min(u["qty"], remaining_to_sell)
+                to_fill.append({
+                    "row": u["row"],
+                    "total_qty": u["qty"],
+                    "sell_qty": sell_qty,
+                    "is_full": sell_qty == u["qty"],
+                    "primary": u["primary"],  # only write Realised data to primary file rows
+                })
+                remaining_to_sell -= sell_qty
+
+            if remaining_to_sell > 0:
+                wb.close()
+                raise ValueError(
+                    f"Cannot sell {quantity} shares of {symbol}: "
+                    f"only {quantity - remaining_to_sell} unsold shares available"
+                )
+
+            # ── Step 4: Write Realised data to BUY rows ─────────
+            # Only write to rows in the primary file (archive rows are read-only)
+            for info in to_fill:
+                if not info.get("primary", True):
+                    continue  # skip archive file rows
+                r = info["row"]
+                sell_qty = info["sell_qty"]
+                price_e = _safe_float(ws.cell(r, 5).value)   # E: PRICE per share
+                cost_f = _safe_float(ws.cell(r, 6).value)     # F: COST
+                stt = _safe_float(ws.cell(r, 8).value)        # H: STT
+                add_chrg = _safe_float(ws.cell(r, 9).value)   # I: ADD CHRG
+                total_cost = cost_f + stt + add_chrg           # = SUM(F:I)
+
+                # Z: Gain = (1 - commission*2) * ((sell_price * units) - (E * units))
+                gain = (1 - commission * 2) * ((price * sell_qty) - (price_e * sell_qty))
+                gain = round(gain, 2)
+
+                # AA: Gross = (E * units) + gain
+                gross = round((price_e * sell_qty) + gain, 2)
+
+                # Y: Gain% = Z / SUM(F:I)
+                gain_pct = round(gain / total_cost, 6) if total_cost > 0 else 0
+
+                # Write cells
+                ws.cell(r, col_w, value=round(price, 2))           # W: Sell price
+                ws.cell(r, col_x, value=sell_dt)                   # X: Sell date
+                if col_y:
+                    ws.cell(r, col_y, value=gain_pct)              # Y: Gain %
+                if col_z:
+                    ws.cell(r, col_z, value=gain)                  # Z: Gain
+                if col_aa:
+                    ws.cell(r, col_aa, value=gross)                # AA: Gross
+                ws.cell(r, col_ab, value=sell_qty)                 # AB: Units
+
+            wb.save(filepath)
+            _sync_to_drive(filepath)
         self._invalidate_symbol(symbol)
 
     def add_dividend(self, symbol: str, exchange: str, amount: float,
@@ -870,6 +1011,7 @@ class XlsxPortfolio:
                         abs(price - holding.buy_price) < 0.01):
                     ws.delete_rows(row_idx)
                     wb.save(filepath)
+                    _sync_to_drive(filepath)
                     # Find symbol for this file to invalidate cache
                     for sym, fp in self._file_map.items():
                         if fp == filepath:
@@ -883,6 +1025,206 @@ class XlsxPortfolio:
 
     # ── XLSX Write Helpers ────────────────────────────────
 
+    def _convert_realised_formulas(self, filepath: Path):
+        """Replace Realised section formulas with cached values.
+
+        Row insertion shifts cells; openpyxl updates formula text but
+        drops cached computed values. Converting formulas → values first
+        ensures the data survives row insertions intact.
+        """
+        # Read cached values
+        wb_data = openpyxl.load_workbook(filepath, data_only=True)
+        ws_data = wb_data["Trading History"]
+        hr = self._find_header_row(ws_data)
+        rcols = _find_realised_columns(ws_data, hr)
+        cols = [c for c in [
+            rcols.get("sell_price"), rcols.get("sell_date"),
+            rcols.get("sell_gain"), rcols.get("sold_units"),
+        ] if c is not None]
+        # Derived: Gain%, Gross
+        if rcols.get("sell_date") and rcols.get("sell_gain"):
+            if rcols["sell_gain"] - rcols["sell_date"] == 2:
+                cols.append(rcols["sell_date"] + 1)
+        if rcols.get("sell_gain") and rcols.get("sold_units"):
+            if rcols["sold_units"] - rcols["sell_gain"] == 2:
+                cols.append(rcols["sell_gain"] + 1)
+
+        cached: Dict[Tuple[int, int], object] = {}
+        for r in range(hr + 1, (ws_data.max_row or hr) + 1):
+            for c in cols:
+                val = ws_data.cell(r, c).value
+                if val is not None:
+                    cached[(r, c)] = val
+        wb_data.close()
+
+        if not cached:
+            return
+
+        # Replace formulas with values
+        wb = openpyxl.load_workbook(filepath)
+        ws = wb["Trading History"]
+        changed = False
+        for (r, c), val in cached.items():
+            cell = ws.cell(r, c)
+            if isinstance(cell.value, str) and str(cell.value).startswith("="):
+                cell.value = val
+                changed = True
+        if changed:
+            wb.save(filepath)
+            _sync_to_drive(filepath)
+        else:
+            wb.close()
+
+    def _ensure_realised_headers(self, ws, header_row: int):
+        """Create Realised section headers (W–AB) if they don't already exist."""
+        rcols = _find_realised_columns(ws, header_row)
+        if rcols["sell_price"] is not None:
+            return  # Already has Realised section
+
+        # Standard positions: W=23, X=24, Y=25, Z=26, AA=27, AB=28
+        # Row 2: "Realised" marker
+        ws.cell(2, 23, value="Realised")
+
+        # Row header_row: sub-headers
+        headers = {23: "Price", 24: "Date", 25: "Gain %", 26: "Gain", 27: "Gross", 28: "Units"}
+        hdr_font = Font(bold=True)
+        hdr_fill = PatternFill("solid", fgColor="FF967BB6")
+        for col, name in headers.items():
+            cell = ws.cell(header_row, col, value=name)
+            cell.font = hdr_font
+            cell.fill = hdr_fill
+
+    def get_existing_transaction_fingerprints(self, symbol: str):
+        """Return (fingerprints, remarks_set) for existing transactions in a stock's xlsx.
+
+        fingerprints: set of (date_str, action, qty, price_rounded) tuples
+        remarks_set: set of CN# remark strings
+        Used for duplicate detection before import.
+        """
+        symbol = symbol.upper()
+        files = self._all_files.get(symbol, [])
+        if not files:
+            # Fallback: try glob-based file lookup (matches symbol substring in filename)
+            fallback = self._find_file_for_symbol(symbol)
+            if fallback:
+                files = [fallback]
+            else:
+                return set(), set()
+
+        fingerprints = set()
+        remarks_set = set()
+
+        for fp in files:
+            try:
+                wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+                if "Trading History" not in wb.sheetnames:
+                    wb.close()
+                    continue
+                ws = wb["Trading History"]
+
+                # Find header row
+                header_row = 4
+                for r in range(1, 11):
+                    vals = [ws.cell(r, c).value for c in range(1, 5)]
+                    if "DATE" in vals and "ACTION" in vals:
+                        header_row = r
+                        break
+
+                for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+                    if not row or len(row) < 7:
+                        continue
+                    raw_date, exch, action, qty, price, cost, remarks = (
+                        row[0], row[1], row[2], row[3], row[4], row[5], row[6]
+                    )
+                    if not action or str(action).strip() not in ("Buy", "Sell"):
+                        continue
+
+                    # Parse date
+                    date_str = ""
+                    if isinstance(raw_date, datetime):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif isinstance(raw_date, date):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif raw_date:
+                        date_str = _parse_date(raw_date) or ""
+
+                    qty_int = int(qty) if qty else 0
+                    price_r = round(float(price), 2) if price else 0.0
+
+                    if date_str and qty_int > 0:
+                        fp_tuple = (date_str, str(action).strip(), qty_int, price_r)
+                        fingerprints.add(fp_tuple)
+
+                    # Also track CN# remarks for contract-note-level dedup
+                    if remarks and str(remarks).startswith("CN#"):
+                        remarks_set.add(str(remarks).strip())
+
+                wb.close()
+            except Exception as e:
+                print(f"[XlsxDB] Error reading fingerprints from {fp.name}: {e}")
+
+        return fingerprints, remarks_set
+
+    def get_existing_dividend_fingerprints(self, symbol: str) -> set:
+        """Return set of (date_str, amount_rounded) tuples for existing DIV rows.
+
+        Used for duplicate detection when bulk-importing dividends from bank statements.
+        """
+        symbol = symbol.upper()
+        files = self._all_files.get(symbol, [])
+        if not files:
+            fallback = self._find_file_for_symbol(symbol)
+            if fallback:
+                files = [fallback]
+            else:
+                return set()
+
+        fingerprints = set()
+
+        for fp in files:
+            try:
+                wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+                if "Trading History" not in wb.sheetnames:
+                    wb.close()
+                    continue
+                ws = wb["Trading History"]
+
+                header_row = 4
+                for r in range(1, 11):
+                    vals = [ws.cell(r, c).value for c in range(1, 5)]
+                    if "DATE" in vals and "ACTION" in vals:
+                        header_row = r
+                        break
+
+                for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+                    if not row or len(row) < 6:
+                        continue
+                    raw_date, exch, _action, _qty, price, cost = (
+                        row[0], row[1], row[2], row[3], row[4], row[5]
+                    )
+                    if str(exch).strip() != "DIV":
+                        continue
+
+                    # Parse date
+                    date_str = ""
+                    if isinstance(raw_date, datetime):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif isinstance(raw_date, date):
+                        date_str = raw_date.strftime("%Y-%m-%d")
+                    elif raw_date:
+                        date_str = _parse_date(raw_date) or ""
+
+                    # Amount: prefer column F (cost), fall back to E (price)
+                    amount = _safe_float(cost) or _safe_float(price) or 0
+                    if date_str and amount > 0:
+                        fingerprints.add((date_str, round(amount, 2)))
+
+                wb.close()
+            except Exception as e:
+                print(f"[XlsxDB] Error reading dividend fingerprints from {fp.name}: {e}")
+
+        return fingerprints
+
     def _find_header_row(self, ws) -> int:
         """Find the header row in a Trading History sheet."""
         for r in range(1, 11):
@@ -894,6 +1236,9 @@ class XlsxPortfolio:
     def _insert_transaction(self, filepath: Path, tx: Transaction):
         """Insert a transaction row at the top of Trading History."""
         with self._lock:
+            # Preserve cached formula values before row insertion
+            self._convert_realised_formulas(filepath)
+
             wb = openpyxl.load_workbook(filepath)
             ws = wb["Trading History"]
             header_row = self._find_header_row(ws)
@@ -916,8 +1261,9 @@ class XlsxPortfolio:
             ws.cell(insert_at, 4, value=tx.quantity)
             # E: PRICE
             ws.cell(insert_at, 5, value=tx.price)
-            # F: COST
-            ws.cell(insert_at, 6, value=round(tx.price * tx.quantity, 2))
+            # F: COST (use explicit cost if provided, else compute from price * qty)
+            cost_val = tx.cost if tx.cost > 0 else round(tx.price * tx.quantity, 2)
+            ws.cell(insert_at, 6, value=cost_val)
             # G: REMARKS
             ws.cell(insert_at, 7, value=tx.remarks or "~")
             # H: STT
@@ -932,6 +1278,7 @@ class XlsxPortfolio:
                 ws.cell(insert_at, 10, value="=Index!$C$2")
 
             wb.save(filepath)
+            _sync_to_drive(filepath)
 
     def _create_stock_file(self, symbol: str, exchange: str, company_name: str) -> Path:
         """Create a new xlsx file with proper template structure."""
@@ -961,6 +1308,14 @@ class XlsxPortfolio:
         ws.cell(2, 10, value="UnRealised")
         ws.cell(3, 10, value="Total")
 
+        # Realised section headers (W=23 through AB=28)
+        ws.cell(2, 23, value="Realised")
+        realised_headers = {23: "Price", 24: "Date", 25: "Gain %", 26: "Gain", 27: "Gross", 28: "Units"}
+        for col, h in realised_headers.items():
+            cell = ws.cell(4, col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+
         # Column widths
         widths = {1: 12, 2: 6, 3: 6, 4: 6, 5: 10, 6: 12,
                   7: 10, 8: 8, 9: 8, 10: 12, 11: 10, 12: 12, 13: 12, 14: 8}
@@ -987,10 +1342,14 @@ class XlsxPortfolio:
         ws_idx.cell(11, 3, value=0)
 
         wb.save(filepath)
+        _sync_to_drive(filepath)
 
         # Register in maps
         self._file_map[symbol] = filepath
         self._name_map[symbol] = company_name
+        if symbol not in self._all_files:
+            self._all_files[symbol] = []
+        self._all_files[symbol].append(filepath)
 
         print(f"[XlsxDB] Created new stock file: {filename}")
         return filepath
@@ -1014,6 +1373,7 @@ class XlsxPortfolio:
         prices[f"{symbol}.{exchange}"] = price
         with open(self._manual_prices_file, "w") as f:
             json.dump(prices, f, indent=2)
+        _sync_to_drive(self._manual_prices_file)
 
     def get_all_manual_prices(self) -> dict:
         try:
@@ -1027,7 +1387,7 @@ class XlsxPortfolio:
 #  MODULE-LEVEL SINGLETON
 # ═══════════════════════════════════════════════════════════
 
-# Path: relative to backend/ directory → ../dumps/Stocks
-_STOCKS_DIR = Path(__file__).parent.parent.parent / "dumps" / "Stocks"
+from app.config import DUMPS_DIR as _DUMPS_DIR
+_STOCKS_DIR = _DUMPS_DIR / "Stocks"
 
 xlsx_db = XlsxPortfolio(_STOCKS_DIR)

@@ -1,0 +1,109 @@
+[
+  {
+    "key": "SENSEX",
+    "label": "Sensex",
+    "type": "index",
+    "unit": "",
+    "price": 74563.92,
+    "change": -1470.5,
+    "change_pct": -1.93,
+    "instrument_token": 265,
+    "source": "zerodha"
+  },
+  {
+    "key": "NIFTY50",
+    "label": "Nifty 50",
+    "type": "index",
+    "unit": "",
+    "price": 23151.1,
+    "change": -488.05,
+    "change_pct": -2.06,
+    "instrument_token": 256265,
+    "source": "zerodha"
+  },
+  {
+    "key": "GIFTNIFTY",
+    "label": "GIFT Nifty",
+    "type": "index",
+    "unit": "",
+    "price": 23228.4,
+    "change": -500.1,
+    "change_pct": -2.11,
+    "instrument_token": 13238786,
+    "source": "zerodha"
+  },
+  {
+    "key": "GOLD",
+    "label": "Gold",
+    "type": "commodity",
+    "unit": "\u20b9/g",
+    "price": 15840.0,
+    "change": -187.1,
+    "change_pct": -1.17,
+    "instrument_token": 116433415,
+    "source": "zerodha"
+  },
+  {
+    "key": "SILVER",
+    "label": "Silver",
+    "type": "commodity",
+    "unit": "\u20b9/g",
+    "price": 265.71,
+    "change": 0.04,
+    "change_pct": 0.01,
+    "instrument_token": 117128455,
+    "source": "zerodha"
+  },
+  {
+    "key": "SGX",
+    "label": "SGX STI",
+    "type": "index",
+    "unit": "",
+    "price": 4842.27,
+    "change": -5.98,
+    "change_pct": -0.12,
+    "source": "yahoo/google"
+  },
+  {
+    "key": "NIKKEI",
+    "label": "Nikkei",
+    "type": "index",
+    "unit": "",
+    "price": 53819.61,
+    "change": 1090.89,
+    "change_pct": 2.07,
+    "source": "yahoo/google"
+  },
+  {
+    "key": "SGDINR",
+    "label": "SGD/INR",
+    "type": "forex",
+    "unit": "",
+    "price": 72.06,
+    "change": 0.11,
+    "change_pct": 0.15,
+    "source": "yahoo/google"
+  },
+  {
+    "key": "USDINR",
+    "label": "USD/INR",
+    "type": "forex",
+    "unit": "",
+    "price": 92.43,
+    "change": 0.17,
+    "change_pct": 0.18,
+    "instrument_token": 579587,
+    "source": "zerodha"
+  },
+  {
+    "key": "CRUDEOIL",
+    "label": "Crude Oil",
+    "type": "commodity",
+    "unit": "\u20b9/bbl",
+    "price": 9076.0,
+    "change": 272.0,
+    "change_pct": 3.09,
+    "instrument_token": 121033991,
+    "source": "zerodha"
+  }
+]

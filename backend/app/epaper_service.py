@@ -1,0 +1,667 @@
+"""
+Financial news scraper + AI-powered portfolio advisor.
+
+Scrapes articles from:
+  1. The Hindu Business Line (thehindubusinessline.com)
+  2. The Hindu (thehindu.com/business/)
+
+Analyzes them using Claude API, and provides personalized insights
+based on the user's portfolio holdings.
+"""
+import os
+import re
+import json
+import time
+import threading
+import xml.etree.ElementTree as ET
+from datetime import datetime, date, timedelta
+from email.utils import parsedate_to_datetime
+from typing import List, Dict, Optional
+import requests
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+_ENV_PATH = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(_ENV_PATH)
+
+_ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
+_BL_BASE = "https://www.thehindubusinessline.com"
+_TH_BASE = "https://www.thehindu.com"
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+
+# Business Line sections to scrape
+_BL_SECTIONS = [
+    ("markets", "Markets"),
+    ("markets/stock-markets", "Stock Markets"),
+    ("portfolio", "Portfolio"),
+    ("money-and-banking", "Money & Banking"),
+    ("economy", "Economy"),
+    ("companies", "Companies"),
+]
+
+# The Hindu Business sections (RSS feeds)
+_TH_SECTIONS = [
+    ("business/markets", "TH-Markets"),
+    ("business/Economy", "TH-Economy"),
+    ("business/Industry", "TH-Industry"),
+    ("business", "TH-Business"),
+]
+
+# Lookback window for article fetching
+_LOOKBACK_DAYS = 7
+
+# Cache
+_articles_cache: Dict[str, list] = {}  # key → [articles]
+_insights_cache: Dict[str, list] = {}  # date_str → [insights]
+_cache_lock = threading.Lock()
+
+
+# ═══════════════════════════════════════════════════════════
+#  ARTICLE SCRAPING
+# ═══════════════════════════════════════════════════════════
+
+def _fetch_section_articles(section_path: str, section_name: str, max_pages: int = 4) -> List[dict]:
+    """Scrape article headlines + summaries from BL section pages (with pagination)."""
+    all_articles = []
+    seen_urls = set()
+
+    for page_num in range(1, max_pages + 1):
+        if page_num == 1:
+            url = f"{_BL_BASE}/{section_path}/"
+        else:
+            url = f"{_BL_BASE}/{section_path}/?page={page_num}"
+
+        try:
+            resp = requests.get(url, headers=_HEADERS, timeout=15)
+            if resp.status_code != 200:
+                break
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            page_articles = []
+            for tag in soup.find_all(["h2", "h3"]):
+                a = tag.find("a", href=True)
+                if not a:
+                    continue
+                title = a.get_text(strip=True)
+                href = a["href"]
+                if not title or len(title) < 15 or "/article" not in href:
+                    continue
+                if href.startswith("/"):
+                    href = f"{_BL_BASE}{href}"
+                if href in seen_urls:
+                    continue
+                seen_urls.add(href)
+
+                summary = ""
+                parent = tag.parent
+                if parent:
+                    p = parent.find("p")
+                    if p:
+                        summary = p.get_text(strip=True)[:200]
+
+                page_articles.append({
+                    "title": title,
+                    "summary": summary,
+                    "section": section_name,
+                    "url": href,
+                })
+
+            if not page_articles:
+                break  # No more articles on this page
+
+            all_articles.extend(page_articles)
+            print(f"[EPaper] {section_name} page {page_num}: {len(page_articles)} articles")
+        except Exception as e:
+            print(f"[EPaper] Error scraping {section_name} page {page_num}: {e}")
+            break
+
+        time.sleep(0.3)
+
+    return all_articles
+
+
+def _fetch_bl_rss_articles(section_path: str, section_name: str, lookback_days: int = 7) -> List[dict]:
+    """Fetch articles from Business Line RSS feed for a section (past N days)."""
+    url = f"{_BL_BASE}/{section_path}/feeder/default.rss"
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            return []
+
+        root = ET.fromstring(resp.content)
+        articles = []
+        cutoff = date.today() - timedelta(days=lookback_days)
+
+        for item in root.findall(".//item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            desc_el = item.find("description")
+            pub_el = item.find("pubDate")
+
+            if title_el is None or link_el is None:
+                continue
+
+            title = title_el.text.strip() if title_el.text else ""
+            link = link_el.text.strip() if link_el.text else ""
+
+            if not title or len(title) < 15 or "/article" not in link:
+                continue
+
+            # Filter to lookback window
+            art_date = None
+            if pub_el is not None and pub_el.text:
+                try:
+                    pub_date = parsedate_to_datetime(pub_el.text)
+                    art_date = pub_date.date().isoformat()
+                    if pub_date.date() < cutoff:
+                        continue
+                except Exception:
+                    pass
+
+            summary = ""
+            if desc_el is not None and desc_el.text:
+                soup = BeautifulSoup(desc_el.text, "html.parser")
+                summary = soup.get_text(strip=True)[:200]
+
+            articles.append({
+                "title": title,
+                "summary": summary,
+                "section": section_name,
+                "url": link,
+                "source": "Business Line",
+                "date": art_date or date.today().isoformat(),
+            })
+
+        return articles
+    except Exception as e:
+        print(f"[EPaper] Error fetching BL RSS {section_name}: {e}")
+        return []
+
+
+def _fetch_article_body(url: str) -> str:
+    """Fetch full article text from a BL article URL."""
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            print(f"[EPaper] Body fetch HTTP {resp.status_code}: {url[-50:]}")
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # BL article body — primary container is div.contentbody#ControlPara
+        body_parts = []
+        el = soup.find("div", class_="contentbody")
+        if not el:
+            el = soup.find("div", id="ControlPara")
+        if not el:
+            # Fallback to other selectors
+            for selector in ["div.paywall", "div.article-body", "article"]:
+                tag_name = selector.split(".")[0] if "." in selector else selector
+                class_name = selector.split(".")[1] if "." in selector else None
+                el = soup.find(tag_name, class_=class_name) if class_name else soup.find(tag_name)
+                if el:
+                    break
+        if el:
+            for p in el.find_all("p"):
+                text = p.get_text(strip=True)
+                if text and len(text) > 20:
+                    body_parts.append(text)
+
+        return "\n\n".join(body_parts)[:3000]  # Cap at 3000 chars per article
+    except Exception as e:
+        print(f"[EPaper] Error fetching article body: {e}")
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════
+#  THE HINDU SCRAPING (RSS + article body)
+# ═══════════════════════════════════════════════════════════
+
+def _fetch_th_rss_articles(section_path: str, section_name: str, lookback_days: int = 7) -> List[dict]:
+    """Fetch articles from The Hindu RSS feed for a section (past N days)."""
+    url = f"{_TH_BASE}/{section_path}/feeder/default.rss"
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            print(f"[TheHindu] RSS {section_name} failed: {resp.status_code}")
+            return []
+
+        root = ET.fromstring(resp.content)
+        articles = []
+        cutoff = date.today() - timedelta(days=lookback_days)
+
+        for item in root.findall(".//item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            desc_el = item.find("description")
+            pub_el = item.find("pubDate")
+
+            if title_el is None or link_el is None:
+                continue
+
+            title = title_el.text.strip() if title_el.text else ""
+            link = link_el.text.strip() if link_el.text else ""
+
+            if not title or len(title) < 15 or "/article" not in link:
+                continue
+
+            # Filter to lookback window
+            art_date = None
+            if pub_el is not None and pub_el.text:
+                try:
+                    pub_date = parsedate_to_datetime(pub_el.text)
+                    art_date = pub_date.date().isoformat()
+                    if pub_date.date() < cutoff:
+                        continue
+                except Exception:
+                    pass
+
+            summary = ""
+            if desc_el is not None and desc_el.text:
+                soup = BeautifulSoup(desc_el.text, "html.parser")
+                summary = soup.get_text(strip=True)[:200]
+
+            articles.append({
+                "title": title,
+                "summary": summary,
+                "section": section_name,
+                "url": link,
+                "source": "The Hindu",
+                "date": art_date or date.today().isoformat(),
+            })
+
+        return articles
+    except Exception as e:
+        print(f"[TheHindu] Error fetching RSS {section_name}: {e}")
+        return []
+
+
+def _fetch_th_article_body(url: str) -> str:
+    """Fetch full article text from a The Hindu article URL."""
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            print(f"[TheHindu] Body fetch HTTP {resp.status_code}: {url[-50:]}")
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # The Hindu body: div.articlebodycontent or div[itemprop="articleBody"]
+        body_parts = []
+        el = soup.find("div", class_="articlebodycontent")
+        if not el:
+            el = soup.find("div", attrs={"itemprop": "articleBody"})
+        if not el:
+            # Fallback: find div with id starting with content-body-
+            for div in soup.find_all("div"):
+                div_id = div.get("id", "")
+                if div_id.startswith("content-body-"):
+                    el = div
+                    break
+        if el:
+            for p in el.find_all("p"):
+                text = p.get_text(strip=True)
+                if text and len(text) > 20:
+                    body_parts.append(text)
+
+        return "\n\n".join(body_parts)[:3000]
+    except Exception as e:
+        print(f"[TheHindu] Error fetching article body: {e}")
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════
+#  COMBINED ARTICLE FETCHING
+# ═══════════════════════════════════════════════════════════
+
+def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOOKBACK_DAYS) -> List[dict]:
+    """Fetch articles from Business Line + The Hindu for the past N days. Cached per day."""
+    today = date.today().isoformat()
+    cache_key = f"{today}_d{lookback_days}"
+
+    with _cache_lock:
+        if not force_refresh and cache_key in _articles_cache:
+            return _articles_cache[cache_key]
+
+    all_articles = []
+    seen_urls = set()
+
+    # --- Business Line (RSS feeds for historical + page scraping for latest) ---
+    print(f"[EPaper] Fetching Business Line articles (past {lookback_days} days)...")
+
+    # RSS feeds first (covers historical articles)
+    for section_path, section_name in _BL_SECTIONS:
+        rss_articles = _fetch_bl_rss_articles(section_path, section_name, lookback_days)
+        for art in rss_articles:
+            if art["url"] not in seen_urls:
+                seen_urls.add(art["url"])
+                all_articles.append(art)
+        time.sleep(0.3)
+
+    rss_count = len(all_articles)
+    print(f"[EPaper] Business Line RSS: {rss_count} articles")
+
+    # Page scraping as supplement (catches articles RSS may miss)
+    for section_path, section_name in _BL_SECTIONS:
+        page_articles = _fetch_section_articles(section_path, section_name, max_pages=3)
+        for art in page_articles:
+            if art["url"] not in seen_urls:
+                art["source"] = "Business Line"
+                art.setdefault("date", today)
+                seen_urls.add(art["url"])
+                all_articles.append(art)
+        time.sleep(0.3)
+
+    bl_count = len(all_articles)
+    print(f"[EPaper] Business Line total: {bl_count} articles (RSS: {rss_count}, pages: {bl_count - rss_count})")
+
+    # --- The Hindu (RSS feeds with lookback) ---
+    print(f"[EPaper] Fetching The Hindu Business articles (past {lookback_days} days)...")
+    for section_path, section_name in _TH_SECTIONS:
+        articles = _fetch_th_rss_articles(section_path, section_name, lookback_days)
+        for art in articles:
+            if art["url"] not in seen_urls:
+                seen_urls.add(art["url"])
+                all_articles.append(art)
+        time.sleep(0.3)
+
+    th_count = len(all_articles) - bl_count
+    print(f"[EPaper] The Hindu: {th_count} articles")
+    print(f"[EPaper] Total: {len(all_articles)} articles from both sources (past {lookback_days} days)")
+
+    # Fetch full body for all articles (throttled)
+    bodies_found = 0
+    for i, art in enumerate(all_articles):
+        source = art.get("source", "Business Line")
+        if source == "The Hindu":
+            body = _fetch_th_article_body(art["url"])
+        else:
+            body = _fetch_article_body(art["url"])
+        art["body"] = body
+        if body:
+            bodies_found += 1
+        if (i + 1) % 20 == 0:
+            print(f"[EPaper] Fetched body for {i+1}/{len(all_articles)} articles ({bodies_found} with content)...")
+        time.sleep(0.3)
+    print(f"[EPaper] Total articles with body: {bodies_found}/{len(all_articles)}")
+
+    with _cache_lock:
+        _articles_cache[cache_key] = all_articles
+
+    return all_articles
+
+
+# ═══════════════════════════════════════════════════════════
+#  AI ANALYSIS
+# ═══════════════════════════════════════════════════════════
+
+def _call_claude(system_prompt: str, user_message: str, max_tokens: int = 4096) -> str:
+    """Call Claude API for analysis."""
+    if not _ANTHROPIC_API_KEY:
+        return ""
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": _ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": max_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_message}],
+            },
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["content"][0]["text"]
+        else:
+            print(f"[EPaper] Claude API error: {resp.status_code} {resp.text[:200]}")
+            return ""
+    except Exception as e:
+        print(f"[EPaper] Claude API call failed: {e}")
+        return ""
+
+
+def generate_insights(articles: List[dict], portfolio_symbols: List[str]) -> List[dict]:
+    """Use Claude to analyze articles and generate portfolio-relevant insights."""
+    today = date.today().isoformat()
+    with _cache_lock:
+        if today in _insights_cache:
+            return _insights_cache[today]
+
+    if not _ANTHROPIC_API_KEY:
+        # Fallback: keyword-based matching without AI
+        return _keyword_insights(articles, portfolio_symbols)
+
+    # Build article summaries for Claude
+    article_texts = []
+    for i, art in enumerate(articles[:40]):
+        text = f"[{i+1}] [{art['section']}] {art['title']}"
+        if art.get("summary"):
+            text += f"\n{art['summary']}"
+        if art.get("body"):
+            text += f"\n{art['body'][:500]}"
+        article_texts.append(text)
+
+    articles_block = "\n\n".join(article_texts)
+    portfolio_str = ", ".join(portfolio_symbols) if portfolio_symbols else "No holdings data"
+
+    system_prompt = """You are an expert Indian financial advisor analyzing today's articles from Business Line and The Hindu newspapers.
+Your job is to extract ACTIONABLE insights for an investor. Focus on:
+
+1. **Direct stock impacts**: Any news about specific companies — investments, earnings, orders, regulatory changes, mergers, management changes
+2. **Sector impacts**: News affecting entire sectors (IT, pharma, banking, infra, etc.)
+3. **Market outlook**: Overall market direction signals, FII/DII flows, global cues
+4. **Mutual fund / Fixed deposit**: Rate changes, NAV impacts, new fund launches
+5. **Macro factors**: RBI policy, inflation, crude oil, rupee movement, geopolitical risks
+
+For EACH insight, provide:
+- A clear actionable headline
+- Which stocks/sectors are affected
+- Whether it's POSITIVE, NEGATIVE, or NEUTRAL
+- What action the investor should consider (buy/sell/hold/watch)
+- Urgency: HIGH (act today), MEDIUM (this week), LOW (monitor)
+
+Return as JSON array of objects with keys: headline, detail, stocks_affected (array), sectors (array), sentiment (positive/negative/neutral), action (buy/sell/hold/watch/avoid), urgency (high/medium/low), article_indices (array of source article numbers)"""
+
+    user_msg = f"""Analyze these articles from Business Line and The Hindu from today ({today}).
+
+USER'S PORTFOLIO HOLDINGS: {portfolio_str}
+(Prioritize insights about these stocks, but also flag important opportunities and risks outside the portfolio)
+
+ARTICLES:
+{articles_block}
+
+Return ONLY a JSON array. Prioritize the most actionable insights first. Include 10-20 insights."""
+
+    response = _call_claude(system_prompt, user_msg)
+    if not response:
+        return _keyword_insights(articles, portfolio_symbols)
+
+    # Parse JSON from response
+    try:
+        # Extract JSON array from response (handle markdown code blocks)
+        json_match = re.search(r"\[[\s\S]*\]", response)
+        if json_match:
+            insights = json.loads(json_match.group())
+        else:
+            insights = json.loads(response)
+
+        # Attach source article URLs
+        for insight in insights:
+            insight["sources"] = []
+            for idx in insight.get("article_indices", []):
+                if 1 <= idx <= len(articles):
+                    art = articles[idx - 1]
+                    insight["sources"].append({"title": art["title"], "url": art["url"]})
+
+        with _cache_lock:
+            _insights_cache[today] = insights
+        print(f"[EPaper] Generated {len(insights)} AI insights")
+        return insights
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"[EPaper] Failed to parse Claude response: {e}")
+        return _keyword_insights(articles, portfolio_symbols)
+
+
+def _keyword_insights(articles: List[dict], portfolio_symbols: List[str]) -> List[dict]:
+    """Fallback: Simple keyword-based article matching against portfolio."""
+    insights = []
+    symbols_upper = set(s.upper() for s in portfolio_symbols)
+    # Short symbols (<=3 chars) need word-boundary matching to avoid false positives
+    # e.g. "OIL" shouldn't match "oil prices" but should match "OIL India"
+    _short_syms = {s for s in symbols_upper if len(s) <= 4}
+    _long_syms = symbols_upper - _short_syms
+
+    for art in articles:
+        text = f"{art['title']} {art.get('summary', '')} {art.get('body', '')}".upper()
+        matched_stocks = []
+        for s in _long_syms:
+            if s in text:
+                matched_stocks.append(s)
+        for s in _short_syms:
+            # Word-boundary match for short symbols
+            if re.search(rf'\b{re.escape(s)}\b', text):
+                # Extra check: must appear near company-related context
+                # Skip if the symbol is a common English word in the article context
+                common_words = {"OIL", "GAS", "SUN", "MAX", "YES", "CAN", "BIG", "NEW", "ALL", "ONE"}
+                if s in common_words:
+                    # Only match if preceded/followed by company indicators
+                    if not re.search(rf'\b{re.escape(s)}\s+(INDIA|LTD|LIMITED|CORP|SHARES?|STOCK)', text):
+                        continue
+                matched_stocks.append(s)
+
+        if matched_stocks:
+            # Determine basic sentiment from keywords
+            pos_words = ["SURGE", "JUMP", "RALLY", "GAIN", "UP", "RISE", "BULLISH", "GROWTH", "PROFIT", "ORDER", "INVEST"]
+            neg_words = ["FALL", "DROP", "CRASH", "LOSS", "BEARISH", "DECLINE", "SELL-OFF", "SLUMP", "CUT", "RISK"]
+
+            pos_count = sum(1 for w in pos_words if w in text)
+            neg_count = sum(1 for w in neg_words if w in text)
+            sentiment = "positive" if pos_count > neg_count else "negative" if neg_count > pos_count else "neutral"
+
+            insights.append({
+                "headline": art["title"],
+                "detail": art.get("summary", ""),
+                "stocks_affected": matched_stocks,
+                "sectors": [art["section"]],
+                "sentiment": sentiment,
+                "action": "watch",
+                "urgency": "medium",
+                "sources": [{"title": art["title"], "url": art["url"]}],
+            })
+
+    # Also include top market/macro articles
+    for art in articles[:10]:
+        text = art["title"].upper()
+        if any(kw in text for kw in ["SENSEX", "NIFTY", "RBI", "CRUDE", "RUPEE", "FII", "MARKET"]):
+            if not any(i["headline"] == art["title"] for i in insights):
+                insights.append({
+                    "headline": art["title"],
+                    "detail": art.get("summary", ""),
+                    "stocks_affected": [],
+                    "sectors": [art["section"]],
+                    "sentiment": "neutral",
+                    "action": "watch",
+                    "urgency": "medium",
+                    "sources": [{"title": art["title"], "url": art["url"]}],
+                })
+
+    return insights[:20]
+
+
+# ═══════════════════════════════════════════════════════════
+#  CHAT
+# ═══════════════════════════════════════════════════════════
+
+def chat(message: str, articles: List[dict], portfolio_symbols: List[str],
+         history: List[dict] = None) -> str:
+    """Chat about today's articles with portfolio context."""
+    if not _ANTHROPIC_API_KEY:
+        return ("I need an Anthropic API key to provide AI-powered analysis. "
+                "Please add ANTHROPIC_API_KEY to your .env file.")
+
+    # Build context
+    article_summaries = []
+    for i, art in enumerate(articles[:30]):
+        text = f"[{i+1}] [{art['section']}] {art['title']}"
+        if art.get("body"):
+            text += f"\n{art['body'][:300]}"
+        elif art.get("summary"):
+            text += f"\n{art['summary']}"
+        article_summaries.append(text)
+
+    context = "\n\n".join(article_summaries)
+    portfolio_str = ", ".join(portfolio_symbols) if portfolio_symbols else "No portfolio data"
+
+    system_prompt = f"""You are an expert Indian financial advisor. You have access to today's Business Line newspaper articles and the user's stock portfolio.
+
+USER'S PORTFOLIO: {portfolio_str}
+
+TODAY'S BUSINESS LINE ARTICLES:
+{context}
+
+Guidelines:
+- Give specific, actionable advice based on the articles
+- Reference specific article numbers when citing sources
+- Flag any news that directly affects the user's holdings
+- Warn about risks and highlight opportunities
+- Be concise but thorough — don't miss critical information
+- If asked about a specific stock, check if any article mentions it
+- For buy/sell recommendations, always mention the risk level
+- Use INR for all currency references"""
+
+    messages = []
+    if history:
+        for h in history[-10:]:  # Last 10 messages for context
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": message})
+
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": _ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 2048,
+                "system": system_prompt,
+                "messages": messages,
+            },
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            return resp.json()["content"][0]["text"]
+        else:
+            return f"API error: {resp.status_code} — {resp.text[:200]}"
+    except Exception as e:
+        return f"Error calling AI: {str(e)}"
+
+
+# ═══════════════════════════════════════════════════════════
+#  STATUS
+# ═══════════════════════════════════════════════════════════
+
+def has_api_key() -> bool:
+    return bool(_ANTHROPIC_API_KEY)
+
+
+def get_status() -> dict:
+    today = date.today().isoformat()
+    cached = _articles_cache.get(today, [])
+    bl_count = sum(1 for a in cached if a.get("source") == "Business Line")
+    th_count = sum(1 for a in cached if a.get("source") == "The Hindu")
+    return {
+        "has_api_key": has_api_key(),
+        "articles_cached": today in _articles_cache,
+        "articles_count": len(cached),
+        "bl_count": bl_count,
+        "th_count": th_count,
+        "insights_cached": today in _insights_cache,
+        "insights_count": len(_insights_cache.get(today, [])),
+    }

@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    volumes:
+      # Persist xlsx data across container restarts
+      - ./backend/dumps:/app/backend/dumps
+      # Persist ticker data, users, tokens
+      - ./backend/data:/app/backend/data
+    restart: unless-stopped

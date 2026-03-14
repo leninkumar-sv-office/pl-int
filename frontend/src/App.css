@@ -45,26 +45,180 @@ body {
 }
 .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
 .header h1 span { color: var(--blue); }
-.header-actions { display: flex; gap: 12px; }
+.header-actions { display: flex; gap: 12px; align-items: center; }
+
+/* ── Refresh Interval Dropdown ──────────────────────── */
+.refresh-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.refresh-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b8fa3' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+  color-scheme: dark;
+}
+.refresh-select:hover {
+  border-color: var(--blue);
+  color: var(--text);
+}
+.refresh-select:focus {
+  outline: none;
+  border-color: var(--blue);
+  color: var(--text);
+}
+
+/* ── Zerodha Status Indicator ─────────────────────────── */
+.zerodha-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.zerodha-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid;
+  text-decoration: none;
+}
+.zerodha-dot.connected {
+  background: rgba(0, 210, 106, 0.15);
+  color: #00d26a;
+  border-color: #00d26a;
+}
+.zerodha-dot.expired {
+  background: rgba(255, 192, 72, 0.15);
+  color: #ffc048;
+  border-color: #ffc048;
+  animation: pulse-warn 2s ease-in-out infinite;
+}
+.zerodha-dot.disconnected {
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
+  border-color: #ff4757;
+}
+.zerodha-dot:hover {
+  transform: scale(1.1);
+}
+@keyframes pulse-warn {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.token-input-popup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 100;
+  min-width: 300px;
+}
+.token-input-popup input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: monospace;
+}
+.token-input-popup input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+.token-input-popup button {
+  background: var(--blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.token-input-popup button:last-child {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+/* ── Dashboard Collapsible ────────────────────────────── */
+.dashboard-section { margin-bottom: 8px; }
+.dashboard-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  width: 100%;
+  text-align: left;
+}
+.dashboard-toggle:hover { opacity: 0.85; }
+.toggle-arrow {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: transform 0.2s;
+}
+.toggle-arrow.expanded { transform: rotate(90deg); }
+.toggle-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.toggle-summary {
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+}
 
 /* ── Summary Cards ───────────────────────────────────── */
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
-  margin-bottom: 32px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .summary-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
   transition: border-color 0.2s;
 }
 .summary-card:hover { border-color: var(--blue); }
-.summary-card .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-.summary-card .value { font-size: 20px; font-weight: 700; }
-.summary-card .sub { font-size: 11px; margin-top: 3px; }
+.summary-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.summary-card .value { font-size: 15px; font-weight: 700; }
+.summary-card .sub { font-size: 10px; margin-top: 1px; }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
 .neutral { color: var(--text-dim); }
@@ -117,10 +271,9 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow-x: auto;
 }
 table { width: 100%; border-collapse: collapse; }
-thead { background: rgba(255,255,255,0.03); }
+thead { background: var(--bg-card); }
 th {
   padding: 12px 10px;
   text-align: left;
@@ -131,6 +284,10 @@ th {
   font-weight: 600;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  z-index: 10;
 }
 td {
   padding: 12px 10px;
@@ -305,6 +462,14 @@ tr.highlight-profit:hover {
   font-size: 14px;
   font-family: inherit;
   transition: border-color 0.2s;
+  color-scheme: dark;
+}
+.form-group input[type="date"] {
+  cursor: pointer;
+}
+.form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
 }
 .form-group input:focus, .form-group select:focus {
   outline: none;
@@ -359,6 +524,7 @@ tr.highlight-profit:hover {
   margin-right: 12px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 1024px) {
@@ -370,4 +536,11 @@ tr.highlight-profit:hover {
   .summary-grid { grid-template-columns: repeat(3, 1fr); }
   .table-container { overflow-x: auto; }
   table { min-width: 800px; }
+}
+
+/* Hide number input spinners in filter row */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
