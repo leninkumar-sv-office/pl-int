@@ -320,7 +320,7 @@ def _extract_statement_info(all_text: str) -> tuple[str, str]:
     return cas_id, statement_period
 
 
-def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
+def parse_cdsl_cas(pdf_bytes: bytes, password: str = None) -> dict:
     """Parse a CDSL CAS PDF and return structured fund/transaction data.
 
     Uses a table-first approach:
@@ -329,7 +329,18 @@ def parse_cdsl_cas(pdf_bytes: bytes) -> dict:
     3. Each table's first row has ISIN to link to fund metadata
     4. Parse transaction rows from tables
     """
-    pdf = pdfplumber.open(io.BytesIO(pdf_bytes))
+    _passwords = [password] if password else []
+    _passwords += ["AEPPL3176B", "aeppl3176b", ""]
+
+    pdf = None
+    for pw in _passwords:
+        try:
+            pdf = pdfplumber.open(io.BytesIO(pdf_bytes), password=pw or "")
+            break
+        except Exception:
+            continue
+    if pdf is None:
+        raise ValueError("Could not open PDF — it may be password-protected")
 
     # ── Phase 1: Extract all text ──
     all_text = ""

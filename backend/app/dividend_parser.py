@@ -495,7 +495,20 @@ def parse_dividend_statement(pdf_bytes: bytes, portfolio_name_map: dict,
     dividends = []
     pages_text = []
 
-    with pdfplumber.open(io.BytesIO(pdf_bytes) if isinstance(pdf_bytes, bytes) else pdf_bytes) as pdf:
+    _stream = io.BytesIO(pdf_bytes) if isinstance(pdf_bytes, bytes) else pdf_bytes
+    # Try common passwords for encrypted bank statement PDFs
+    _pdf = None
+    for pw in ["", "AEPPL3176B", "aeppl3176b"]:
+        try:
+            _pdf = pdfplumber.open(_stream, password=pw)
+            break
+        except Exception:
+            _stream.seek(0)
+            continue
+    if _pdf is None:
+        raise ValueError("Could not open PDF — it may be password-protected")
+
+    with _pdf as pdf:
         for page in pdf.pages:
             page_text = page.extract_text() or ""
             pages_text.append(page_text)

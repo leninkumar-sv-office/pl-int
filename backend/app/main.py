@@ -149,9 +149,10 @@ app.add_middleware(
 async def auth_middleware(request: Request, call_next):
     if auth_module.is_auth_enabled():
         path = request.url.path
-        # Allow auth endpoints, static files, and health checks through
+        # Allow auth endpoints, Zerodha browser pages, static files, and health checks through
         if not (path.startswith("/api/auth/") or path.startswith("/assets/")
                 or path == "/" or path == "/favicon.ico"
+                or path.startswith("/api/zerodha/")
                 or not path.startswith("/api/")):
             auth_header = request.headers.get("authorization", "")
             if not auth_header.startswith("Bearer "):
@@ -527,8 +528,6 @@ def parse_dividend_statement_preview(req: DividendStatementUpload):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
 
-    pdf_bytes = _try_decrypt_pdf(pdf_bytes)
-
     try:
         result = dividend_parser.parse_dividend_statement(
             pdf_bytes=pdf_bytes,
@@ -621,46 +620,6 @@ def import_dividends_confirmed(req: dict):
     }
 
 
-# ══════════════════════════════════════════════════════════
-#  PDF DECRYPTION HELPER
-# ══════════════════════════════════════════════════════════
-
-# Common passwords to try for encrypted PDFs (PAN numbers, etc.)
-_PDF_PASSWORDS = ["AEPPL3176B", "aeppl3176b"]
-
-
-def _try_decrypt_pdf(pdf_bytes: bytes) -> bytes:
-    """If PDF is password-protected, try common passwords and return decrypted bytes.
-    Returns original bytes if PDF is not encrypted or if decryption succeeds."""
-    import pikepdf
-    import io
-
-    # Quick check: try opening without password first
-    try:
-        reader = pikepdf.open(io.BytesIO(pdf_bytes))
-        reader.close()
-        return pdf_bytes  # Not encrypted
-    except pikepdf._core.PasswordError:
-        pass  # Encrypted — try passwords below
-    except Exception:
-        return pdf_bytes  # Some other issue — let downstream parser handle it
-
-    for pw in _PDF_PASSWORDS:
-        try:
-            reader = pikepdf.open(io.BytesIO(pdf_bytes), password=pw)
-            out = io.BytesIO()
-            reader.save(out)
-            reader.close()
-            return out.getvalue()
-        except Exception:
-            continue
-
-    raise HTTPException(
-        status_code=400,
-        detail="PDF is password-protected and could not be decrypted. "
-               "Please provide an unencrypted PDF or contact support."
-    )
-
 
 # ══════════════════════════════════════════════════════════
 #  CONTRACT NOTE PDF IMPORT
@@ -683,8 +642,6 @@ def _decode_and_parse_pdf(req: ContractNoteUpload) -> dict:
         pdf_bytes = base64.b64decode(req.pdf_base64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
-
-    pdf_bytes = _try_decrypt_pdf(pdf_bytes)
 
     try:
         return contract_note_parser.parse_contract_note_from_bytes(pdf_bytes)
@@ -2204,7 +2161,6 @@ def parse_cdsl_cas_endpoint(req: CDSLCASUpload):
         pdf_bytes = base64.b64decode(req.pdf_base64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
-    pdf_bytes = _try_decrypt_pdf(pdf_bytes)
     try:
         result = parse_cdsl_cas(pdf_bytes)
         return result

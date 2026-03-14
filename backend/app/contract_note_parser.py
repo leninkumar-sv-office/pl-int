@@ -224,7 +224,16 @@ def extract_text_from_pdf(pdf_path: str, layout: bool = True) -> str:
     try:
         import pdfplumber
         pages_text = []
-        with pdfplumber.open(pdf_path) as pdf:
+        _pdf = None
+        for pw in ["", "AEPPL3176B", "aeppl3176b"]:
+            try:
+                _pdf = pdfplumber.open(pdf_path, password=pw)
+                break
+            except Exception:
+                continue
+        if _pdf is None:
+            raise ValueError("Could not open PDF — it may be password-protected")
+        with _pdf as pdf:
             for page in pdf.pages:
                 if layout:
                     text = page.extract_text(layout=True)
@@ -344,7 +353,16 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
     transactions: List[dict] = []
 
     try:
-        with pdfplumber.open(pdf_path) as pdf:
+        _pdf = None
+        for pw in ["", "AEPPL3176B", "aeppl3176b"]:
+            try:
+                _pdf = pdfplumber.open(pdf_path, password=pw)
+                break
+            except Exception:
+                continue
+        if _pdf is None:
+            raise ValueError("Could not open PDF — it may be password-protected")
+        with _pdf as pdf:
             # Pre-scan: determine which sections exist so we can prefer Annexure B
             has_annexure_b = False
             has_equity_segment = False
