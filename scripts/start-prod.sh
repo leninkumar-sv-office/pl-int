@@ -20,5 +20,5 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-# Run uvicorn (foreground — launchd manages the process)
-exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 >> "$LOG_FILE" 2>&1
+# Run uvicorn (foreground — launchd manages stdout/stderr)
+exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
