@@ -32,11 +32,59 @@ import MFImportPreviewModal from './components/MFImportPreviewModal';
 import DividendImportPreviewModal from './components/DividendImportPreviewModal';
 import TradePlanner, { openTradePlanner } from './components/BuyPlannerModal';
 import UserSelector from './components/UserSelector';
+import GoogleLogin from './components/GoogleLogin';
+import { getAuthStatus, verifySession } from './services/api';
 
 export const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+/* ── Auth wrapper ────────────────────────────────── */
+function AuthGate({ children }) {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authConfig, setAuthConfig] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await getAuthStatus();
+        if (cancelled) return;
+        setAuthConfig(status);
+        if (!status.auth_enabled) {
+          setAuthenticated(true);
+          setAuthChecked(true);
+          return;
+        }
+        const token = localStorage.getItem('sessionToken');
+        if (token) {
+          try {
+            await verifySession();
+            if (!cancelled) setAuthenticated(true);
+          } catch {
+            localStorage.removeItem('sessionToken');
+          }
+        }
+      } catch {
+        setAuthenticated(true);
+      }
+      if (!cancelled) setAuthChecked(true);
+    })();
+    const onExpired = () => { setAuthenticated(false); };
+    window.addEventListener('auth-expired', onExpired);
+    return () => { cancelled = true; window.removeEventListener('auth-expired', onExpired); };
+  }, []);
+
+  if (!authChecked) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: 'var(--text-muted)' }}>Loading...</div>;
+  }
+  if (authConfig?.auth_enabled && !authenticated) {
+    return <GoogleLogin clientId={authConfig.google_client_id} onSuccess={() => window.location.reload()} />;
+  }
+  return children;
+}
 
 export default function App() {
   // If opened as Trade Planner window, render only that
@@ -974,6 +1022,7 @@ export default function App() {
   };
 
   return (
+    <AuthGate>
     <div className="app">
       <Toaster
         position="top-right"
@@ -1173,6 +1222,29 @@ export default function App() {
         <div className="header-actions">
           {/* User selector */}
           <UserSelector currentUserId={currentUserId} onUserChange={handleUserChange} />
+          {localStorage.getItem('sessionToken') && (() => {
+            const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+            const initial = (authUser.name || authUser.email || '?')[0].toUpperCase();
+            return (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('sessionToken');
+                  localStorage.removeItem('authUser');
+                  window.location.reload();
+                }}
+                title={`Sign out (${authUser.email || ''})`}
+                style={{
+                  width: 28, height: 28, borderRadius: '50%', border: 'none',
+                  background: 'var(--blue)', color: '#fff', fontSize: '13px',
+                  fontWeight: 600, cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', padding: 0,
+                  ...(authUser.picture ? { backgroundImage: `url(${authUser.picture})`, backgroundSize: 'cover', color: 'transparent' } : {}),
+                }}
+              >
+                {initial}
+              </button>
+            );
+          })()}
           {/* Zerodha status */}
           {zerodhaStatus && (
             <div className="zerodha-status" title={
@@ -1568,5 +1640,6 @@ export default function App() {
       )}
 
     </div>
+    </AuthGate>
   );
 }

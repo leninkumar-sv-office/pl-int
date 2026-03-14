@@ -7,14 +7,47 @@ const api = axios.create({
   timeout: 60000,  // 60s — handles cold-start scenarios
 });
 
-// Attach X-User-Id header to every request
+// Attach X-User-Id and auth headers to every request
 api.interceptors.request.use((config) => {
   const userId = localStorage.getItem('selectedUserId');
   if (userId) {
     config.headers['X-User-Id'] = userId;
   }
+  const sessionToken = localStorage.getItem('sessionToken');
+  if (sessionToken) {
+    config.headers['Authorization'] = `Bearer ${sessionToken}`;
+  }
   return config;
 });
+
+// Redirect to login on 401
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/')) {
+      localStorage.removeItem('sessionToken');
+      window.dispatchEvent(new Event('auth-expired'));
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ── Auth ──────────────────────────────────────────
+
+export async function getAuthStatus() {
+  const { data } = await api.get('/auth/status');
+  return data;
+}
+
+export async function googleLogin(idToken) {
+  const { data } = await api.post('/auth/google', { token: idToken });
+  return data;
+}
+
+export async function verifySession() {
+  const { data } = await api.get('/auth/verify');
+  return data;
+}
 
 // ── Users ─────────────────────────────────────────
 

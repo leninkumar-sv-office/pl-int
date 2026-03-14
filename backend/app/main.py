@@ -37,6 +37,7 @@ from . import zerodha_service
 from . import contract_note_parser
 from . import dividend_parser
 from . import epaper_service
+from . import auth as auth_module
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -133,6 +134,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Auth middleware — blocks unauthenticated requests when AUTH_MODE=google
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if auth_module.is_auth_enabled():
+        path = request.url.path
+        # Allow auth endpoints, static files, and health checks through
+        if not (path.startswith("/api/auth/") or path.startswith("/assets/")
+                or path == "/" or path == "/favicon.ico"
+                or not path.startswith("/api/")):
+            auth_header = request.headers.get("authorization", "")
+            if not auth_header.startswith("Bearer "):
+                return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+            session = auth_module.verify_session_token(auth_header[7:])
+            if not session:
+                return JSONResponse(status_code=401, content={"detail": "Invalid or expired session"})
+    return await call_next(request)
 
 
 # User context middleware — sets _current_user_id from X-User-Id header
@@ -235,6 +254,52 @@ def add_user(req: AddUserRequest):
     # Create user's dump directories
     get_user_dumps_dir(user_id)
     return user
+
+
+# ══════════════════════════════════════════════════════════
+#  AUTHENTICATION ENDPOINTS
+# ══════════════════════════════════════════════════════════
+
+@app.get("/api/auth/status")
+def auth_status():
+    """Check if authentication is enabled and current config."""
+    return {
+        "auth_enabled": auth_module.is_auth_enabled(),
+        "auth_mode": auth_module.AUTH_MODE,
+        "google_client_id": auth_module.GOOGLE_CLIENT_ID if auth_module.is_auth_enabled() else "",
+    }
+
+
+@app.post("/api/auth/google")
+def google_login(body: dict):
+    """Verify Google ID token and return a session JWT."""
+    id_token = body.get("token", "").strip()
+    if not id_token:
+        raise HTTPException(400, "token is required")
+    if not auth_module.is_auth_enabled():
+        raise HTTPException(400, "Google auth is not enabled (set AUTH_MODE=google)")
+    user_info = auth_module.verify_google_token(id_token)
+    if not user_info:
+        raise HTTPException(401, "Invalid Google token or email not allowed")
+    session_token = auth_module.create_session_token(user_info["email"], user_info["name"])
+    return {
+        "session_token": session_token,
+        "email": user_info["email"],
+        "name": user_info["name"],
+        "picture": user_info["picture"],
+    }
+
+
+@app.get("/api/auth/verify")
+def verify_session(request: Request):
+    """Verify a session token is still valid."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(401, "No token provided")
+    session = auth_module.verify_session_token(auth_header[7:])
+    if not session:
+        raise HTTPException(401, "Invalid or expired session")
+    return session
 
 
 # ══════════════════════════════════════════════════════════
