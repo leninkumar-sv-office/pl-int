@@ -60,7 +60,14 @@ pip install -r "$BACKEND_DIR/requirements.txt" --quiet
 echo "Python environment ready ($(python3 --version))"
 echo ""
 
-# ── Step 3: Run Backend ─────────────────────────────────
+# ── Step 3: Kill existing server on port 8000 ────────────
+if lsof -ti:8000 &>/dev/null; then
+    echo "Killing existing process on port 8000..."
+    kill -9 $(lsof -ti:8000) 2>/dev/null
+    sleep 1
+fi
+
+# ── Step 4: Run Backend ─────────────────────────────────
 echo "── Starting Backend ────────────────────────────────"
 echo "   Backend:  http://127.0.0.1:8000"
 echo "   API Docs: http://127.0.0.1:8000/docs"

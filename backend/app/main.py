@@ -126,6 +126,10 @@ def on_startup():
     except Exception as e:
         print(f"[App] Drive sync skipped: {e}")
 
+    # Re-index MF database after Drive sync (files may have arrived after module import)
+    mf_db.reindex()
+    print(f"[App] MF database re-indexed: {len(mf_db._file_map)} funds")
+
 
 @app.on_event("shutdown")
 def on_shutdown():
