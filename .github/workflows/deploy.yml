@@ -36,16 +36,10 @@ jobs:
         env:
           DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
           DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
-          PLIST_LABEL: com.pl.dashboard
-          PLIST_PATH: /Users/lenin/Library/LaunchAgents/com.pl.dashboard.plist
         run: |
           echo "── Deploying ${{ steps.tag.outputs.tag }} ──"
 
-          # Stop existing app via launchctl
-          launchctl bootout gui/$(id -u)/$PLIST_LABEL 2>/dev/null || true
-          sleep 2
-
-          # Kill any leftover process on port 8000
+          # Kill any existing process on port 8000
           lsof -ti:8000 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
           sleep 1
 
@@ -119,79 +113,28 @@ jobs:
           deactivate
           echo "Python deps installed"
 
-          # Create LaunchAgent plist — runs venv python directly with env vars baked in
-          VENV_PYTHON="$DEPLOY_DIR/backend/venv/bin/python3"
-
-          cat > "$PLIST_PATH" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>Label</key>
-            <string>${PLIST_LABEL}</string>
-            <key>ProgramArguments</key>
-            <array>
-              <string>${VENV_PYTHON}</string>
-              <string>-m</string>
-              <string>uvicorn</string>
-              <string>app.main:app</string>
-              <string>--host</string>
-              <string>0.0.0.0</string>
-              <string>--port</string>
-              <string>8000</string>
-            </array>
-            <key>WorkingDirectory</key>
-            <string>${DEPLOY_DIR}/backend</string>
-            <key>EnvironmentVariables</key>
-            <dict>
-              <key>PATH</key>
-              <string>${DEPLOY_DIR}/backend/venv/bin:/usr/local/bin:/usr/bin:/bin</string>
-              <key>VIRTUAL_ENV</key>
-              <string>${DEPLOY_DIR}/backend/venv</string>
-              <key>ZERODHA_API_KEY</key>
-              <string>${{ secrets.ZERODHA_API_KEY }}</string>
-              <key>ZERODHA_API_SECRET</key>
-              <string>${{ secrets.ZERODHA_API_SECRET }}</string>
-              <key>ZERODHA_ACCESS_TOKEN</key>
-              <string>${{ secrets.ZERODHA_ACCESS_TOKEN }}</string>
-              <key>ZERODHA_USER_ID</key>
-              <string>${{ secrets.ZERODHA_USER_ID }}</string>
-              <key>ZERODHA_PASSWORD</key>
-              <string>${{ secrets.ZERODHA_PASSWORD }}</string>
-              <key>ZERODHA_TOTP_SECRET</key>
-              <string>${{ secrets.ZERODHA_TOTP_SECRET }}</string>
-              <key>AUTH_MODE</key>
-              <string>${{ secrets.AUTH_MODE }}</string>
-              <key>GOOGLE_CLIENT_ID</key>
-              <string>${{ secrets.GOOGLE_CLIENT_ID }}</string>
-              <key>ALLOWED_EMAILS</key>
-              <string>${{ secrets.ALLOWED_EMAILS }}</string>
-              <key>GOOGLE_CLIENT_SECRET</key>
-              <string>${{ secrets.GOOGLE_CLIENT_SECRET }}</string>
-              <key>GOOGLE_DRIVE_DUMPS_FOLDER_ID</key>
-              <string>${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}</string>
-            </dict>
-            <key>RunAtLoad</key>
-            <true/>
-            <key>KeepAlive</key>
-            <true/>
-            <key>StandardOutPath</key>
-            <string>${DEPLOY_DIR}/app.log</string>
-            <key>StandardErrorPath</key>
-            <string>${DEPLOY_DIR}/app.log</string>
-          </dict>
-          </plist>
-          EOF
-          # Remove leading whitespace from heredoc
-          sed -i '' 's/^          //' "$PLIST_PATH"
-          echo "LaunchAgent plist written"
+          # Write startup script
+          cat > "$DEPLOY_DIR/start.sh" <<'STARTEOF'
+          #!/bin/bash
+          cd /Users/lenin/Desktop/workspace/pl-auto/backend
+          source venv/bin/activate
+          set -a
+          source /Users/lenin/Desktop/workspace/pl-auto/.env
+          set +a
+          exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+          STARTEOF
+          sed -i '' 's/^          //' "$DEPLOY_DIR/start.sh"
+          chmod +x "$DEPLOY_DIR/start.sh"
 
           # Clear old log
           > "$DEPLOY_DIR/app.log"
 
-          # Load and start the app via launchctl
-          launchctl bootstrap gui/$(id -u) "$PLIST_PATH"
-          echo "App started via LaunchAgent"
+          # Start app — unset RUNNER_TRACKING_ID so runner won't kill it on job end
+          echo "── Starting app ──"
+          (unset RUNNER_TRACKING_ID; nohup bash "$DEPLOY_DIR/start.sh" >> "$DEPLOY_DIR/app.log" 2>&1 &)
+          sleep 2
+          echo "App process started"
+          lsof -ti:8000 -sTCP:LISTEN && echo "Port 8000 is listening" || echo "Waiting for port 8000..."
 
       - name: Health check
         run: |
@@ -208,6 +151,16 @@ jobs:
           echo "Health check failed after 2.5 minutes"
           echo "--- App logs ---"
           tail -50 /Users/lenin/Desktop/workspace/pl-auto/app.log 2>/dev/null || echo "No logs found"
-          echo "--- LaunchAgent status ---"
-          launchctl list | grep pl || echo "Not loaded"
+          echo "--- Port 8000 ---"
+          lsof -ti:8000 || echo "Nothing on port 8000"
           exit 1
+
+      - name: Verify app persists after job
+        run: |
+          PID=$(lsof -ti:8000 -sTCP:LISTEN 2>/dev/null || true)
+          if [ -n "$PID" ]; then
+            echo "App running with PID $PID — will persist after job ends"
+            echo "$PID" > /Users/lenin/Desktop/workspace/pl-auto/app.pid
+          else
+            echo "WARNING: App not detected on port 8000"
+          fi
