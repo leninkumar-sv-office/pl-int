@@ -53,27 +53,24 @@ jobs:
             echo "Copied .env from dev workspace"
           fi
 
-          # Kill existing server on port 8000
-          lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-          sleep 1
-
-          # Install frontend deps and build
-          cd frontend
-          npm ci --silent
-          npm run build
-          cd ..
-
-          # Install backend deps
-          cd backend
-          python3 -m venv venv 2>/dev/null || true
-          source venv/bin/activate
-          pip install -r requirements.txt --quiet
-
-          # Start server in background
-          nohup python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/pl-auto-server.log 2>&1 &
-          echo "Server started with PID $!"
+          # Deploy as Docker container
+          docker compose down --remove-orphans 2>/dev/null || true
+          docker compose up -d --build
 
       - name: Health check
         run: |
-          sleep 30
-          curl -sf http://localhost:8000/api/auth/status && echo "Deploy successful: ${{ steps.tag.outputs.tag }}" || echo "Health check failed"
+          echo "Waiting for container to be healthy..."
+          for i in $(seq 1 12); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' pl-dashboard 2>/dev/null || echo "starting")
+            echo "  Attempt $i/12: $status"
+            if [ "$status" = "healthy" ]; then
+              echo "Container is healthy!"
+              curl -s http://localhost:8000/health | python3 -m json.tool
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Health check failed after 2 minutes"
+          echo "--- Container logs ---"
+          docker compose logs --tail=50
+          exit 1

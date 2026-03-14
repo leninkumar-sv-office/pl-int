@@ -156,6 +156,7 @@ async def auth_middleware(request: Request, call_next):
         # Allow auth endpoints, Zerodha browser pages, static files, and health checks through
         if not (path.startswith("/api/auth/") or path.startswith("/assets/")
                 or path == "/" or path == "/favicon.ico"
+                or path == "/health"
                 or path.startswith("/api/zerodha/")
                 or not path.startswith("/api/")):
             auth_header = request.headers.get("authorization", "")
@@ -267,6 +268,78 @@ def add_user(req: AddUserRequest):
     # Create user's dump directories
     get_user_dumps_dir(user_id)
     return user
+
+
+# ══════════════════════════════════════════════════════════
+#  HEALTH CHECK
+# ══════════════════════════════════════════════════════════
+
+@app.get("/health")
+def health_check():
+    """Comprehensive health check — verifies all app subsystems."""
+    checks = {}
+    healthy = True
+
+    # 1. Stock database
+    try:
+        holdings = db.get_all_holdings()
+        checks["stocks"] = {"status": "ok", "holdings": len(holdings)}
+    except Exception as e:
+        checks["stocks"] = {"status": "error", "error": str(e)}
+        healthy = False
+
+    # 2. Mutual fund database
+    try:
+        fund_count = len(mf_db._file_map)
+        checks["mutual_funds"] = {"status": "ok", "funds": fund_count}
+        if fund_count == 0:
+            checks["mutual_funds"]["status"] = "warn"
+            checks["mutual_funds"]["message"] = "No funds indexed"
+    except Exception as e:
+        checks["mutual_funds"] = {"status": "error", "error": str(e)}
+        healthy = False
+
+    # 3. Dumps directory
+    try:
+        from .config import DUMPS_DIR
+        dumps_exists = DUMPS_DIR.exists()
+        checks["data_dir"] = {"status": "ok" if dumps_exists else "error", "path": str(DUMPS_DIR)}
+        if not dumps_exists:
+            healthy = False
+    except Exception as e:
+        checks["data_dir"] = {"status": "error", "error": str(e)}
+        healthy = False
+
+    # 4. Zerodha connection
+    try:
+        if zerodha_service.is_configured():
+            session_valid = zerodha_service.is_session_valid()
+            checks["zerodha"] = {"status": "ok" if session_valid else "warn",
+                                 "configured": True, "session_valid": session_valid}
+        else:
+            checks["zerodha"] = {"status": "warn", "configured": False}
+    except Exception as e:
+        checks["zerodha"] = {"status": "error", "error": str(e)}
+
+    # 5. Auth module
+    try:
+        checks["auth"] = {"status": "ok", "mode": auth_module.AUTH_MODE,
+                          "enabled": auth_module.is_auth_enabled()}
+    except Exception as e:
+        checks["auth"] = {"status": "error", "error": str(e)}
+        healthy = False
+
+    # 6. Frontend build
+    checks["frontend"] = {"status": "ok" if os.path.exists(FRONTEND_DIST) else "error",
+                           "dist_exists": os.path.exists(FRONTEND_DIST)}
+    if not os.path.exists(FRONTEND_DIST):
+        healthy = False
+
+    status_code = 200 if healthy else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "healthy" if healthy else "unhealthy", "checks": checks}
+    )
 
 
 # ══════════════════════════════════════════════════════════

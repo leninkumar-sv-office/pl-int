@@ -15,9 +15,9 @@ RUN npm run build
 # ── Stage 2: Python Backend ───────────────────────────
 FROM python:3.12-slim
 
-# System deps for pdfplumber (pdfminer) and general build
+# System deps for pdfplumber (pdfminer) and health check
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+    gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -41,6 +41,9 @@ RUN useradd -m -r appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -sf http://localhost:8000/health || exit 1
 
 WORKDIR /app/backend
 
