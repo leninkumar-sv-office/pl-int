@@ -1,0 +1,14 @@
+node_modules/
+frontend/node_modules/
+backend/venv/
+backend/dumps/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.git/
+test-results/
+*.png
+docs/
+.playwright-mcp/
+.claude/
