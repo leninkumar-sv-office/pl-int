@@ -35,6 +35,17 @@ jobs:
       - name: Deploy to pl-auto
         env:
           DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
+          ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
+          ZERODHA_API_SECRET: ${{ secrets.ZERODHA_API_SECRET }}
+          ZERODHA_ACCESS_TOKEN: ${{ secrets.ZERODHA_ACCESS_TOKEN }}
+          ZERODHA_USER_ID: ${{ secrets.ZERODHA_USER_ID }}
+          ZERODHA_PASSWORD: ${{ secrets.ZERODHA_PASSWORD }}
+          ZERODHA_TOTP_SECRET: ${{ secrets.ZERODHA_TOTP_SECRET }}
+          AUTH_MODE: ${{ secrets.AUTH_MODE }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_DRIVE_DUMPS_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}
         run: |
           # Create deploy dir if first time
           if [ ! -d "$DEPLOY_DIR/.git" ]; then
@@ -45,13 +56,43 @@ jobs:
 
           cd "$DEPLOY_DIR"
           git fetch origin --tags
+          git reset --hard HEAD
+          git clean -fd
           git checkout ${{ steps.tag.outputs.tag }}
 
-          # Copy .env from dev workspace if not present (first deploy only)
-          if [ ! -f backend/.env ] && [ -f /Users/lenin/Desktop/workspace/pl/backend/.env ]; then
-            cp /Users/lenin/Desktop/workspace/pl/backend/.env backend/.env
-            echo "Copied .env from dev workspace"
+          # Generate .env from GitHub Secrets
+          cat > backend/.env << ENVEOF
+          ZERODHA_API_KEY=${ZERODHA_API_KEY}
+          ZERODHA_API_SECRET=${ZERODHA_API_SECRET}
+          ZERODHA_ACCESS_TOKEN=${ZERODHA_ACCESS_TOKEN}
+          ZERODHA_USER_ID=${ZERODHA_USER_ID}
+          ZERODHA_PASSWORD=${ZERODHA_PASSWORD}
+          ZERODHA_TOTP_SECRET=${ZERODHA_TOTP_SECRET}
+          AUTH_MODE=${AUTH_MODE}
+          GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+          ALLOWED_EMAILS=${ALLOWED_EMAILS}
+          GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+          GOOGLE_DRIVE_DUMPS_FOLDER_ID=${GOOGLE_DRIVE_DUMPS_FOLDER_ID}
+          ENVEOF
+          # Remove leading whitespace from heredoc
+          sed -i '' 's/^[[:space:]]*//' backend/.env
+          echo "Generated backend/.env from GitHub Secrets"
+
+          # Copy dumps data from dev workspace if deploy dumps is empty
+          DEV_DUMPS="/Users/lenin/Desktop/workspace/pl/backend/dumps"
+          if [ -d "$DEV_DUMPS" ] && [ -n "$(ls -A "$DEV_DUMPS" 2>/dev/null)" ]; then
+            rsync -a --ignore-existing "$DEV_DUMPS/" "$DEPLOY_DIR/backend/dumps/"
+            echo "Synced dumps data from dev workspace"
           fi
+
+          # Kill any non-Docker process on port 8000
+          lsof -ti:8000 -sTCP:LISTEN | while read pid; do
+            cmd=$(ps -p "$pid" -o comm= 2>/dev/null)
+            if [ "$cmd" != "com.docker.ba" ] && [ "$cmd" != "vpnkit-bridge" ]; then
+              kill -9 "$pid" 2>/dev/null || true
+            fi
+          done
+          sleep 1
 
           # Deploy as Docker container
           docker compose down --remove-orphans 2>/dev/null || true
@@ -72,5 +113,5 @@ jobs:
           done
           echo "Health check failed after 2 minutes"
           echo "--- Container logs ---"
-          docker compose logs --tail=50
+          docker compose -f /Users/lenin/Desktop/workspace/pl-auto/docker-compose.yml logs --tail=50
           exit 1
