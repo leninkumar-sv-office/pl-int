@@ -34,6 +34,7 @@ jobs:
 
       - name: Deploy to pl-auto
         env:
+          DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
           DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
           DUMPS_DIR: /Users/lenin/Desktop/workspace/pl-auto/dumps
           ZERODHA_API_KEY: ${{ secrets.ZERODHA_API_KEY }}
@@ -89,6 +90,8 @@ jobs:
           docker compose up -d --build
 
       - name: Health check
+        env:
+          DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
         run: |
           echo "Waiting for container to be healthy..."
           for i in $(seq 1 12); do
