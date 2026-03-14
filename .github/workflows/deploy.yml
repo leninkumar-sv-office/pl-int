@@ -58,7 +58,7 @@ jobs:
           cd "$DEPLOY_DIR"
           git fetch origin --tags
           git reset --hard HEAD
-          git clean -fd
+          git clean -fd -e dumps/ -e backend/data/
           git checkout ${{ steps.tag.outputs.tag }}
 
           # Create dumps directory on host
