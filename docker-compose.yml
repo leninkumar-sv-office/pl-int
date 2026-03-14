@@ -4,14 +4,25 @@ services:
     container_name: pl-dashboard
     ports:
       - "8000:8000"
-    env_file:
-      - backend/.env
+    environment:
+      - ZERODHA_API_KEY=${ZERODHA_API_KEY}
+      - ZERODHA_API_SECRET=${ZERODHA_API_SECRET}
+      - ZERODHA_ACCESS_TOKEN=${ZERODHA_ACCESS_TOKEN}
+      - ZERODHA_USER_ID=${ZERODHA_USER_ID}
+      - ZERODHA_PASSWORD=${ZERODHA_PASSWORD}
+      - ZERODHA_TOTP_SECRET=${ZERODHA_TOTP_SECRET}
+      - AUTH_MODE=${AUTH_MODE}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_DRIVE_DUMPS_FOLDER_ID=${GOOGLE_DRIVE_DUMPS_FOLDER_ID}
     volumes:
-      # Persist xlsx data across container restarts
-      - ./backend/dumps:/app/backend/dumps
+      # Persist xlsx data — mounted from pl-auto/dumps on host
+      - /Users/lenin/Desktop/workspace/pl-auto/dumps:/app/backend/dumps
       # Persist ticker data, users, tokens
       - ./backend/data:/app/backend/data
     restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s
