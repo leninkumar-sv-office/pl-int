@@ -31,6 +31,16 @@ from app.config import DUMPS_DIR
 SI_DIR = DUMPS_DIR / "Standing Instructions"
 SI_FILE = SI_DIR / "Standing Instructions.xlsx"
 
+
+def _sync_to_drive(filepath: Path):
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
 _lock = threading.Lock()
 
 # Column mapping (1-indexed for openpyxl)
@@ -164,6 +174,7 @@ def _save(items: list, si_dir: Path = None, si_file: Path = None):
 
     wb.save(str(si_file))
     wb.close()
+    _sync_to_drive(Path(si_file))
 
 
 # ═══════════════════════════════════════════════════════════

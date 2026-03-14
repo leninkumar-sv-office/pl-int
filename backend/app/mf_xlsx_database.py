@@ -28,6 +28,17 @@ import openpyxl
 from .models import MFHolding, MFSoldPosition
 
 
+def _sync_to_drive(filepath):
+    """Notify Drive service that a file was modified (async upload)."""
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = Path(filepath).resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
+
 # ═══════════════════════════════════════════════════════════
 #  LIVE NAV FETCHING (Google Finance + AMFI)
 # ═══════════════════════════════════════════════════════════
@@ -1068,6 +1079,7 @@ class MFXlsxPortfolio:
 
         wb.save(filepath)
         wb.close()
+        _sync_to_drive(filepath)
 
         # Register in maps
         self._file_map[fund_code] = filepath
@@ -1161,6 +1173,7 @@ class MFXlsxPortfolio:
 
             wb.save(filepath)
             wb.close()
+            _sync_to_drive(filepath)
 
             # Invalidate cache to force re-parse
             self._cache.pop(fund_code, None)
@@ -1231,6 +1244,7 @@ class MFXlsxPortfolio:
 
             wb.save(filepath)
             wb.close()
+            _sync_to_drive(filepath)
 
             # Invalidate cache and re-parse to get FIFO-matched realized P&L
             self._cache.pop(fund_code, None)

@@ -47,6 +47,16 @@ RD_JSON_FILE = DUMPS_DIR / "recurring_deposits.json"
 _lock = threading.Lock()
 
 
+def _sync_to_drive(filepath: Path):
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
+
 # ═══════════════════════════════════════════════════════════
 #  HELPERS
 # ═══════════════════════════════════════════════════════════
@@ -300,6 +310,7 @@ def _create_rd_xlsx(name: str, bank: str, monthly_amount: float,
 
     wb.save(str(filepath))
     wb.close()
+    _sync_to_drive(filepath)
     return filepath
 
 
@@ -325,6 +336,7 @@ def _save_json(data: list, json_file: Path = None, dumps_dir: Path = None):
     dumps_dir.mkdir(parents=True, exist_ok=True)
     with open(json_file, "w") as f:
         json.dump(data, f, indent=2)
+    _sync_to_drive(json_file)
 
 
 # ═══════════════════════════════════════════════════════════

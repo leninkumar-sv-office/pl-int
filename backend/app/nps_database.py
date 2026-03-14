@@ -36,6 +36,16 @@ PDF_IMPORT_DIR = Path("/Users/lenin/Downloads/NPS")
 _lock = threading.Lock()
 _imported = False  # track whether PDF import has run this session
 
+
+def _sync_to_drive(filepath: Path):
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
 # Scheme short codes
 SCHEME_MAP = {"E": "Equity", "C": "Corporate Bonds", "G": "Government Securities"}
 
@@ -493,6 +503,7 @@ def _write_xlsx(filepath: Path, account: dict, transactions: list):
 
     filepath.parent.mkdir(parents=True, exist_ok=True)
     wb.save(filepath)
+    _sync_to_drive(filepath)
 
 
 def _read_xlsx(filepath: Path) -> dict:

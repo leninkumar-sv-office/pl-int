@@ -2,8 +2,8 @@ from pathlib import Path
 import json
 import os
 
-# Base dumps directory (Google Drive)
-DUMPS_BASE = Path("/Users/lenin/Google Drive/My Drive/pl/dumps")
+# Base dumps directory (local — synced from/to Google Drive via API)
+DUMPS_BASE = Path(os.path.dirname(__file__)).resolve().parent / "dumps"
 
 # Users config file
 _USERS_FILE = Path(os.path.dirname(__file__)) / ".." / "data" / "users.json"
@@ -30,6 +30,11 @@ def save_users(users: list):
     """Persist user list to users.json."""
     _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _USERS_FILE.write_text(json.dumps(users, indent=2))
+    try:
+        from . import drive_service
+        drive_service.sync_data_file("users.json")
+    except Exception:
+        pass
 
 
 def get_user_dumps_dir(user_id: str) -> Path:

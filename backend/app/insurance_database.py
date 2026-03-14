@@ -23,6 +23,16 @@ INSURANCE_FILE = DUMPS_DIR / "insurance_policies.json"
 _lock = threading.Lock()
 
 
+def _sync_to_drive(filepath: Path):
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
+
 # ═══════════════════════════════════════════════════════════
 #  LOAD / SAVE
 # ═══════════════════════════════════════════════════════════
@@ -40,6 +50,7 @@ def _save(data: list, json_file: Path = None):
     json_file.parent.mkdir(parents=True, exist_ok=True)
     with open(json_file, "w") as f:
         json.dump(data, f, indent=2)
+    _sync_to_drive(json_file)
 
 
 # ═══════════════════════════════════════════════════════════

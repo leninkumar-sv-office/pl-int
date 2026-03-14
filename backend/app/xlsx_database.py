@@ -19,6 +19,17 @@ from openpyxl.styles import Font, PatternFill
 
 from .models import Holding, SoldPosition, Transaction
 
+
+def _sync_to_drive(filepath: Path):
+    """Notify Drive service that a file was modified (async upload)."""
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass  # Drive sync is best-effort
+
 # ═══════════════════════════════════════════════════════════
 #  SYMBOL RESOLUTION  (dynamic from Zerodha + NSE, no hardcoding)
 # ═══════════════════════════════════════════════════════════
@@ -952,6 +963,7 @@ class XlsxPortfolio:
                 ws.cell(r, col_ab, value=sell_qty)                 # AB: Units
 
             wb.save(filepath)
+            _sync_to_drive(filepath)
         self._invalidate_symbol(symbol)
 
     def add_dividend(self, symbol: str, exchange: str, amount: float,
@@ -999,6 +1011,7 @@ class XlsxPortfolio:
                         abs(price - holding.buy_price) < 0.01):
                     ws.delete_rows(row_idx)
                     wb.save(filepath)
+                    _sync_to_drive(filepath)
                     # Find symbol for this file to invalidate cache
                     for sym, fp in self._file_map.items():
                         if fp == filepath:
@@ -1058,6 +1071,7 @@ class XlsxPortfolio:
                 changed = True
         if changed:
             wb.save(filepath)
+            _sync_to_drive(filepath)
         else:
             wb.close()
 
@@ -1264,6 +1278,7 @@ class XlsxPortfolio:
                 ws.cell(insert_at, 10, value="=Index!$C$2")
 
             wb.save(filepath)
+            _sync_to_drive(filepath)
 
     def _create_stock_file(self, symbol: str, exchange: str, company_name: str) -> Path:
         """Create a new xlsx file with proper template structure."""
@@ -1327,6 +1342,7 @@ class XlsxPortfolio:
         ws_idx.cell(11, 3, value=0)
 
         wb.save(filepath)
+        _sync_to_drive(filepath)
 
         # Register in maps
         self._file_map[symbol] = filepath
@@ -1357,6 +1373,7 @@ class XlsxPortfolio:
         prices[f"{symbol}.{exchange}"] = price
         with open(self._manual_prices_file, "w") as f:
             json.dump(prices, f, indent=2)
+        _sync_to_drive(self._manual_prices_file)
 
     def get_all_manual_prices(self) -> dict:
         try:

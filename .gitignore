@@ -30,10 +30,33 @@ node_modules/
 # Data dumps
 backend/dumps/
 
-# Env
+# Sensitive data / credentials
 .env
 .env.local
+backend/data/.jwt_secret
+backend/data/google_tokens.json
+backend/data/tokens.json
+
+# Python venv
 backend/venv/
-.DS_Store
+
+# Frontend build & vite temp files
 frontend/dist/
-frontend/vite.config.*
+frontend/vite.config.js.timestamp-*
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Test results & screenshots
+test-results/
+/*.png
+
+# Playwright test config (root-level)
+/package.json
+/package-lock.json
+/playwright.config.js
+
+# Misc generated / snapshot files
+/snapshot_tabs.md
+/stocks-tab-snapshot.md
+docs/superpowers/

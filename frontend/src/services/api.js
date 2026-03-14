@@ -44,6 +44,11 @@ export async function googleLogin(idToken) {
   return data;
 }
 
+export async function googleLoginWithCode(code) {
+  const { data } = await api.post('/auth/google-code', { code });
+  return data;
+}
+
 export async function verifySession() {
   const { data } = await api.get('/auth/verify');
   return data;

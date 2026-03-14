@@ -118,6 +118,16 @@ def on_startup():
     _start_ticker_bg_refresh()
     print("[App] Background market ticker refresh started (every 60s)")
 
+    # Sync data from Google Drive (for ephemeral deployments) — non-blocking
+    import threading
+    def _bg_drive_sync():
+        try:
+            from app import drive_service
+            drive_service.sync_from_drive()
+        except Exception as e:
+            print(f"[App] Drive sync skipped: {e}")
+    threading.Thread(target=_bg_drive_sync, daemon=True).start()
+
 
 @app.on_event("shutdown")
 def on_shutdown():
@@ -290,6 +300,30 @@ def google_login(body: dict):
     }
 
 
+@app.post("/api/auth/google-code")
+def google_login_with_code(body: dict):
+    """Exchange Google OAuth authorization code for session + Drive tokens."""
+    auth_code = body.get("code", "").strip()
+    if not auth_code:
+        raise HTTPException(400, "code is required")
+    if not auth_module.is_auth_enabled():
+        raise HTTPException(400, "Google auth is not enabled")
+    try:
+        result = auth_module.exchange_auth_code(auth_code)
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        print(f"[Auth] Code exchange failed: {e}")
+        raise HTTPException(401, "Failed to exchange authorization code")
+    session_token = auth_module.create_session_token(result["email"], result["name"])
+    return {
+        "session_token": session_token,
+        "email": result["email"],
+        "name": result["name"],
+        "picture": result["picture"],
+    }
+
+
 @app.get("/api/auth/verify")
 def verify_session(request: Request):
     """Verify a session token is still valid."""
@@ -300,6 +334,25 @@ def verify_session(request: Request):
     if not session:
         raise HTTPException(401, "Invalid or expired session")
     return session
+
+
+# ══════════════════════════════════════════════════════════
+#  GOOGLE DRIVE SYNC ENDPOINTS
+# ══════════════════════════════════════════════════════════
+
+@app.get("/api/drive/status")
+def drive_status():
+    """Check Google Drive sync status."""
+    from app import drive_service
+    return drive_service.get_drive_status()
+
+
+@app.post("/api/drive/sync")
+def drive_sync_now():
+    """Trigger a full sync from Drive."""
+    from app import drive_service
+    drive_service.sync_from_drive()
+    return {"status": "ok", "message": "Sync complete"}
 
 
 # ══════════════════════════════════════════════════════════
@@ -476,6 +529,8 @@ def parse_dividend_statement_preview(req: DividendStatementUpload):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
 
+    pdf_bytes = _try_decrypt_pdf(pdf_bytes)
+
     try:
         result = dividend_parser.parse_dividend_statement(
             pdf_bytes=pdf_bytes,
@@ -569,6 +624,47 @@ def import_dividends_confirmed(req: dict):
 
 
 # ══════════════════════════════════════════════════════════
+#  PDF DECRYPTION HELPER
+# ══════════════════════════════════════════════════════════
+
+# Common passwords to try for encrypted PDFs (PAN numbers, etc.)
+_PDF_PASSWORDS = ["AEPPL3176B", "aeppl3176b"]
+
+
+def _try_decrypt_pdf(pdf_bytes: bytes) -> bytes:
+    """If PDF is password-protected, try common passwords and return decrypted bytes.
+    Returns original bytes if PDF is not encrypted or if decryption succeeds."""
+    import pikepdf
+    import io
+
+    # Quick check: try opening without password first
+    try:
+        reader = pikepdf.open(io.BytesIO(pdf_bytes))
+        reader.close()
+        return pdf_bytes  # Not encrypted
+    except pikepdf._core.PasswordError:
+        pass  # Encrypted — try passwords below
+    except Exception:
+        return pdf_bytes  # Some other issue — let downstream parser handle it
+
+    for pw in _PDF_PASSWORDS:
+        try:
+            reader = pikepdf.open(io.BytesIO(pdf_bytes), password=pw)
+            out = io.BytesIO()
+            reader.save(out)
+            reader.close()
+            return out.getvalue()
+        except Exception:
+            continue
+
+    raise HTTPException(
+        status_code=400,
+        detail="PDF is password-protected and could not be decrypted. "
+               "Please provide an unencrypted PDF or contact support."
+    )
+
+
+# ══════════════════════════════════════════════════════════
 #  CONTRACT NOTE PDF IMPORT
 # ══════════════════════════════════════════════════════════
 
@@ -589,6 +685,8 @@ def _decode_and_parse_pdf(req: ContractNoteUpload) -> dict:
         pdf_bytes = base64.b64decode(req.pdf_base64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
+
+    pdf_bytes = _try_decrypt_pdf(pdf_bytes)
 
     try:
         return contract_note_parser.parse_contract_note_from_bytes(pdf_bytes)
@@ -1727,6 +1825,11 @@ def _save_ticker_file(tickers: List[dict]):
             })
     with open(_TICKER_FILE, "w") as f:
         json.dump(result, f, indent=2)
+    try:
+        from app import drive_service
+        drive_service.sync_data_file("market_ticker.json")
+    except Exception:
+        pass
 
 
 def _record_ticker_history(tickers: List[dict]):
@@ -1758,6 +1861,11 @@ def _record_ticker_history(tickers: List[dict]):
         os.makedirs(os.path.dirname(_TICKER_HISTORY_FILE), exist_ok=True)
         with open(_TICKER_HISTORY_FILE, "w") as f:
             json.dump(history, f, indent=2)
+        try:
+            from app import drive_service
+            drive_service.sync_data_file("market_ticker_history.json")
+        except Exception:
+            pass
 
     return history
 
@@ -2098,6 +2206,7 @@ def parse_cdsl_cas_endpoint(req: CDSLCASUpload):
         pdf_bytes = base64.b64decode(req.pdf_base64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
+    pdf_bytes = _try_decrypt_pdf(pdf_bytes)
     try:
         result = parse_cdsl_cas(pdf_bytes)
         return result

@@ -55,6 +55,17 @@ PPF_JSON_FILE = DUMPS_DIR / "ppf_accounts.json"  # legacy, for migration
 
 _lock = threading.Lock()
 
+
+def _sync_to_drive(filepath: Path):
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
+
 # PPF constants
 PPF_DEFAULT_RATE = 7.1   # current rate (%)
 PPF_TENURE_YEARS = 15
@@ -650,6 +661,7 @@ def _create_ppf_xlsx(name: str, bank: str, sip_amount: float,
 
     wb.save(str(filepath))
     wb.close()
+    _sync_to_drive(filepath)
 
     # Clean up any legacy sidecar meta files
     meta_file = filepath.with_suffix(".meta.json")
