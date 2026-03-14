@@ -43,7 +43,7 @@ jobs:
 
           # Stop existing app via launchctl
           launchctl bootout gui/$(id -u)/$PLIST_LABEL 2>/dev/null || true
-          sleep 1
+          sleep 2
 
           # Kill any leftover process on port 8000
           lsof -ti:8000 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
@@ -87,10 +87,6 @@ jobs:
           rm -rf /tmp/pl-data-backup
 
           # Write .env file from GitHub Secrets
-          cat > "$DEPLOY_DIR/.env" <<'ENVEOF'
-          PLACEHOLDER
-          ENVEOF
-          # Write actual values (can't use heredoc with secrets safely)
           printf '%s\n' \
             "ZERODHA_API_KEY=${{ secrets.ZERODHA_API_KEY }}" \
             "ZERODHA_API_SECRET=${{ secrets.ZERODHA_API_SECRET }}" \
@@ -120,42 +116,78 @@ jobs:
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt --quiet
+          deactivate
           echo "Python deps installed"
 
-          # Make start script executable
-          chmod +x "$DEPLOY_DIR/scripts/start-prod.sh"
+          # Create LaunchAgent plist — runs venv python directly with env vars baked in
+          VENV_PYTHON="$DEPLOY_DIR/backend/venv/bin/python3"
 
-          # Clear old log
-          > "$DEPLOY_DIR/app.log"
-
-          # Create LaunchAgent plist to run the app
-          cat > "$PLIST_PATH" <<PLISTEOF
+          cat > "$PLIST_PATH" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>Label</key>
-            <string>$PLIST_LABEL</string>
+            <string>${PLIST_LABEL}</string>
             <key>ProgramArguments</key>
             <array>
-              <string>/bin/bash</string>
-              <string>$DEPLOY_DIR/scripts/start-prod.sh</string>
+              <string>${VENV_PYTHON}</string>
+              <string>-m</string>
+              <string>uvicorn</string>
+              <string>app.main:app</string>
+              <string>--host</string>
+              <string>0.0.0.0</string>
+              <string>--port</string>
+              <string>8000</string>
             </array>
+            <key>WorkingDirectory</key>
+            <string>${DEPLOY_DIR}/backend</string>
+            <key>EnvironmentVariables</key>
+            <dict>
+              <key>PATH</key>
+              <string>${DEPLOY_DIR}/backend/venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+              <key>VIRTUAL_ENV</key>
+              <string>${DEPLOY_DIR}/backend/venv</string>
+              <key>ZERODHA_API_KEY</key>
+              <string>${{ secrets.ZERODHA_API_KEY }}</string>
+              <key>ZERODHA_API_SECRET</key>
+              <string>${{ secrets.ZERODHA_API_SECRET }}</string>
+              <key>ZERODHA_ACCESS_TOKEN</key>
+              <string>${{ secrets.ZERODHA_ACCESS_TOKEN }}</string>
+              <key>ZERODHA_USER_ID</key>
+              <string>${{ secrets.ZERODHA_USER_ID }}</string>
+              <key>ZERODHA_PASSWORD</key>
+              <string>${{ secrets.ZERODHA_PASSWORD }}</string>
+              <key>ZERODHA_TOTP_SECRET</key>
+              <string>${{ secrets.ZERODHA_TOTP_SECRET }}</string>
+              <key>AUTH_MODE</key>
+              <string>${{ secrets.AUTH_MODE }}</string>
+              <key>GOOGLE_CLIENT_ID</key>
+              <string>${{ secrets.GOOGLE_CLIENT_ID }}</string>
+              <key>ALLOWED_EMAILS</key>
+              <string>${{ secrets.ALLOWED_EMAILS }}</string>
+              <key>GOOGLE_CLIENT_SECRET</key>
+              <string>${{ secrets.GOOGLE_CLIENT_SECRET }}</string>
+              <key>GOOGLE_DRIVE_DUMPS_FOLDER_ID</key>
+              <string>${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}</string>
+            </dict>
             <key>RunAtLoad</key>
             <true/>
             <key>KeepAlive</key>
             <true/>
             <key>StandardOutPath</key>
-            <string>$DEPLOY_DIR/app.log</string>
+            <string>${DEPLOY_DIR}/app.log</string>
             <key>StandardErrorPath</key>
-            <string>$DEPLOY_DIR/app.log</string>
-            <key>WorkingDirectory</key>
-            <string>$DEPLOY_DIR/backend</string>
+            <string>${DEPLOY_DIR}/app.log</string>
           </dict>
           </plist>
-          PLISTEOF
+          EOF
           # Remove leading whitespace from heredoc
           sed -i '' 's/^          //' "$PLIST_PATH"
+          echo "LaunchAgent plist written"
+
+          # Clear old log
+          > "$DEPLOY_DIR/app.log"
 
           # Load and start the app via launchctl
           launchctl bootstrap gui/$(id -u) "$PLIST_PATH"
@@ -164,16 +196,18 @@ jobs:
       - name: Health check
         run: |
           echo "Waiting for app to be ready..."
-          for i in $(seq 1 24); do
+          for i in $(seq 1 30); do
             if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-              echo "App is healthy! (attempt $i/24)"
+              echo "App is healthy! (attempt $i/30)"
               curl -s http://localhost:8000/health | python3 -m json.tool
               exit 0
             fi
-            echo "  Attempt $i/24: not ready yet"
+            echo "  Attempt $i/30: not ready yet"
             sleep 5
           done
-          echo "Health check failed after 2 minutes"
+          echo "Health check failed after 2.5 minutes"
           echo "--- App logs ---"
           tail -50 /Users/lenin/Desktop/workspace/pl-auto/app.log 2>/dev/null || echo "No logs found"
+          echo "--- LaunchAgent status ---"
+          launchctl list | grep pl || echo "Not loaded"
           exit 1
