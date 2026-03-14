@@ -17,9 +17,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_DRIVE_DUMPS_FOLDER_ID=${GOOGLE_DRIVE_DUMPS_FOLDER_ID}
     volumes:
-      # Persist xlsx data — mounted from pl-auto/dumps on host
-      - /Users/lenin/Desktop/workspace/pl-auto/dumps:/app/backend/dumps
-      # Persist ticker data, users, tokens
+      # Persist xlsx data and ticker data across deploys
+      - ./backend/dumps:/app/backend/dumps
       - ./backend/data:/app/backend/data
     restart: unless-stopped
     stop_grace_period: 30s
