@@ -36,21 +36,25 @@ jobs:
         env:
           DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
           DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
+          PLIST_LABEL: com.pl.dashboard
+          PLIST_PATH: /Users/lenin/Library/LaunchAgents/com.pl.dashboard.plist
         run: |
           echo "── Deploying ${{ steps.tag.outputs.tag }} ──"
 
-          # Kill any existing process on port 8000
+          # Stop existing app via launchctl
+          launchctl bootout gui/$(id -u)/$PLIST_LABEL 2>/dev/null || true
+          sleep 1
+
+          # Kill any leftover process on port 8000
           lsof -ti:8000 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
           sleep 1
 
-          # Clean the deploy directory completely (preserve dumps)
+          # Backup dumps and data before cleaning
           if [ -d "$DEPLOY_DIR" ]; then
-            # Save dumps before cleaning
             if [ -d "$DEPLOY_DIR/backend/dumps" ]; then
               mkdir -p /tmp/pl-dumps-backup
               cp -a "$DEPLOY_DIR/backend/dumps/." /tmp/pl-dumps-backup/ 2>/dev/null || true
             fi
-            # Save data dir (ticker data, users, tokens)
             if [ -d "$DEPLOY_DIR/backend/data" ]; then
               mkdir -p /tmp/pl-data-backup
               cp -a "$DEPLOY_DIR/backend/data/." /tmp/pl-data-backup/ 2>/dev/null || true
@@ -58,7 +62,7 @@ jobs:
             rm -rf "$DEPLOY_DIR"
           fi
 
-          # Fresh clone from the checked-out workspace
+          # Fresh clone
           git clone "$GITHUB_WORKSPACE" "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
           git checkout ${{ steps.tag.outputs.tag }}
@@ -69,7 +73,6 @@ jobs:
             cp -a /tmp/pl-dumps-backup/. "$DEPLOY_DIR/backend/dumps/"
             echo "Restored dumps from backup"
           fi
-          # Seed from dev workspace if still empty
           if [ -d "$DEV_DUMPS" ] && [ -n "$(ls -A "$DEV_DUMPS" 2>/dev/null)" ]; then
             rsync -a --ignore-existing "$DEV_DUMPS/" "$DEPLOY_DIR/backend/dumps/"
             echo "Synced dumps from dev workspace"
@@ -84,21 +87,23 @@ jobs:
           rm -rf /tmp/pl-data-backup
 
           # Write .env file from GitHub Secrets
-          cat > "$DEPLOY_DIR/.env" <<ENVEOF
-          ZERODHA_API_KEY=${{ secrets.ZERODHA_API_KEY }}
-          ZERODHA_API_SECRET=${{ secrets.ZERODHA_API_SECRET }}
-          ZERODHA_ACCESS_TOKEN=${{ secrets.ZERODHA_ACCESS_TOKEN }}
-          ZERODHA_USER_ID=${{ secrets.ZERODHA_USER_ID }}
-          ZERODHA_PASSWORD=${{ secrets.ZERODHA_PASSWORD }}
-          ZERODHA_TOTP_SECRET=${{ secrets.ZERODHA_TOTP_SECRET }}
-          AUTH_MODE=${{ secrets.AUTH_MODE }}
-          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-          ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}
-          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}
+          cat > "$DEPLOY_DIR/.env" <<'ENVEOF'
+          PLACEHOLDER
           ENVEOF
-          # Remove leading whitespace from heredoc indentation
-          sed -i '' 's/^          //' "$DEPLOY_DIR/.env"
+          # Write actual values (can't use heredoc with secrets safely)
+          printf '%s\n' \
+            "ZERODHA_API_KEY=${{ secrets.ZERODHA_API_KEY }}" \
+            "ZERODHA_API_SECRET=${{ secrets.ZERODHA_API_SECRET }}" \
+            "ZERODHA_ACCESS_TOKEN=${{ secrets.ZERODHA_ACCESS_TOKEN }}" \
+            "ZERODHA_USER_ID=${{ secrets.ZERODHA_USER_ID }}" \
+            "ZERODHA_PASSWORD=${{ secrets.ZERODHA_PASSWORD }}" \
+            "ZERODHA_TOTP_SECRET=${{ secrets.ZERODHA_TOTP_SECRET }}" \
+            "AUTH_MODE=${{ secrets.AUTH_MODE }}" \
+            "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            "ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}" \
+            "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
+            > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
           echo ".env written with secrets"
 
@@ -117,30 +122,56 @@ jobs:
           pip install -r requirements.txt --quiet
           echo "Python deps installed"
 
-          # Start the app in background with nohup
-          echo "── Starting app ──"
-          cd "$DEPLOY_DIR/backend"
-          source venv/bin/activate
-          # Load .env into environment
-          set -a
-          source "$DEPLOY_DIR/.env"
-          set +a
-          nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > "$DEPLOY_DIR/app.log" 2>&1 &
-          APP_PID=$!
-          echo "App started with PID $APP_PID"
-          echo "$APP_PID" > "$DEPLOY_DIR/app.pid"
+          # Make start script executable
+          chmod +x "$DEPLOY_DIR/scripts/start-prod.sh"
+
+          # Clear old log
+          > "$DEPLOY_DIR/app.log"
+
+          # Create LaunchAgent plist to run the app
+          cat > "$PLIST_PATH" <<PLISTEOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key>
+            <string>$PLIST_LABEL</string>
+            <key>ProgramArguments</key>
+            <array>
+              <string>/bin/bash</string>
+              <string>$DEPLOY_DIR/scripts/start-prod.sh</string>
+            </array>
+            <key>RunAtLoad</key>
+            <true/>
+            <key>KeepAlive</key>
+            <true/>
+            <key>StandardOutPath</key>
+            <string>$DEPLOY_DIR/app.log</string>
+            <key>StandardErrorPath</key>
+            <string>$DEPLOY_DIR/app.log</string>
+            <key>WorkingDirectory</key>
+            <string>$DEPLOY_DIR/backend</string>
+          </dict>
+          </plist>
+          PLISTEOF
+          # Remove leading whitespace from heredoc
+          sed -i '' 's/^          //' "$PLIST_PATH"
+
+          # Load and start the app via launchctl
+          launchctl bootstrap gui/$(id -u) "$PLIST_PATH"
+          echo "App started via LaunchAgent"
 
       - name: Health check
         run: |
           echo "Waiting for app to be ready..."
-          for i in $(seq 1 12); do
+          for i in $(seq 1 24); do
             if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-              echo "App is healthy! (attempt $i/12)"
+              echo "App is healthy! (attempt $i/24)"
               curl -s http://localhost:8000/health | python3 -m json.tool
               exit 0
             fi
-            echo "  Attempt $i/12: not ready yet"
-            sleep 10
+            echo "  Attempt $i/24: not ready yet"
+            sleep 5
           done
           echo "Health check failed after 2 minutes"
           echo "--- App logs ---"
