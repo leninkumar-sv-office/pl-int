@@ -80,9 +80,10 @@ jobs:
           done
           sleep 1
 
-          # Graceful shutdown of existing container
+          # Graceful shutdown and remove old container + image
           docker compose stop --timeout 30 2>/dev/null || true
-          docker compose down --remove-orphans 2>/dev/null || true
+          docker compose down --rmi all --remove-orphans 2>/dev/null || true
+          docker image prune -f 2>/dev/null || true
 
           # Deploy — secrets are passed as env vars via docker-compose.yml
           docker compose up -d --build
