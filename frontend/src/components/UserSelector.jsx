@@ -48,17 +48,18 @@ export default function UserSelector({ currentUserId, onUserChange }) {
       <button
         onClick={() => setOpen(!open)}
         style={{
-          width: '32px', height: '32px', borderRadius: '50%',
+          height: '32px', borderRadius: '16px',
           background: currentUser.color || 'var(--blue)',
           color: '#fff', border: '2px solid transparent',
-          fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+          fontSize: '12px', fontWeight: 600, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '0 12px', whiteSpace: 'nowrap',
           transition: 'border-color 0.2s',
           borderColor: open ? 'var(--text)' : 'transparent',
         }}
         title={currentUser.name}
       >
-        {currentUser.avatar || currentUser.name[0]}
+        {currentUser.name}
       </button>
 
       {/* Dropdown */}
@@ -131,6 +132,28 @@ export default function UserSelector({ currentUserId, onUserChange }) {
               >+ Add user</button>
             )}
           </div>
+
+          {/* Auth user + Sign out */}
+          {localStorage.getItem('sessionToken') && (() => {
+            const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+            return authUser.name ? (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}>{authUser.name}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>{authUser.email}</div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('sessionToken');
+                    localStorage.removeItem('authUser');
+                    window.location.reload();
+                  }}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--red, #ff4757)',
+                    fontSize: '12px', cursor: 'pointer', padding: 0, fontWeight: 500,
+                  }}
+                >Sign out</button>
+              </div>
+            ) : null;
+          })()}
         </div>
       )}
     </div>

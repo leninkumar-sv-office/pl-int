@@ -1222,29 +1222,6 @@ export default function App() {
         <div className="header-actions">
           {/* User selector */}
           <UserSelector currentUserId={currentUserId} onUserChange={handleUserChange} />
-          {localStorage.getItem('sessionToken') && (() => {
-            const authUser = JSON.parse(localStorage.getItem('authUser') || '{}');
-            const initial = (authUser.name || authUser.email || '?')[0].toUpperCase();
-            return (
-              <button
-                onClick={() => {
-                  localStorage.removeItem('sessionToken');
-                  localStorage.removeItem('authUser');
-                  window.location.reload();
-                }}
-                title={`Sign out (${authUser.email || ''})`}
-                style={{
-                  width: 28, height: 28, borderRadius: '50%', border: 'none',
-                  background: 'var(--blue)', color: '#fff', fontSize: '13px',
-                  fontWeight: 600, cursor: 'pointer', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', padding: 0,
-                  ...(authUser.picture ? { backgroundImage: `url(${authUser.picture})`, backgroundSize: 'cover', color: 'transparent' } : {}),
-                }}
-              >
-                {initial}
-              </button>
-            );
-          })()}
           {/* Zerodha status */}
           {zerodhaStatus && (
             <div className="zerodha-status" title={
