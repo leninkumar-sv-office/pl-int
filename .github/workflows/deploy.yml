@@ -10,6 +10,11 @@ permissions:
 jobs:
   tag-and-deploy:
     runs-on: self-hosted
+    env:
+      DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
+      DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
+      DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,7 +23,6 @@ jobs:
       - name: Create auto-increment tag
         id: tag
         run: |
-          # Find latest prod-N tag
           latest=$(git tag -l 'prod-*' --sort=-v:refname | head -1)
           if [ -z "$latest" ]; then
             next=1
@@ -32,16 +36,26 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Created tag: $tag"
 
-      - name: Deploy to pl-auto
-        env:
-          DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
-          DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
+      - name: Stop old deployment
+        run: |
+          # Stop and remove old Docker container + images
+          cd "$DEPLOY_DIR" 2>/dev/null && \
+            docker compose down --rmi all --remove-orphans 2>/dev/null || true
+          docker image prune -f 2>/dev/null || true
+
+          # Kill any non-Docker process on port 8000
+          lsof -ti:8000 -sTCP:LISTEN | while read pid; do
+            cmd=$(ps -p "$pid" -o comm= 2>/dev/null)
+            if [ "$cmd" != "com.docker.ba" ] && [ "$cmd" != "vpnkit-bridge" ]; then
+              kill -9 "$pid" 2>/dev/null || true
+            fi
+          done
+          sleep 1
+          echo "Old deployment stopped"
+
+      - name: Clone and prepare
         run: |
           echo "── Deploying ${{ steps.tag.outputs.tag }} ──"
-
-          # Kill any existing process on port 8000
-          lsof -ti:8000 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
-          sleep 1
 
           # Backup dumps and data before cleaning
           if [ -d "$DEPLOY_DIR" ]; then
@@ -95,72 +109,28 @@ jobs:
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
-          echo ".env written with secrets"
+          echo "Deploy directory ready"
 
-          # Build frontend
-          echo "── Building frontend ──"
-          cd "$DEPLOY_DIR/frontend"
-          npm install --silent 2>/dev/null
-          npm run build
-          echo "Frontend built"
-
-          # Setup Python venv and install deps
-          echo "── Setting up Python environment ──"
-          cd "$DEPLOY_DIR/backend"
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt --quiet
-          deactivate
-          echo "Python deps installed"
-
-          # Write startup script
-          cat > "$DEPLOY_DIR/start.sh" <<'STARTEOF'
-          #!/bin/bash
-          cd /Users/lenin/Desktop/workspace/pl-auto/backend
-          source venv/bin/activate
-          set -a
-          source /Users/lenin/Desktop/workspace/pl-auto/.env
-          set +a
-          exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-          STARTEOF
-          sed -i '' 's/^          //' "$DEPLOY_DIR/start.sh"
-          chmod +x "$DEPLOY_DIR/start.sh"
-
-          # Clear old log
-          > "$DEPLOY_DIR/app.log"
-
-          # Start app — unset RUNNER_TRACKING_ID so runner won't kill it on job end
-          echo "── Starting app ──"
-          (unset RUNNER_TRACKING_ID; nohup bash "$DEPLOY_DIR/start.sh" >> "$DEPLOY_DIR/app.log" 2>&1 &)
-          sleep 2
-          echo "App process started"
-          lsof -ti:8000 -sTCP:LISTEN && echo "Port 8000 is listening" || echo "Waiting for port 8000..."
+      - name: Docker build and start
+        run: |
+          cd "$DEPLOY_DIR"
+          docker compose --env-file .env up -d --build
+          echo "Docker container started"
 
       - name: Health check
         run: |
-          echo "Waiting for app to be ready..."
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-              echo "App is healthy! (attempt $i/30)"
+          echo "Waiting for container to be healthy..."
+          for i in $(seq 1 24); do
+            health=$(docker inspect --format='{{.State.Health.Status}}' pl-dashboard 2>/dev/null || echo "starting")
+            echo "  Attempt $i/24: $health"
+            if [ "$health" = "healthy" ]; then
+              echo "Container is healthy!"
               curl -s http://localhost:8000/health | python3 -m json.tool
               exit 0
             fi
-            echo "  Attempt $i/30: not ready yet"
             sleep 5
           done
-          echo "Health check failed after 2.5 minutes"
-          echo "--- App logs ---"
-          tail -50 /Users/lenin/Desktop/workspace/pl-auto/app.log 2>/dev/null || echo "No logs found"
-          echo "--- Port 8000 ---"
-          lsof -ti:8000 || echo "Nothing on port 8000"
+          echo "Health check failed after 2 minutes"
+          echo "--- Container logs ---"
+          docker compose -f "$DEPLOY_DIR/docker-compose.yml" logs --tail=50 2>/dev/null
           exit 1
-
-      - name: Verify app persists after job
-        run: |
-          PID=$(lsof -ti:8000 -sTCP:LISTEN 2>/dev/null || true)
-          if [ -n "$PID" ]; then
-            echo "App running with PID $PID — will persist after job ends"
-            echo "$PID" > /Users/lenin/Desktop/workspace/pl-auto/app.pid
-          else
-            echo "WARNING: App not detected on port 8000"
-          fi
