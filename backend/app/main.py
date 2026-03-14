@@ -118,15 +118,13 @@ def on_startup():
     _start_ticker_bg_refresh()
     print("[App] Background market ticker refresh started (every 60s)")
 
-    # Sync data from Google Drive (for ephemeral deployments) — non-blocking
-    import threading
-    def _bg_drive_sync():
-        try:
-            from app import drive_service
-            drive_service.sync_from_drive()
-        except Exception as e:
-            print(f"[App] Drive sync skipped: {e}")
-    threading.Thread(target=_bg_drive_sync, daemon=True).start()
+    # Sync data from Google Drive — blocks startup until complete
+    # so that database modules find files on first request
+    try:
+        from app import drive_service
+        drive_service.sync_from_drive()
+    except Exception as e:
+        print(f"[App] Drive sync skipped: {e}")
 
 
 @app.on_event("shutdown")
