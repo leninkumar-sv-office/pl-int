@@ -1,7 +1,7 @@
 {
   "TMCV.NSE": {
     "price": 425.65,
-    "name": "Tata Motors Ltd",
+    "name": "TMCV",
     "week_52_high": 509,
     "week_52_low": 306.3,
     "day_change": -17.9,
@@ -13,7 +13,7 @@
   },
   "TMCV.BSE": {
     "price": 425.75,
-    "name": "Tata Motors Ltd",
+    "name": "TMCV",
     "week_52_high": 508.95,
     "week_52_low": 306,
     "day_change": -17.85,
@@ -25,7 +25,7 @@
   },
   "IDEA.NSE": {
     "price": 9.27,
-    "name": "Vodafone Idea Limited",
+    "name": "IDEA",
     "week_52_high": 12.8,
     "week_52_low": 6.12,
     "day_change": -0.29,
@@ -37,7 +37,7 @@
   },
   "PIIND.NSE": {
     "price": 2896.3,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4330,
     "week_52_low": 2840.1,
     "day_change": -56.1,
@@ -49,7 +49,7 @@
   },
   "PIIND.BSE": {
     "price": 2901.7,
-    "name": "PI Industries Ltd",
+    "name": "PIIND",
     "week_52_high": 4329,
     "week_52_low": 2841.6,
     "day_change": -50.55,
@@ -61,7 +61,7 @@
   },
   "RAILTEL.NSE": {
     "price": 278.0,
-    "name": "Railtel Corporation of India Ltd",
+    "name": "RAILTEL",
     "week_52_high": 478.95,
     "week_52_low": 266,
     "day_change": -9.1,
@@ -73,7 +73,7 @@
   },
   "TATACHEM.BSE": {
     "price": 672.6,
-    "name": "Tata Chemicals",
+    "name": "TATACHEM",
     "week_52_high": 1026,
     "week_52_low": 668.55,
     "day_change": -10.45,
@@ -85,7 +85,7 @@
   },
   "TRENT.NSE": {
     "price": 3487.8,
-    "name": "Trent",
+    "name": "TRENT",
     "week_52_high": 6261,
     "week_52_low": 3470.2,
     "day_change": -45.8,
@@ -97,7 +97,7 @@
   },
   "TRENT.BSE": {
     "price": 3490.4,
-    "name": "Trent",
+    "name": "TRENT",
     "week_52_high": 6259,
     "week_52_low": 3470.7,
     "day_change": -41.75,
@@ -109,7 +109,7 @@
   },
   "TATATECH.NSE": {
     "price": 540.35,
-    "name": "Tata Technologies Ltd",
+    "name": "TATATECH",
     "week_52_high": 797,
     "week_52_low": 537.2,
     "day_change": -11.5,
@@ -121,7 +121,7 @@
   },
   "RALLIS.NSE": {
     "price": 240.1,
-    "name": "Rallis India Ltd",
+    "name": "RALLIS",
     "week_52_high": 385.9,
     "week_52_low": 196.78,
     "day_change": -7.25,
@@ -133,7 +133,7 @@
   },
   "RALLIS.BSE": {
     "price": 239.25,
-    "name": "Rallis India Ltd",
+    "name": "RALLIS",
     "week_52_high": 385.6,
     "week_52_low": 197,
     "day_change": -8.15,
@@ -145,7 +145,7 @@
   },
   "TATATECH.BSE": {
     "price": 540.15,
-    "name": "Tata Technologies Ltd",
+    "name": "TATATECH",
     "week_52_high": 797,
     "week_52_low": 537.2,
     "day_change": -12.3,
@@ -181,7 +181,7 @@
   },
   "RITES.NSE": {
     "price": 196.84,
-    "name": "Rites Ltd",
+    "name": "RITES",
     "week_52_high": 316,
     "week_52_low": 194.65,
     "day_change": -2.81,
@@ -193,7 +193,7 @@
   },
   "RITES.BSE": {
     "price": 196.95,
-    "name": "Rites Ltd",
+    "name": "RITES",
     "week_52_high": 316.15,
     "week_52_low": 194.65,
     "day_change": -2.95,
@@ -205,7 +205,7 @@
   },
   "RVNL.NSE": {
     "price": 271.25,
-    "name": "Rail Vikas Nigam",
+    "name": "RVNL",
     "week_52_high": 447.8,
     "week_52_low": 270.35,
     "day_change": -8.35,
@@ -217,7 +217,7 @@
   },
   "RVNL.BSE": {
     "price": 271.25,
-    "name": "Rail Vikas Nigam",
+    "name": "RVNL",
     "week_52_high": 448,
     "week_52_low": 270.5,
     "day_change": -8.25,
@@ -229,7 +229,7 @@
   },
   "LICI.NSE": {
     "price": 772.7,
-    "name": "Life Insurance Corporation Of India",
+    "name": "LICI",
     "week_52_high": 980,
     "week_52_low": 737.7,
     "day_change": -23.95,
@@ -241,7 +241,7 @@
   },
   "LICI.BSE": {
     "price": 773.1,
-    "name": "Life Insurance Corporation Of India",
+    "name": "LICI",
     "week_52_high": 980.05,
     "week_52_low": 738,
     "day_change": -23.4,
@@ -253,7 +253,7 @@
   },
   "OIL.NSE": {
     "price": 470.55,
-    "name": "Oil India Ltd",
+    "name": "OIL",
     "week_52_high": 524,
     "week_52_low": 325,
     "day_change": -8.75,
@@ -265,7 +265,7 @@
   },
   "TRITURBINE.NSE": {
     "price": 459.45,
-    "name": "Triveni Turbine Limited",
+    "name": "TRITURBINE",
     "week_52_high": 675.2,
     "week_52_low": 454.1,
     "day_change": -10.85,
@@ -277,7 +277,7 @@
   },
   "TRITURBINE.BSE": {
     "price": 458.8,
-    "name": "Triveni Turbine Limited",
+    "name": "TRITURBINE",
     "week_52_high": 675.4,
     "week_52_low": 454.4,
     "day_change": -11.6,
@@ -289,7 +289,7 @@
   },
   "TATACHEM.NSE": {
     "price": 670.8,
-    "name": "Tata Chemicals",
+    "name": "TATACHEM",
     "week_52_high": 1026.65,
     "week_52_low": 668.1,
     "day_change": -12.35,
@@ -301,7 +301,7 @@
   },
   "SBILIFE.NSE": {
     "price": 1904.4,
-    "name": "SBI Life Insurance Company Ltd",
+    "name": "SBILIFE",
     "week_52_high": 2132,
     "week_52_low": 1392,
     "day_change": -35.0,
@@ -313,7 +313,7 @@
   },
   "SBILIFE.BSE": {
     "price": 1920.0,
-    "name": "SBI Life Insurance Company Ltd",
+    "name": "SBILIFE",
     "week_52_high": 2132.9,
     "week_52_low": 1391.15,
     "day_change": -21.1,
@@ -325,7 +325,7 @@
   },
   "SUNTV.NSE": {
     "price": 562.8,
-    "name": "Sun TV Network Ltd",
+    "name": "SUNTV",
     "week_52_high": 691.4,
     "week_52_low": 480.2,
     "day_change": -30.5,
@@ -337,7 +337,7 @@
   },
   "SBIN.NSE": {
     "price": 1047.0,
-    "name": "State Bank of India",
+    "name": "SBIN",
     "week_52_high": 1234.7,
     "week_52_low": 722.3,
     "day_change": -38.2,
@@ -349,7 +349,7 @@
   },
   "TITAGARH.NSE": {
     "price": 639.4,
-    "name": "TITAGARH RAIL SYSTEMS LIMITED",
+    "name": "TITAGARH",
     "week_52_high": 974.35,
     "week_52_low": 637.7,
     "day_change": -16.45,
@@ -361,7 +361,7 @@
   },
   "TITAGARH.BSE": {
     "price": 639.0,
-    "name": "TITAGARH RAIL SYSTEMS LIMITED",
+    "name": "TITAGARH",
     "week_52_high": 974.05,
     "week_52_low": 637.75,
     "day_change": -17.4,
@@ -373,7 +373,7 @@
   },
   "NATIONALUM.NSE": {
     "price": 387.35,
-    "name": "National Aluminium Company Limited",
+    "name": "NATIONALUM",
     "week_52_high": 431.5,
     "week_52_low": 137.75,
     "day_change": -21.8,
@@ -385,7 +385,7 @@
   },
   "WABAG.NSE": {
     "price": 1227.6,
-    "name": "Va Tech Wabag Ltd",
+    "name": "WABAG",
     "week_52_high": 1680,
     "week_52_low": 1033,
     "day_change": -51.9,
@@ -397,7 +397,7 @@
   },
   "TATASTEEL.NSE": {
     "price": 183.51,
-    "name": "Tata Steel Ltd",
+    "name": "TATASTEEL",
     "week_52_high": 216.45,
     "week_52_low": 122.44,
     "day_change": -9.96,
@@ -409,7 +409,7 @@
   },
   "TATASTEEL.BSE": {
     "price": 183.4,
-    "name": "Tata Steel Ltd",
+    "name": "TATASTEEL",
     "week_52_high": 216.5,
     "week_52_low": 121.35,
     "day_change": -10.05,
@@ -421,7 +421,7 @@
   },
   "WABAG.BSE": {
     "price": 1227.5,
-    "name": "Va Tech Wabag Ltd",
+    "name": "WABAG",
     "week_52_high": 1679,
     "week_52_low": 1033.95,
     "day_change": -48.35,
@@ -433,7 +433,7 @@
   },
   "TATACAP.NSE": {
     "price": 313.05,
-    "name": "TATA Capital",
+    "name": "TATACAP",
     "week_52_high": 367.3,
     "week_52_low": 309,
     "day_change": -5.55,
@@ -445,7 +445,7 @@
   },
   "TATACAP.BSE": {
     "price": 313.0,
-    "name": "TATA Capital",
+    "name": "TATACAP",
     "week_52_high": 367.65,
     "week_52_low": 309.1,
     "day_change": -5.5,
@@ -457,7 +457,7 @@
   },
   "LT.NSE": {
     "price": 3439.0,
-    "name": "Larsen and Toubro Ltd",
+    "name": "LT",
     "week_52_high": 4440,
     "week_52_low": 2965.3,
     "day_change": -280.5,
@@ -469,7 +469,7 @@
   },
   "LT.BSE": {
     "price": 3440.95,
-    "name": "Larsen and Toubro Ltd",
+    "name": "LT",
     "week_52_high": 4440,
     "week_52_low": 2967.65,
     "day_change": -280.0,
@@ -481,7 +481,7 @@
   },
   "SYNGENE.NSE": {
     "price": 420.85,
-    "name": "Syngene International Ltd",
+    "name": "SYNGENE",
     "week_52_high": 760,
     "week_52_low": 387.05,
     "day_change": 16.75,
@@ -493,7 +493,7 @@
   },
   "SYNGENE.BSE": {
     "price": 422.55,
-    "name": "Syngene International Ltd",
+    "name": "SYNGENE",
     "week_52_high": 760.95,
     "week_52_low": 381.05,
     "day_change": 18.45,
@@ -505,7 +505,7 @@
   },
   "TMPV.NSE": {
     "price": 314.1,
-    "name": "Tata Motors Passenger Vehicles Limited",
+    "name": "TMPV",
     "week_52_high": 512.25,
     "week_52_low": 308.5,
     "day_change": -10.45,
@@ -517,7 +517,7 @@
   },
   "TEJASNET.NSE": {
     "price": 424.45,
-    "name": "Tejas Networks Limited",
+    "name": "TEJASNET",
     "week_52_high": 914.4,
     "week_52_low": 294,
     "day_change": -16.65,
@@ -529,7 +529,7 @@
   },
   "TEJASNET.BSE": {
     "price": 424.1,
-    "name": "Tejas Networks Limited",
+    "name": "TEJASNET",
     "week_52_high": 914.5,
     "week_52_low": 294.1,
     "day_change": -16.7,
@@ -541,7 +541,7 @@
   },
   "RELIANCE.NSE": {
     "price": 1380.7,
-    "name": "Reliance Industries Ltd",
+    "name": "RELIANCE",
     "week_52_high": 1611.8,
     "week_52_low": 1114.85,
     "day_change": -11.5,
@@ -553,7 +553,7 @@
   },
   "RELIANCE.BSE": {
     "price": 1380.6,
-    "name": "Reliance Industries Ltd",
+    "name": "RELIANCE",
     "week_52_high": 1611.2,
     "week_52_low": 1115.55,
     "day_change": -11.25,
@@ -565,7 +565,7 @@
   },
   "RAILTEL.BSE": {
     "price": 277.9,
-    "name": "Railtel Corporation of India Ltd",
+    "name": "RAILTEL",
     "week_52_high": 478.8,
     "week_52_low": 265.6,
     "day_change": -9.1,
@@ -577,7 +577,7 @@
   },
   "TATAPOWER.NSE": {
     "price": 394.95,
-    "name": "Tata Power Company Limited",
+    "name": "TATAPOWER",
     "week_52_high": 416.8,
     "week_52_low": 335,
     "day_change": -7.2,
@@ -589,7 +589,7 @@
   },
   "TATAPOWER.BSE": {
     "price": 394.95,
-    "name": "Tata Power Company Limited",
+    "name": "TATAPOWER",
     "week_52_high": 416.7,
     "week_52_low": 332.1,
     "day_change": -7.35,
@@ -601,7 +601,7 @@
   },
   "IRCON.NSE": {
     "price": 130.22,
-    "name": "Ircon International Ltd",
+    "name": "IRCON",
     "week_52_high": 225.52,
     "week_52_low": 129.81,
     "day_change": -6.33,
@@ -613,7 +613,7 @@
   },
   "JIOFIN.NSE": {
     "price": 235.25,
-    "name": "Jio Financial Services Ltd",
+    "name": "JIOFIN",
     "week_52_high": 338.6,
     "week_52_low": 203.1,
     "day_change": -6.95,
@@ -625,7 +625,7 @@
   },
   "AWHCL.BSE": {
     "price": 463.45,
-    "name": "Antony Waste Handling Cell Ltd",
+    "name": "AWHCL",
     "week_52_high": 692.05,
     "week_52_low": 407.5,
     "day_change": -20.5,
@@ -637,7 +637,7 @@
   },
   "KAJARIACER.NSE": {
     "price": 910.15,
-    "name": "Kajaria Ceramics Ltd",
+    "name": "KAJARIACER",
     "week_52_high": 1321.9,
     "week_52_low": 758.7,
     "day_change": -29.85,
@@ -649,7 +649,7 @@
   },
   "ASIANPAINT.NSE": {
     "price": 2196.8,
-    "name": "Asian Paints Ltd",
+    "name": "ASIANPAINT",
     "week_52_high": 2985.7,
     "week_52_low": 2162.6,
     "day_change": -24.4,
@@ -661,7 +661,7 @@
   },
   "ITC.BSE": {
     "price": 301.5,
-    "name": "ITC Ltd",
+    "name": "ITC",
     "week_52_high": 435.05,
     "week_52_low": 295.8,
     "day_change": -2.4,
@@ -673,7 +673,7 @@
   },
   "AFCONS.BSE": {
     "price": 279.9,
-    "name": "Afcons Infrastructure Ltd",
+    "name": "AFCONS",
     "week_52_high": 498.9,
     "week_52_low": 271.65,
     "day_change": 1.5,
@@ -685,7 +685,7 @@
   },
   "ADANIPOWER.NSE": {
     "price": 146.57,
-    "name": "Adani Power Limited",
+    "name": "ADANIPOWER",
     "week_52_high": 182.7,
     "week_52_low": 92.4,
     "day_change": -2.54,
@@ -697,7 +697,7 @@
   },
   "ITCHOTELS.BSE": {
     "price": 153.15,
-    "name": "ITC Hotels Ltd",
+    "name": "ITCHOTELS",
     "week_52_high": 261.35,
     "week_52_low": 152,
     "day_change": -4.95,
@@ -709,7 +709,7 @@
   },
   "JWL.BSE": {
     "price": 262.15,
-    "name": "Jupiter Wagons Limited",
+    "name": "JWL",
     "week_52_high": 457.2,
     "week_52_low": 237.1,
     "day_change": -10.2,
@@ -721,7 +721,7 @@
   },
   "HEROMOTOCO.BSE": {
     "price": 5204.35,
-    "name": "Hero MotoCorp Ltd",
+    "name": "HEROMOTOCO",
     "week_52_high": 6390,
     "week_52_low": 3322.6,
     "day_change": -191.25,
@@ -733,7 +733,7 @@
   },
   "BBTC.NSE": {
     "price": 1527.3,
-    "name": "Bombay Burmah Trading Corporation Ltd",
+    "name": "BBTC",
     "week_52_high": 2155,
     "week_52_low": 1505.3,
     "day_change": -43.6,
@@ -745,7 +745,7 @@
   },
   "LGEINDIA.BSE": {
     "price": 1551.2,
-    "name": "LG Electronics India",
+    "name": "LGEINDIA",
     "week_52_high": 1736.4,
     "week_52_low": 1300.4,
     "day_change": -23.55,
@@ -757,7 +757,7 @@
   },
   "ADANIGREEN.BSE": {
     "price": 860.75,
-    "name": "Adani Green Energy Limited",
+    "name": "ADANIGREEN",
     "week_52_high": 1179.2,
     "week_52_low": 767,
     "day_change": -5.2,
@@ -769,7 +769,7 @@
   },
   "IRCTC.BSE": {
     "price": 528.0,
-    "name": "Indian Rail Tour Corp Ltd",
+    "name": "IRCTC",
     "week_52_high": 820.2,
     "week_52_low": 520.2,
     "day_change": -8.55,
@@ -781,7 +781,7 @@
   },
   "AUROPHARMA.NSE": {
     "price": 1296.5,
-    "name": "Aurobindo Pharma Ltd",
+    "name": "AUROPHARMA",
     "week_52_high": 1319.8,
     "week_52_low": 1010,
     "day_change": -15.4,
@@ -793,7 +793,7 @@
   },
   "JAINREC.BSE": {
     "price": 428.1,
-    "name": "Jain Resource Recycling Limited",
+    "name": "JAINREC",
     "week_52_high": 461,
     "week_52_low": 247.8,
     "day_change": 0.5,
@@ -805,7 +805,7 @@
   },
   "IREDA.BSE": {
     "price": 114.85,
-    "name": "Indian Renewable Energy Dev Agency Ltd",
+    "name": "IREDA",
     "week_52_high": 186.55,
     "week_52_low": 111.75,
     "day_change": -2.25,
@@ -817,7 +817,7 @@
   },
   "BEML.BSE": {
     "price": 1525.95,
-    "name": "BEML Limited",
+    "name": "BEML",
     "week_52_high": 2437.4,
     "week_52_low": 1232.35,
     "day_change": -86.8,
@@ -829,7 +829,7 @@
   },
   "AWHCL.NSE": {
     "price": 461.55,
-    "name": "Antony Waste Handling Cell Ltd",
+    "name": "AWHCL",
     "week_52_high": 693,
     "week_52_low": 408.05,
     "day_change": -23.9,
@@ -841,7 +841,7 @@
   },
   "ITC.NSE": {
     "price": 301.45,
-    "name": "ITC Ltd",
+    "name": "ITC",
     "week_52_high": 435.1,
     "week_52_low": 295.8,
     "day_change": -2.65,
@@ -853,7 +853,7 @@
   },
   "IRFC.NSE": {
     "price": 97.2,
-    "name": "Indian Railway Fin Corp",
+    "name": "IRFC",
     "week_52_high": 148.95,
     "week_52_low": 95.27,
     "day_change": -2.72,
@@ -865,7 +865,7 @@
   },
   "AFCONS.NSE": {
     "price": 278.85,
-    "name": "Afcons Infrastructure Ltd",
+    "name": "AFCONS",
     "week_52_high": 498.7,
     "week_52_low": 271.5,
     "day_change": 0.35,
@@ -877,7 +877,7 @@
   },
   "DIXON.BSE": {
     "price": 10339.7,
-    "name": "Dixon Technologies (India) Limited",
+    "name": "DIXON",
     "week_52_high": 18471.5,
     "week_52_low": 9620,
     "day_change": -464.8,
@@ -889,7 +889,7 @@
   },
   "ITCHOTELS.NSE": {
     "price": 153.12,
-    "name": "ITC Hotels Ltd",
+    "name": "ITCHOTELS",
     "week_52_high": 261.62,
     "week_52_low": 151.72,
     "day_change": -4.84,
@@ -901,7 +901,7 @@
   },
   "JWL.NSE": {
     "price": 262.15,
-    "name": "Jupiter Wagons Limited",
+    "name": "JWL",
     "week_52_high": 457,
     "week_52_low": 246.2,
     "day_change": -10.05,
@@ -913,7 +913,7 @@
   },
   "HEROMOTOCO.NSE": {
     "price": 5206.0,
-    "name": "Hero MotoCorp Ltd",
+    "name": "HEROMOTOCO",
     "week_52_high": 6388.5,
     "week_52_low": 3344,
     "day_change": -188.5,
@@ -925,7 +925,7 @@
   },
   "LGEINDIA.NSE": {
     "price": 1562.0,
-    "name": "LG Electronics India",
+    "name": "LGEINDIA",
     "week_52_high": 1749,
     "week_52_low": 1325.5,
     "day_change": -15.0,
@@ -937,7 +937,7 @@
   },
   "ADANIGREEN.NSE": {
     "price": 861.35,
-    "name": "Adani Green Energy Limited",
+    "name": "ADANIGREEN",
     "week_52_high": 1177.55,
     "week_52_low": 765,
     "day_change": -5.2,
@@ -949,7 +949,7 @@
   },
   "IRCTC.NSE": {
     "price": 527.6,
-    "name": "Indian Rail Tour Corp Ltd",
+    "name": "IRCTC",
     "week_52_high": 820.25,
     "week_52_low": 520.05,
     "day_change": -9.1,
@@ -961,7 +961,7 @@
   },
   "BHARTIARTL.BSE": {
     "price": 1806.7,
-    "name": "Bharti Airtel Limited",
+    "name": "BHARTIARTL",
     "week_52_high": 2174.7,
     "week_52_low": 1619.95,
     "day_change": 5.9,
@@ -973,7 +973,7 @@
   },
   "JAINREC.NSE": {
     "price": 428.45,
-    "name": "Jain Resource Recycling Limited",
+    "name": "JAINREC",
     "week_52_high": 461,
     "week_52_low": 247.57,
     "day_change": -0.1,
@@ -985,7 +985,7 @@
   },
   "IREDA.NSE": {
     "price": 114.85,
-    "name": "Indian Renewable Energy Dev Agency Ltd",
+    "name": "IREDA",
     "week_52_high": 186.58,
     "week_52_low": 112.07,
     "day_change": -2.18,
@@ -997,7 +997,7 @@
   },
   "BIOCON.NSE": {
     "price": 383.55,
-    "name": "Biocon Ltd",
+    "name": "BIOCON",
     "week_52_high": 424.95,
     "week_52_low": 299,
     "day_change": -8.65,
@@ -1009,7 +1009,7 @@
   },
   "BEML.NSE": {
     "price": 1525.4,
-    "name": "BEML Limited",
+    "name": "BEML",
     "week_52_high": 2437.4,
     "week_52_low": 1225.6,
     "day_change": -88.8,
@@ -1021,7 +1021,7 @@
   },
   "IRB.NSE": {
     "price": 41.56,
-    "name": "IRB Infra",
+    "name": "IRB",
     "week_52_high": 54.28,
     "week_52_low": 38.3,
     "day_change": -1.01,
@@ -1033,7 +1033,7 @@
   },
   "IRCON.BSE": {
     "price": 130.2,
-    "name": "Ircon International Ltd",
+    "name": "IRCON",
     "week_52_high": 225.7,
     "week_52_low": 129.8,
     "day_change": -6.3,
@@ -1045,7 +1045,7 @@
   },
   "JIOFIN.BSE": {
     "price": 235.2,
-    "name": "Jio Financial Services Ltd",
+    "name": "JIOFIN",
     "week_52_high": 338.45,
     "week_52_low": 200.15,
     "day_change": -7.1,
@@ -1057,7 +1057,7 @@
   },
   "KAJARIACER.BSE": {
     "price": 910.1,
-    "name": "Kajaria Ceramics Ltd",
+    "name": "KAJARIACER",
     "week_52_high": 1322,
     "week_52_low": 745,
     "day_change": -30.4,
@@ -1069,7 +1069,7 @@
   },
   "ASIANPAINT.BSE": {
     "price": 2196.25,
-    "name": "Asian Paints Ltd",
+    "name": "ASIANPAINT",
     "week_52_high": 2985.5,
     "week_52_low": 2163,
     "day_change": -25.25,
@@ -1081,7 +1081,7 @@
   },
   "IOC.NSE": {
     "price": 156.54,
-    "name": "Indian Oil Corporation Ltd",
+    "name": "IOC",
     "week_52_high": 188.96,
     "week_52_low": 116.2,
     "day_change": -3.62,
@@ -1093,7 +1093,7 @@
   },
   "ADANIPOWER.BSE": {
     "price": 146.7,
-    "name": "Adani Power Limited",
+    "name": "ADANIPOWER",
     "week_52_high": 182.75,
     "week_52_low": 94.4,
     "day_change": -2.4,
@@ -1105,7 +1105,7 @@
   },
   "CENTRALBK.NSE": {
     "price": 35.5,
-    "name": "Central Bank of India",
+    "name": "CENTRALBK",
     "week_52_high": 47.3,
     "week_52_low": 32.75,
     "day_change": -1.11,
@@ -1117,7 +1117,7 @@
   },
   "DIXON.NSE": {
     "price": 10338.0,
-    "name": "Dixon Technologies (India) Limited",
+    "name": "DIXON",
     "week_52_high": 18471,
     "week_52_low": 9630,
     "day_change": -465.0,
@@ -1129,7 +1129,7 @@
   },
   "BBTC.BSE": {
     "price": 1520.45,
-    "name": "Bombay Burmah Trading Corporation Ltd",
+    "name": "BBTC",
     "week_52_high": 2156.1,
     "week_52_low": 1505.95,
     "day_change": -48.8,
@@ -1141,7 +1141,7 @@
   },
   "AUROPHARMA.BSE": {
     "price": 1296.2,
-    "name": "Aurobindo Pharma Ltd",
+    "name": "AUROPHARMA",
     "week_52_high": 1319.6,
     "week_52_low": 994.35,
     "day_change": -17.1,
@@ -1153,7 +1153,7 @@
   },
   "HIGHENE.BSE": {
     "price": 535.8,
-    "name": "High Energy Batteries (India) Ltd",
+    "name": "HIGHENE",
     "week_52_high": 830.35,
     "week_52_low": 432,
     "day_change": -11.15,
@@ -1165,7 +1165,7 @@
   },
   "BHARTIARTL.NSE": {
     "price": 1803.4,
-    "name": "Bharti Airtel Limited",
+    "name": "BHARTIARTL",
     "week_52_high": 2174.5,
     "week_52_low": 1612.2,
     "day_change": 2.1,
@@ -1177,7 +1177,7 @@
   },
   "BHARATCOAL.NSE": {
     "price": 36.1,
-    "name": "Bharat Coking Coal Limited",
+    "name": "BHARATCOAL",
     "week_52_high": 45.09,
     "week_52_low": 31.16,
     "day_change": 0.29,
@@ -1189,7 +1189,7 @@
   },
   "SBIETF.NSE": {
     "price": 134.49,
-    "name": "Sbi-Etf Gold",
+    "name": "SBIETF",
     "week_52_high": 153.95,
     "week_52_low": 64.96,
     "day_change": -2.12,
@@ -1201,7 +1201,7 @@
   },
   "RAMCOSYS.NSE": {
     "price": 411.45,
-    "name": "Ramco Systems Ltd",
+    "name": "RAMCOSYS",
     "week_52_high": 682.35,
     "week_52_low": 288.05,
     "day_change": -6.6,
@@ -1213,7 +1213,7 @@
   },
   "GGL.BSE": {
     "price": 3.1,
-    "name": "Gautam Gems Ltd",
+    "name": "GGL",
     "week_52_high": 5.35,
     "week_52_low": 2.8,
     "day_change": 0.04,
@@ -1225,7 +1225,7 @@
   },
   "BEL.NSE": {
     "price": 439.4,
-    "name": "Bharat Electronics Ltd",
+    "name": "BEL",
     "week_52_high": 473.45,
     "week_52_low": 256.2,
     "day_change": -14.15,
@@ -1237,7 +1237,7 @@
   },
   "COALINDIA.NSE": {
     "price": 467.0,
-    "name": "Coal India Ltd",
+    "name": "COALINDIA",
     "week_52_high": 476,
     "week_52_low": 346.6,
     "day_change": -3.1,
@@ -1249,7 +1249,7 @@
   },
   "SUZLON.NSE": {
     "price": 41.41,
-    "name": "Suzlon Energy",
+    "name": "SUZLON",
     "week_52_high": 74.3,
     "week_52_low": 38.19,
     "day_change": -1.02,
@@ -1261,7 +1261,7 @@
   },
   "SETFGOLD.NSE": {
     "price": 134.49,
-    "name": "SBI ETF Gold",
+    "name": "SETFGOLD",
     "week_52_high": 153.95,
     "week_52_low": 64.96,
     "day_change": -2.12,
@@ -1273,7 +1273,7 @@
   },
   "WIPRO.BSE": {
     "price": 197.55,
-    "name": "Wipro Ltd",
+    "name": "WIPRO",
     "week_52_high": 267.7,
     "week_52_low": 193.1,
     "day_change": -4.85,
@@ -1285,7 +1285,7 @@
   },
   "CARYSIL.NSE": {
     "price": 785.1,
-    "name": "Carysil Ltd",
+    "name": "CARYSIL",
     "week_52_high": 1071.9,
     "week_52_low": 512,
     "day_change": -30.2,
@@ -1297,7 +1297,7 @@
   },
   "VEDL.NSE": {
     "price": 689.55,
-    "name": "Vedanta Limited",
+    "name": "VEDL",
     "week_52_high": 769.8,
     "week_52_low": 350.1,
     "day_change": -30.05,
@@ -1309,7 +1309,7 @@
   },
   "COALINDIA.BSE": {
     "price": 466.8,
-    "name": "Coal India Ltd",
+    "name": "COALINDIA",
     "week_52_high": 475.95,
     "week_52_low": 340.9,
     "day_change": -3.35,
@@ -1321,7 +1321,7 @@
   },
   "APOLLOHOSP.BSE": {
     "price": 7550.45,
-    "name": "Apollo Hospitals Enterprise Ltd",
+    "name": "APOLLOHOSP",
     "week_52_high": 8099,
     "week_52_low": 6017.95,
     "day_change": -23.85,
@@ -1333,7 +1333,7 @@
   },
   "NATIONALUM.BSE": {
     "price": 386.9,
-    "name": "National Aluminium Company Limited",
+    "name": "NATIONALUM",
     "week_52_high": 431.6,
     "week_52_low": 140,
     "day_change": -22.35,
@@ -1345,7 +1345,7 @@
   },
   "HINDCOPPER.BSE": {
     "price": 496.2,
-    "name": "Hindustan Copper Ltd",
+    "name": "HINDCOPPER",
     "week_52_high": 759.2,
     "week_52_low": 183.9,
     "day_change": -31.25,
@@ -1357,7 +1357,7 @@
   },
   "RAMCOSYS.BSE": {
     "price": 408.0,
-    "name": "Ramco Systems Ltd",
+    "name": "RAMCOSYS",
     "week_52_high": 681.8,
     "week_52_low": 288.2,
     "day_change": -9.95,
@@ -1369,7 +1369,7 @@
   },
   "PRITI.NSE": {
     "price": 36.29,
-    "name": "Priti International Ltd",
+    "name": "PRITI",
     "week_52_high": 107.09,
     "week_52_low": 33.5,
     "day_change": -0.73,
@@ -1381,7 +1381,7 @@
   },
   "ABB.NSE": {
     "price": 6392.5,
-    "name": "ABB India Ltd",
+    "name": "ABB",
     "week_52_high": 6554,
     "week_52_low": 4637.5,
     "day_change": -16.5,
@@ -1393,7 +1393,7 @@
   },
   "MANAPPURAM.NSE": {
     "price": 256.1,
-    "name": "Manuppuram Finance Ltd",
+    "name": "MANAPPURAM",
     "week_52_high": 321.6,
     "week_52_low": 204.1,
     "day_change": 0.55,
@@ -1405,7 +1405,7 @@
   },
   "AVANTIFEED.NSE": {
     "price": 1191.3,
-    "name": "Avanti Feeds",
+    "name": "AVANTIFEED",
     "week_52_high": 1489,
     "week_52_low": 601.55,
     "day_change": -58.7,
@@ -1417,7 +1417,7 @@
   },
   "PNCINFRA.NSE": {
     "price": 193.24,
-    "name": "PNC Infratech Ltd",
+    "name": "PNCINFRA",
     "week_52_high": 331.8,
     "week_52_low": 191.23,
     "day_change": -8.62,
@@ -1429,7 +1429,7 @@
   },
   "SETFGOLD.BSE": {
     "price": 134.78,
-    "name": "SBI ETF Gold",
+    "name": "SETFGOLD",
     "week_52_high": 152.5,
     "week_52_low": 65.35,
     "day_change": -1.83,
@@ -1441,7 +1441,7 @@
   },
   "VEDL.BSE": {
     "price": 689.15,
-    "name": "Vedanta Limited",
+    "name": "VEDL",
     "week_52_high": 770,
     "week_52_low": 349.35,
     "day_change": -30.4,
@@ -1453,7 +1453,7 @@
   },
   "AURUM.NSE": {
     "price": 169.07,
-    "name": "Aurum Proptech Ltd",
+    "name": "AURUM",
     "week_52_high": 225.7,
     "week_52_low": 144.4,
     "day_change": -5.96,
@@ -1465,7 +1465,7 @@
   },
   "ASHOKLEY.NSE": {
     "price": 170.65,
-    "name": "Ashok Leyland Ltd",
+    "name": "ASHOKLEY",
     "week_52_high": 215.42,
     "week_52_low": 95.95,
     "day_change": -7.82,
@@ -1477,7 +1477,7 @@
   },
   "AVANTIFEED.BSE": {
     "price": 1195.5,
-    "name": "Avanti Feeds",
+    "name": "AVANTIFEED",
     "week_52_high": 1489.45,
     "week_52_low": 582,
     "day_change": -50.85,
@@ -1489,7 +1489,7 @@
   },
   "SILVERBEES.NSE": {
     "price": 244.49,
-    "name": "Nippon Silver",
+    "name": "SILVERBEES",
     "week_52_high": 360,
     "week_52_low": 77.55,
     "day_change": -9.01,
@@ -1501,7 +1501,7 @@
   },
   "WIPRO.NSE": {
     "price": 197.58,
-    "name": "Wipro Ltd",
+    "name": "WIPRO",
     "week_52_high": 267.8,
     "week_52_low": 193.03,
     "day_change": -4.93,
@@ -1513,7 +1513,7 @@
   },
   "MASTEK.NSE": {
     "price": 1496.8,
-    "name": "Majesco Ltd",
+    "name": "MASTEK",
     "week_52_high": 2818,
     "week_52_low": 1487.1,
     "day_change": -60.9,
@@ -1525,7 +1525,7 @@
   },
   "APOLLOTYRE.NSE": {
     "price": 400.3,
-    "name": "Apollo Tyres Ltd",
+    "name": "APOLLOTYRE",
     "week_52_high": 540.5,
     "week_52_low": 375,
     "day_change": -17.35,
@@ -1537,7 +1537,7 @@
   },
   "ABB.BSE": {
     "price": 6394.6,
-    "name": "ABB India Ltd",
+    "name": "ABB",
     "week_52_high": 6555,
     "week_52_low": 4590.05,
     "day_change": -17.9,
@@ -1549,7 +1549,7 @@
   },
   "APOLLOHOSP.NSE": {
     "price": 7550.0,
-    "name": "Apollo Hospitals Enterprise Ltd",
+    "name": "APOLLOHOSP",
     "week_52_high": 8099.5,
     "week_52_low": 6002,
     "day_change": -24.5,
@@ -1561,7 +1561,7 @@
   },
   "BHARATWIRE.NSE": {
     "price": 155.49,
-    "name": "Bharat Wire Ropes Ltd",
+    "name": "BHARATWIRE",
     "week_52_high": 248.7,
     "week_52_low": 154.11,
     "day_change": -7.98,
@@ -1573,7 +1573,7 @@
   },
   "HINDCOPPER.NSE": {
     "price": 496.3,
-    "name": "Hindustan Copper Ltd",
+    "name": "HINDCOPPER",
     "week_52_high": 760.05,
     "week_52_low": 183.82,
     "day_change": -31.05,
@@ -1585,7 +1585,7 @@
   },
   "UNIONBANK.NSE": {
     "price": 173.88,
-    "name": "Union Bank of India Ltd",
+    "name": "UNIONBANK",
     "week_52_high": 205.49,
     "week_52_low": 108.49,
     "day_change": -8.22,
@@ -1597,7 +1597,7 @@
   },
   "NIPPONAMC.NSE": {
     "price": 823.65,
-    "name": "Nipponamc -\nNetfsilver",
+    "name": "NIPPONAMC",
     "week_52_high": 1009,
     "week_52_low": 498.05,
     "day_change": -22.7,
@@ -1609,7 +1609,7 @@
   },
   "NIPPONAMC.BSE": {
     "price": 823.6,
-    "name": "Nipponamc -\nNetfsilver",
+    "name": "NIPPONAMC",
     "week_52_high": 1003.9,
     "week_52_low": 456.05,
     "day_change": -27.25,
