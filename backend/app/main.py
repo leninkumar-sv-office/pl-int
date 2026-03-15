@@ -345,10 +345,16 @@ def health_check():
     if not os.path.exists(FRONTEND_DIST):
         healthy = False
 
+    # Read deploy tag
+    tag_file = os.path.join(os.path.dirname(__file__), "..", "data", "deploy_tag.txt")
+    tag = "dev"
+    if os.path.exists(tag_file):
+        tag = open(tag_file).read().strip() or "dev"
+
     status_code = 200 if healthy else 503
     return JSONResponse(
         status_code=status_code,
-        content={"status": "healthy" if healthy else "unhealthy", "checks": checks}
+        content={"status": "healthy" if healthy else "unhealthy", "tag": tag, "checks": checks}
     )
 
 
