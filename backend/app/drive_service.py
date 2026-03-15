@@ -22,12 +22,12 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-# Existing "dumps" folder ID in Google Drive (My Drive/pl/dumps/)
-DUMPS_FOLDER_ID = os.getenv("GOOGLE_DRIVE_DUMPS_FOLDER_ID", "").strip()
+# Default "dumps" folder ID (legacy — used as fallback for existing email)
+_DEFAULT_DUMPS_FOLDER_ID = os.getenv("GOOGLE_DRIVE_DUMPS_FOLDER_ID", "").strip()
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-# Cache for the parent "pl" folder ID
-_pl_folder_id = None
+# Cache for per-email parent "pl" folder IDs
+_pl_folder_ids: dict[str, str] = {}
 
 # Track sync state
 _initial_sync_done = False
@@ -46,18 +46,30 @@ def _get_service(email: str = ""):
     return build("drive", "v3", credentials=creds)
 
 
-def _get_pl_folder_id(service) -> Optional[str]:
+def _get_dumps_folder_id(email: str = "") -> str:
+    """Get the Drive dumps folder ID for an email."""
+    from . import auth
+    if email:
+        folder_id = auth.get_drive_folder_id(email)
+        if folder_id:
+            return folder_id
+    return _DEFAULT_DUMPS_FOLDER_ID
+
+
+def _get_pl_folder_id(service, email: str = "") -> Optional[str]:
     """Get the parent 'pl' folder ID from the known dumps folder."""
-    global _pl_folder_id
-    if _pl_folder_id:
-        return _pl_folder_id
-    if not DUMPS_FOLDER_ID:
+    cache_key = email or "_default"
+    if cache_key in _pl_folder_ids:
+        return _pl_folder_ids[cache_key]
+    dumps_id = _get_dumps_folder_id(email)
+    if not dumps_id:
         return None
-    meta = service.files().get(fileId=DUMPS_FOLDER_ID, fields="parents").execute()
+    meta = service.files().get(fileId=dumps_id, fields="parents").execute()
     parents = meta.get("parents", [])
     if parents:
-        _pl_folder_id = parents[0]
-    return _pl_folder_id
+        _pl_folder_ids[cache_key] = parents[0]
+        return parents[0]
+    return None
 
 
 def _find_or_create_folder(service, folder_name: str, parent_id: str) -> str:
@@ -95,6 +107,33 @@ def _navigate_to_subfolder(service, root_id: str, subfolder_path: str) -> str:
     return current
 
 
+def init_drive_for_email(email: str) -> str:
+    """Create pl/dumps/ folder structure in a user's Drive. Returns dumps folder ID."""
+    from . import auth
+    existing = auth.get_drive_folder_id(email)
+    if existing:
+        return existing
+    service = _get_service(email)
+    if not service:
+        print(f"[Drive] No credentials for {email} — cannot init folders")
+        return ""
+    try:
+        # Create My Drive/pl/
+        pl_id = _find_or_create_folder(service, "pl", "root")
+        # Create My Drive/pl/data/
+        _find_or_create_folder(service, "data", pl_id)
+        # Create My Drive/pl/dumps/
+        dumps_id = _find_or_create_folder(service, "dumps", pl_id)
+        # Store the folder ID
+        auth.set_drive_folder_id(email, dumps_id)
+        _pl_folder_ids[email] = pl_id
+        print(f"[Drive] Initialized Drive folders for {email} (dumps={dumps_id})")
+        return dumps_id
+    except Exception as e:
+        print(f"[Drive] Failed to init Drive for {email}: {e}")
+        return ""
+
+
 def upload_file(local_path, subfolder: str = None, email: str = ""):
     """Upload a file to Drive (async). subfolder is relative to pl/ folder."""
     local_path = Path(local_path)
@@ -106,11 +145,11 @@ def upload_file(local_path, subfolder: str = None, email: str = ""):
             service = _get_service(email)
             if not service:
                 return
-            if not DUMPS_FOLDER_ID:
-                print("[Drive] No GOOGLE_DRIVE_DUMPS_FOLDER_ID configured")
+            if not _get_dumps_folder_id(email):
+                print(f"[Drive] No dumps folder ID for {email or 'default'}")
                 return
 
-            pl_id = _get_pl_folder_id(service)
+            pl_id = _get_pl_folder_id(service, email)
             if not pl_id:
                 print("[Drive] Could not find parent pl folder")
                 return
@@ -139,15 +178,15 @@ def upload_file(local_path, subfolder: str = None, email: str = ""):
     threading.Thread(target=_do_upload, daemon=True).start()
 
 
-def download_file(filename: str, local_path, subfolder: str = None) -> bool:
+def download_file(filename: str, local_path, subfolder: str = None, email: str = "") -> bool:
     """Download a file from Drive to local path. subfolder is relative to pl/."""
     local_path = Path(local_path)
     try:
-        service = _get_service()
-        if not service or not DUMPS_FOLDER_ID:
+        service = _get_service(email)
+        if not service or not _get_dumps_folder_id(email):
             return False
 
-        pl_id = _get_pl_folder_id(service)
+        pl_id = _get_pl_folder_id(service, email)
         if not pl_id:
             return False
 
@@ -247,14 +286,15 @@ def sync_from_drive(email: str = ""):
     if not service:
         print(f"[Drive] No credentials{f' for {email}' if email else ''} — skipping sync")
         return
-    if not DUMPS_FOLDER_ID:
-        print("[Drive] No GOOGLE_DRIVE_DUMPS_FOLDER_ID — skipping sync")
+    dumps_folder_id = _get_dumps_folder_id(email)
+    if not dumps_folder_id:
+        print(f"[Drive] No dumps folder ID for {email or 'default'} — skipping sync")
         return
 
     print(f"[Drive] Syncing from Google Drive{f' ({email})' if email else ''}...")
 
     # Sync data/ from pl/data/
-    pl_id = _get_pl_folder_id(service)
+    pl_id = _get_pl_folder_id(service, email)
     if pl_id:
         try:
             data_folder_id = _find_or_create_folder(service, "data", pl_id)
@@ -262,10 +302,10 @@ def sync_from_drive(email: str = ""):
         except Exception as e:
             print(f"[Drive] Data sync failed: {e}")
 
-    # Sync dumps/ from the existing pl/dumps/ folder
+    # Sync dumps/ from the email's pl/dumps/ folder
     from .config import DUMPS_BASE
     try:
-        _sync_folder_down(service, DUMPS_FOLDER_ID, DUMPS_BASE)
+        _sync_folder_down(service, dumps_folder_id, DUMPS_BASE)
     except Exception as e:
         print(f"[Drive] Dumps sync failed: {e}")
 
@@ -317,15 +357,16 @@ def get_drive_status(email: str = "") -> dict:
         creds, email = auth.get_any_drive_credentials()
     if not creds:
         return {"connected": False, "reason": "No Drive credentials — sign in with Google"}
-    if not DUMPS_FOLDER_ID:
-        return {"connected": False, "reason": "GOOGLE_DRIVE_DUMPS_FOLDER_ID not configured"}
+    dumps_id = _get_dumps_folder_id(email)
+    if not dumps_id:
+        return {"connected": False, "reason": "No Drive folder configured for this account"}
     try:
         service = _get_service(email)
         about = service.about().get(fields="user").execute()
         return {
             "connected": True,
             "user": about["user"]["emailAddress"],
-            "folder_id": DUMPS_FOLDER_ID,
+            "folder_id": dumps_id,
         }
     except Exception as e:
         return {"connected": False, "reason": str(e)}

@@ -118,6 +118,18 @@ def on_startup():
     _start_ticker_bg_refresh()
     print("[App] Background market ticker refresh started (every 60s)")
 
+    # Migrate existing tokens: seed drive_folder_id from env if missing
+    try:
+        default_folder_id = os.getenv("GOOGLE_DRIVE_DUMPS_FOLDER_ID", "").strip()
+        if default_folder_id:
+            all_tokens = auth_module._load_all_tokens()
+            for email_key, tokens in all_tokens.items():
+                if email_key and "@" in email_key and not tokens.get("drive_folder_id"):
+                    auth_module.set_drive_folder_id(email_key, default_folder_id)
+                    print(f"[App] Seeded drive_folder_id for {email_key}")
+    except Exception as e:
+        print(f"[App] Token migration skipped: {e}")
+
     # Sync data from Google Drive — blocks startup until complete
     # so that database modules find files on first request
     try:
@@ -446,6 +458,14 @@ def google_login_with_code(body: dict):
     except Exception as e:
         print(f"[Auth] Code exchange failed: {e}")
         raise HTTPException(401, "Failed to exchange authorization code")
+    # Initialize Drive folders for this email (creates pl/dumps/ in their Drive)
+    import threading
+    threading.Thread(
+        target=drive_service.init_drive_for_email,
+        args=(result["email"],),
+        daemon=True,
+    ).start()
+
     session_token = auth_module.create_session_token(result["email"], result["name"])
     return {
         "session_token": session_token,

@@ -220,3 +220,18 @@ def _load_tokens(email: str = "") -> dict | None:
     for v in all_tokens.values():
         return v
     return None
+
+
+def get_drive_folder_id(email: str) -> str:
+    """Get the stored Drive dumps folder ID for an email."""
+    tokens = _load_tokens(email)
+    if tokens:
+        return tokens.get("drive_folder_id", "")
+    return ""
+
+
+def set_drive_folder_id(email: str, folder_id: str):
+    """Store the Drive dumps folder ID for an email."""
+    tokens = _load_tokens(email) or {}
+    tokens["drive_folder_id"] = folder_id
+    _save_tokens(email, tokens)
