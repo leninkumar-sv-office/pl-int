@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════
-#  Stock Portfolio Dashboard - Build & Run
-#  Builds frontend, activates venv, runs backend
+#  Stock Portfolio Dashboard - Build & Run (App Mode)
+#  Builds frontend, activates venv, runs backend on :9999
 # ═══════════════════════════════════════════════════════
 
 set -e
@@ -60,21 +60,21 @@ pip install -r "$BACKEND_DIR/requirements.txt" --quiet
 echo "Python environment ready ($(python3 --version))"
 echo ""
 
-# ── Step 3: Kill existing server on port 8000 ────────────
-if lsof -ti:8000 &>/dev/null; then
-    echo "Killing existing process on port 8000..."
-    kill -9 $(lsof -ti:8000) 2>/dev/null
+# ── Step 3: Kill existing server on port 9999 ────────────
+if lsof -ti:9999 &>/dev/null; then
+    echo "Killing existing process on port 9999..."
+    kill -9 $(lsof -ti:9999) 2>/dev/null
     sleep 1
 fi
 
 # ── Step 4: Run Backend ─────────────────────────────────
 echo "── Starting Backend ────────────────────────────────"
-echo "   Backend:  http://127.0.0.1:8000"
-echo "   API Docs: http://127.0.0.1:8000/docs"
+echo "   Backend:  http://127.0.0.1:9999"
+echo "   API Docs: http://127.0.0.1:9999/docs"
 echo ""
 echo "   Frontend build served from: frontend/dist/"
 echo "   Press Ctrl+C to stop the server."
 echo ""
 
 cd "$BACKEND_DIR"
-python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9999 --reload
