@@ -20,13 +20,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Redirect to login on 401
+// Redirect to login on 401, clear invalid persona on 403
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && !error.config?.url?.includes('/auth/')) {
       localStorage.removeItem('sessionToken');
       window.dispatchEvent(new Event('auth-expired'));
+    }
+    if (error.response?.status === 403) {
+      localStorage.removeItem('selectedUserId');
+      window.location.reload();
     }
     return Promise.reject(error);
   }

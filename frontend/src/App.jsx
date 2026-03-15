@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -92,13 +92,26 @@ export default function App() {
     return <TradePlanner />;
   }
 
-  const [currentUserId, setCurrentUserId] = useState(() => localStorage.getItem('selectedUserId') || 'lenin');
+  const [currentUserId, setCurrentUserId] = useState(() => localStorage.getItem('selectedUserId') || null);
   const handleUserChange = useCallback((userId) => {
     localStorage.setItem('selectedUserId', userId);
     setCurrentUserId(userId);
     // Reload all data for the new user
     window.location.reload();
   }, []);
+
+  // Auto-select first available user if none selected
+  useEffect(() => {
+    if (!currentUserId) {
+      getUsers().then(users => {
+        if (users.length > 0) {
+          const first = users[0].id;
+          localStorage.setItem('selectedUserId', first);
+          setCurrentUserId(first);
+        }
+      }).catch(() => {});
+    }
+  }, [currentUserId]);
 
   const [deployTag, setDeployTag] = useState('');
   const [portfolio, setPortfolio] = useState([]);

@@ -33,10 +33,13 @@ _pl_folder_id = None
 _initial_sync_done = False
 
 
-def _get_service():
-    """Build a Drive API service using stored credentials."""
+def _get_service(email: str = ""):
+    """Build a Drive API service using stored credentials for an email."""
     from . import auth
-    creds = auth.get_drive_credentials()
+    if email:
+        creds = auth.get_drive_credentials(email)
+    else:
+        creds, _ = auth.get_any_drive_credentials()
     if not creds:
         return None
     from googleapiclient.discovery import build
@@ -92,7 +95,7 @@ def _navigate_to_subfolder(service, root_id: str, subfolder_path: str) -> str:
     return current
 
 
-def upload_file(local_path, subfolder: str = None):
+def upload_file(local_path, subfolder: str = None, email: str = ""):
     """Upload a file to Drive (async). subfolder is relative to pl/ folder."""
     local_path = Path(local_path)
     if not local_path.exists():
@@ -100,7 +103,7 @@ def upload_file(local_path, subfolder: str = None):
 
     def _do_upload():
         try:
-            service = _get_service()
+            service = _get_service(email)
             if not service:
                 return
             if not DUMPS_FOLDER_ID:
@@ -236,19 +239,19 @@ def _sync_folder_down(service, folder_id: str, local_dir: Path, depth: int = 0):
         print(f"[Drive] {indent}{local_dir.name}/: downloaded {downloaded} file(s)")
 
 
-def sync_from_drive():
+def sync_from_drive(email: str = ""):
     """Download data and dumps from Google Drive on startup."""
     global _initial_sync_done
     t0 = time.time()
-    service = _get_service()
+    service = _get_service(email)
     if not service:
-        print("[Drive] No credentials — skipping sync")
+        print(f"[Drive] No credentials{f' for {email}' if email else ''} — skipping sync")
         return
     if not DUMPS_FOLDER_ID:
         print("[Drive] No GOOGLE_DRIVE_DUMPS_FOLDER_ID — skipping sync")
         return
 
-    print("[Drive] Syncing from Google Drive...")
+    print(f"[Drive] Syncing from Google Drive{f' ({email})' if email else ''}...")
 
     # Sync data/ from pl/data/
     pl_id = _get_pl_folder_id(service)
@@ -271,16 +274,29 @@ def sync_from_drive():
     print(f"[Drive] Sync from Drive complete ({elapsed:.1f}s)")
 
 
+def sync_all_emails():
+    """Sync Drive for all emails that have credentials stored."""
+    from . import auth
+    all_tokens = auth._load_all_tokens()
+    if not all_tokens:
+        print("[Drive] No stored credentials — skipping sync")
+        return
+    for email in all_tokens:
+        if email:  # skip empty-key legacy entries
+            sync_from_drive(email)
+
+
 def sync_data_file(filename: str):
     """Upload a data file to pl/data/ on Drive."""
     local_path = DATA_DIR / filename
     upload_file(local_path, subfolder="data")
 
 
-def sync_dumps_file(relative_path: str):
+def sync_dumps_file(relative_path: str, email: str = ""):
     """Upload a dumps file to pl/dumps/... on Drive.
 
-    relative_path: path relative to DUMPS_BASE, e.g. "Lenin/Stocks/TCS.xlsx"
+    relative_path: path relative to DUMPS_BASE, e.g. "email/Lenin/Stocks/TCS.xlsx"
+    email: optional email for per-email Drive credentials
     """
     from .config import DUMPS_BASE
     local_path = DUMPS_BASE / relative_path
@@ -289,19 +305,22 @@ def sync_dumps_file(relative_path: str):
         subfolder = "dumps/" + "/".join(parts[:-1])
     else:
         subfolder = "dumps"
-    upload_file(local_path, subfolder=subfolder)
+    upload_file(local_path, subfolder=subfolder, email=email)
 
 
-def get_drive_status() -> dict:
+def get_drive_status(email: str = "") -> dict:
     """Check Drive sync status."""
     from . import auth
-    creds = auth.get_drive_credentials()
+    if email:
+        creds = auth.get_drive_credentials(email)
+    else:
+        creds, email = auth.get_any_drive_credentials()
     if not creds:
         return {"connected": False, "reason": "No Drive credentials — sign in with Google"}
     if not DUMPS_FOLDER_ID:
         return {"connected": False, "reason": "GOOGLE_DRIVE_DUMPS_FOLDER_ID not configured"}
     try:
-        service = _get_service()
+        service = _get_service(email)
         about = service.about().get(fields="user").execute()
         return {
             "connected": True,

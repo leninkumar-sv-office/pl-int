@@ -3,18 +3,21 @@
     "id": "lenin",
     "name": "Lenin",
     "avatar": "L",
-    "color": "#4e7cff"
+    "color": "#4e7cff",
+    "email": "leninkumar.sv.ai@gmail.com"
   },
   {
     "id": "appa",
     "name": "Appa",
     "avatar": "A",
-    "color": "#a855f7"
+    "color": "#a855f7",
+    "email": "leninkumar.sv.ai@gmail.com"
   },
   {
     "id": "amma",
     "name": "Amma",
     "avatar": "A",
-    "color": "#4e7cff"
+    "color": "#4e7cff",
+    "email": "leninkumar.sv.ai@gmail.com"
   }
 ]

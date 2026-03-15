@@ -31,7 +31,7 @@ from .models import (
 )
 from .xlsx_database import xlsx_db as db, XlsxPortfolio
 from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache, MFXlsxPortfolio
-from .config import get_users, save_users, get_user_dumps_dir
+from .config import get_users, save_users, get_user_dumps_dir, get_user_email, get_users_for_email
 from . import stock_service
 from . import zerodha_service
 from . import contract_note_parser
@@ -122,7 +122,7 @@ def on_startup():
     # so that database modules find files on first request
     try:
         from app import drive_service
-        drive_service.sync_from_drive()
+        drive_service.sync_all_emails()
     except Exception as e:
         print(f"[App] Drive sync skipped: {e}")
 
@@ -149,8 +149,10 @@ app.add_middleware(
 
 
 # Auth middleware — blocks unauthenticated requests when AUTH_MODE=google
+# Also validates persona ownership (X-User-Id must belong to authenticated email)
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
+    email_token = None
     if auth_module.is_auth_enabled():
         path = request.url.path
         # Allow auth endpoints, Zerodha browser pages, static files, and health checks through
@@ -165,7 +167,25 @@ async def auth_middleware(request: Request, call_next):
             session = auth_module.verify_session_token(auth_header[7:])
             if not session:
                 return JSONResponse(status_code=401, content={"detail": "Invalid or expired session"})
-    return await call_next(request)
+
+            # Set email context for this request
+            email_token = _current_email.set(session["email"])
+
+            # Validate persona ownership
+            requested_user_id = request.headers.get("x-user-id", "")
+            if requested_user_id:
+                persona_email = get_user_email(requested_user_id)
+                if persona_email and persona_email.lower() != session["email"].lower():
+                    _current_email.reset(email_token)
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": f"Persona '{requested_user_id}' does not belong to your account"}
+                    )
+    try:
+        return await call_next(request)
+    finally:
+        if email_token is not None:
+            _current_email.reset(email_token)
 
 
 # User context middleware — sets _current_user_id from X-User-Id header
@@ -186,9 +206,10 @@ async def user_context_middleware(request: Request, call_next):
 
 # Per-request user context (set by middleware)
 _current_user_id: contextvars.ContextVar[str] = contextvars.ContextVar('_current_user_id', default='')
+_current_email: contextvars.ContextVar[str] = contextvars.ContextVar('_current_email', default='')
 
-# Per-user DB instances: {user_id: {"stocks": XlsxPortfolio, "mf": MFXlsxPortfolio}}
-_user_dbs: Dict[str, dict] = {}
+# Per-user DB instances: {(user_id, email): {"stocks": XlsxPortfolio, "mf": MFXlsxPortfolio}}
+_user_dbs: Dict[tuple, dict] = {}
 _user_dbs_lock = threading.Lock()
 
 
@@ -197,13 +218,20 @@ def _get_default_user_id() -> str:
     return users[0]["id"] if users else "lenin"
 
 
+def _resolve_email() -> str:
+    """Get authenticated email for the current request."""
+    return _current_email.get() or ""
+
+
 def _get_user_dbs(user_id: str) -> dict:
     """Get or create DB instances for a user."""
+    email = _resolve_email() or get_user_email(user_id) or ""
+    cache_key = (user_id, email)
     with _user_dbs_lock:
-        if user_id in _user_dbs:
-            return _user_dbs[user_id]
+        if cache_key in _user_dbs:
+            return _user_dbs[cache_key]
     # Outside lock — create instances (I/O)
-    dumps = get_user_dumps_dir(user_id)
+    dumps = get_user_dumps_dir(user_id, email=email or None)
     from .mf_xlsx_database import MFXlsxPortfolio
     dbs = {
         "stocks": XlsxPortfolio(dumps / "Stocks"),
@@ -211,7 +239,7 @@ def _get_user_dbs(user_id: str) -> dict:
         "dumps_dir": dumps,
     }
     with _user_dbs_lock:
-        _user_dbs[user_id] = dbs
+        _user_dbs[cache_key] = dbs
     return dbs
 
 
@@ -224,7 +252,7 @@ def _resolve_user_id() -> str:
 def udb():
     """Get stock DB for the current request's user."""
     uid = _resolve_user_id()
-    if uid == _get_default_user_id():
+    if uid == _get_default_user_id() and not _resolve_email():
         return db
     return _get_user_dbs(uid)["stocks"]
 
@@ -232,7 +260,7 @@ def udb():
 def umf():
     """Get MF DB for the current request's user."""
     uid = _resolve_user_id()
-    if uid == _get_default_user_id():
+    if uid == _get_default_user_id() and not _resolve_email():
         return mf_db
     return _get_user_dbs(uid)["mf"]
 
@@ -240,12 +268,16 @@ def umf():
 def user_dumps_dir():
     """Get dumps dir for the current request's user."""
     uid = _resolve_user_id()
-    return get_user_dumps_dir(uid)
+    email = _resolve_email() or get_user_email(uid)
+    return get_user_dumps_dir(uid, email=email)
 
 
 @app.get("/api/users")
 def list_users():
-    """Get all configured users."""
+    """Get all configured users. If authenticated, returns only personas belonging to the user's email."""
+    email = _resolve_email()
+    if email:
+        return get_users_for_email(email)
     return get_users()
 
 
@@ -257,16 +289,19 @@ class AddUserRequest(BaseModel):
 
 @app.post("/api/users")
 def add_user(req: AddUserRequest):
-    """Add a new user."""
+    """Add a new user. Automatically links to the authenticated email."""
     users = get_users()
     user_id = req.name.lower().replace(" ", "_")
     if any(u["id"] == user_id for u in users):
         raise HTTPException(400, f"User '{user_id}' already exists")
+    email = _resolve_email()
     user = {"id": user_id, "name": req.name, "avatar": req.avatar or req.name[0].upper(), "color": req.color}
+    if email:
+        user["email"] = email
     users.append(user)
     save_users(users)
     # Create user's dump directories
-    get_user_dumps_dir(user_id)
+    get_user_dumps_dir(user_id, email=email or None)
     return user
 
 
@@ -436,14 +471,19 @@ def verify_session(request: Request):
 def drive_status():
     """Check Google Drive sync status."""
     from app import drive_service
-    return drive_service.get_drive_status()
+    email = _resolve_email()
+    return drive_service.get_drive_status(email)
 
 
 @app.post("/api/drive/sync")
 def drive_sync_now():
     """Trigger a full sync from Drive."""
     from app import drive_service
-    drive_service.sync_from_drive()
+    email = _resolve_email()
+    if email:
+        drive_service.sync_from_drive(email)
+    else:
+        drive_service.sync_all_emails()
     return {"status": "ok", "message": "Sync complete"}
 
 

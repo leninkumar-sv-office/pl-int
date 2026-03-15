@@ -120,8 +120,8 @@ def exchange_auth_code(auth_code: str) -> dict:
     if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
         raise ValueError(f"Email {email} not in allowed list")
 
-    # Store refresh token
-    _save_tokens({
+    # Store refresh token (per-email)
+    _save_tokens(email, {
         "refresh_token": creds.refresh_token,
         "access_token": creds.token,
         "client_id": GOOGLE_CLIENT_ID,
@@ -137,10 +137,10 @@ def exchange_auth_code(auth_code: str) -> dict:
     }
 
 
-def get_drive_credentials():
-    """Get valid Drive API credentials, refreshing if needed."""
+def get_drive_credentials(email: str = ""):
+    """Get valid Drive API credentials for an email, refreshing if needed."""
     from google.oauth2.credentials import Credentials
-    tokens = _load_tokens()
+    tokens = _load_tokens(email)
     if not tokens or not tokens.get("refresh_token"):
         return None
     creds = Credentials(
@@ -155,8 +155,18 @@ def get_drive_credentials():
         from google.auth.transport.requests import Request
         creds.refresh(Request())
         tokens["access_token"] = creds.token
-        _save_tokens(tokens)
+        _save_tokens(email, tokens)
     return creds
+
+
+def get_any_drive_credentials():
+    """Return credentials for any stored email (fallback for non-email-scoped calls)."""
+    all_tokens = _load_all_tokens()
+    for email in all_tokens:
+        creds = get_drive_credentials(email)
+        if creds:
+            return creds, email
+    return None, None
 
 
 def create_session_token(email: str, name: str) -> str:
@@ -179,12 +189,34 @@ def verify_session_token(token: str) -> Optional[dict]:
         return None
 
 
-def _save_tokens(tokens: dict):
-    _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _TOKEN_FILE.write_text(json.dumps(tokens, indent=2))
-
-
-def _load_tokens() -> dict | None:
+def _load_all_tokens() -> dict:
+    """Load the full email-keyed token store."""
     if _TOKEN_FILE.exists():
-        return json.loads(_TOKEN_FILE.read_text())
+        try:
+            data = json.loads(_TOKEN_FILE.read_text())
+            # Handle legacy flat format (no email keys)
+            if data and not any("@" in k for k in data.keys()):
+                return {"": data}
+            return data
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_tokens(email: str, tokens: dict):
+    """Persist tokens for one email, merging into the store."""
+    all_tokens = _load_all_tokens()
+    all_tokens[email] = tokens
+    _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _TOKEN_FILE.write_text(json.dumps(all_tokens, indent=2))
+
+
+def _load_tokens(email: str = "") -> dict | None:
+    """Load tokens for a specific email."""
+    all_tokens = _load_all_tokens()
+    if email:
+        return all_tokens.get(email)
+    # Fallback: return first available token
+    for v in all_tokens.values():
+        return v
     return None
