@@ -15,6 +15,7 @@ export default function GoogleLogin({ clientId, onSuccess }) {
         client_id: clientId,
         scope: 'openid email profile https://www.googleapis.com/auth/drive',
         ux_mode: 'popup',
+        select_account: true,
         callback: async (response) => {
           if (response.error) {
             setError(response.error);

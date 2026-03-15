@@ -3,6 +3,16 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Deploy mode'
+        required: true
+        default: 'app'
+        type: choice
+        options:
+          - app
+          - docker
 
 permissions:
   contents: write
@@ -14,6 +24,7 @@ jobs:
       DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
       DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
       DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
+      DEPLOY_MODE: ${{ github.event.inputs.mode || 'app' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -38,13 +49,15 @@ jobs:
 
       - name: Stop old deployment
         run: |
-          # Stop and remove old Docker container + images
+          echo "Stopping old deployment..."
+
+          # Stop Docker container if running
           cd "$DEPLOY_DIR" 2>/dev/null && \
             docker compose down --rmi all --remove-orphans 2>/dev/null || true
           docker image prune -f 2>/dev/null || true
 
-          # Kill any non-Docker process on port 8000
-          lsof -ti:8000 -sTCP:LISTEN | while read pid; do
+          # Kill any process on port 9999
+          lsof -ti:9999 -sTCP:LISTEN | while read pid; do
             cmd=$(ps -p "$pid" -o comm= 2>/dev/null)
             if [ "$cmd" != "com.docker.ba" ] && [ "$cmd" != "vpnkit-bridge" ]; then
               kill -9 "$pid" 2>/dev/null || true
@@ -55,7 +68,7 @@ jobs:
 
       - name: Clone and prepare
         run: |
-          echo "── Deploying ${{ steps.tag.outputs.tag }} ──"
+          echo "── Deploying ${{ steps.tag.outputs.tag }} (mode: $DEPLOY_MODE) ──"
 
           # Backup dumps and data before cleaning
           if [ -d "$DEPLOY_DIR" ]; then
@@ -111,26 +124,93 @@ jobs:
           chmod 600 "$DEPLOY_DIR/.env"
           echo "Deploy directory ready"
 
+      # ── App mode: build frontend + venv + uvicorn ──────────
+      - name: Build frontend
+        if: env.DEPLOY_MODE == 'app'
+        run: |
+          cd "$DEPLOY_DIR/frontend"
+          npm ci --silent
+          npm run build
+          echo "Frontend built → frontend/dist/"
+
+      - name: Setup Python venv and install deps
+        if: env.DEPLOY_MODE == 'app'
+        run: |
+          cd "$DEPLOY_DIR/backend"
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --quiet -r requirements.txt
+          echo "Python venv ready"
+
+      - name: Start app server
+        if: env.DEPLOY_MODE == 'app'
+        run: |
+          cd "$DEPLOY_DIR/backend"
+          source venv/bin/activate
+          set -a; source "$DEPLOY_DIR/.env"; set +a
+
+          # Unset RUNNER_TRACKING_ID so uvicorn survives job cleanup
+          (unset RUNNER_TRACKING_ID; nohup python3 -m uvicorn app.main:app \
+            --host 0.0.0.0 --port 9999 \
+            > "$DEPLOY_DIR/app.log" 2>&1 &)
+          sleep 3
+          echo "App server started (PID: $(lsof -ti:9999 -sTCP:LISTEN))"
+
+      # ── Docker mode: docker compose ────────────────────────
       - name: Docker build and start
+        if: env.DEPLOY_MODE == 'docker'
         run: |
           cd "$DEPLOY_DIR"
           docker compose --env-file .env up -d --build
           echo "Docker container started"
 
-      - name: Health check
+      # ── Health checks (both modes) ─────────────────────────
+      - name: Health check (localhost)
         run: |
-          echo "Waiting for container to be healthy..."
-          for i in $(seq 1 24); do
-            health=$(docker inspect --format='{{.State.Health.Status}}' pl-dashboard 2>/dev/null || echo "starting")
-            echo "  Attempt $i/24: $health"
-            if [ "$health" = "healthy" ]; then
-              echo "Container is healthy!"
-              curl -s http://localhost:8000/health | python3 -m json.tool
-              exit 0
-            fi
-            sleep 5
-          done
+          echo "Waiting for app to be healthy..."
+          if [ "$DEPLOY_MODE" = "docker" ]; then
+            for i in $(seq 1 24); do
+              health=$(docker inspect --format='{{.State.Health.Status}}' pl-dashboard 2>/dev/null || echo "starting")
+              echo "  Attempt $i/24: $health"
+              if [ "$health" = "healthy" ]; then
+                echo "Container is healthy!"
+                curl -s http://localhost:9999/health | python3 -m json.tool
+                exit 0
+              fi
+              sleep 5
+            done
+          else
+            for i in $(seq 1 24); do
+              status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9999/health 2>/dev/null || echo "000")
+              echo "  Attempt $i/24: HTTP $status"
+              if [ "$status" = "200" ]; then
+                echo "App is healthy!"
+                curl -s http://localhost:9999/health | python3 -m json.tool
+                exit 0
+              fi
+              sleep 5
+            done
+          fi
           echo "Health check failed after 2 minutes"
-          echo "--- Container logs ---"
-          docker compose -f "$DEPLOY_DIR/docker-compose.yml" logs --tail=50 2>/dev/null
+          echo "--- Logs ---"
+          if [ "$DEPLOY_MODE" = "docker" ]; then
+            docker compose -f "$DEPLOY_DIR/docker-compose.yml" logs --tail=50 2>/dev/null
+          else
+            tail -50 "$DEPLOY_DIR/app.log" 2>/dev/null
+          fi
           exit 1
+
+      - name: Health check (Cloudflare tunnel)
+        run: |
+          echo "Waiting 5 minutes for Cloudflare tunnel to pick up new deployment..."
+          sleep 300
+          echo "Checking https://pl.thirumagal.com/health ..."
+          status=$(curl -s -o /tmp/tunnel-health.json -w "%{http_code}" https://pl.thirumagal.com/health)
+          if [ "$status" = "200" ]; then
+            echo "Tunnel health check passed!"
+            cat /tmp/tunnel-health.json | python3 -m json.tool
+          else
+            echo "Tunnel health check failed (HTTP $status)"
+            cat /tmp/tunnel-health.json 2>/dev/null
+            exit 1
+          fi

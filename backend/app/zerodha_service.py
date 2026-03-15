@@ -131,7 +131,7 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
                 result = _try_auto_login_and_retry(path, params)
                 if result is not None:
                     return result
-                print("[Zerodha] Token expired. Visit http://localhost:8000/api/zerodha/login to refresh.")
+                print("[Zerodha] Token expired. Visit /api/zerodha/login to refresh.")
                 return None
             elif resp.status_code == 429:
                 # Rate limited — wait and retry
@@ -179,7 +179,7 @@ def is_session_valid() -> bool:
     return False
 
 
-def get_login_url(redirect_url: str = "http://localhost:8000/api/zerodha/callback") -> str:
+def get_login_url(redirect_url: str = "http://localhost:9999/api/zerodha/callback") -> str:
     """Get Kite login URL for user to authenticate."""
     return f"{_LOGIN_URL}?v={_API_VERSION}&api_key={_api_key}&redirect_url={redirect_url}"
 
@@ -339,21 +339,32 @@ def auto_login() -> bool:
             return False
 
         # Step 3: Hit the Kite Connect login URL with session cookies
-        # Follow all redirects (login → /connect/finish → callback with request_token)
+        # Follow redirects manually — stop before hitting our local callback
+        # (which may be unreachable inside Docker or on a different port)
         connect_url = f"https://kite.zerodha.com/connect/login?v={_API_VERSION}&api_key={_api_key}"
         print("[Zerodha] Auto-login: fetching connect login for request_token...")
 
-        connect_resp = session.get(connect_url, allow_redirects=True, timeout=15)
-        final_url = connect_resp.url
-
-        # Extract request_token from final redirect URL
         from urllib.parse import urlparse, parse_qs
-        parsed = urlparse(final_url)
-        params = parse_qs(parsed.query)
-        request_token = params.get("request_token", [None])[0]
+        connect_resp = session.get(connect_url, allow_redirects=False, timeout=15)
+        request_token = None
+        for _ in range(10):  # max redirects
+            location = connect_resp.headers.get("Location", "")
+            parsed = urlparse(location)
+            params = parse_qs(parsed.query)
+            if "request_token" in params:
+                request_token = params["request_token"][0]
+                break
+            if not location or connect_resp.status_code not in (301, 302, 303, 307, 308):
+                break
+            connect_resp = session.get(location, allow_redirects=False, timeout=15)
+        # Fallback: check final URL if we followed all redirects
+        if not request_token:
+            parsed = urlparse(connect_resp.url)
+            params = parse_qs(parsed.query)
+            request_token = params.get("request_token", [None])[0]
 
         if not request_token:
-            print(f"[Zerodha] Auto-login: request_token not found in final URL: {final_url[:200]}")
+            print(f"[Zerodha] Auto-login: request_token not found in redirects: {connect_resp.url[:200]}")
             return False
 
         # Step 4: Exchange request_token for access_token

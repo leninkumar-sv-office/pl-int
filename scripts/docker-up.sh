@@ -21,4 +21,4 @@ docker compose down --rmi all --remove-orphans 2>/dev/null || true
 
 # Build and start — .env is auto-loaded by docker compose
 docker compose up -d --build
-echo "Container started. Health: http://localhost:8000/health"
+echo "Container started. Health: http://localhost:9999/health"

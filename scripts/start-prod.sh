@@ -1,12 +1,11 @@
 #!/bin/bash
-# Start the pl-dashboard production server
-# Used by LaunchAgent to run the app independently of GitHub Actions runner
+# Start the pl-dashboard production server (app mode)
+# Used by CI/CD to run the app directly without Docker
 
 DEPLOY_DIR="/Users/lenin/Desktop/workspace/pl-auto"
 BACKEND_DIR="$DEPLOY_DIR/backend"
 VENV_DIR="$BACKEND_DIR/venv"
 ENV_FILE="$DEPLOY_DIR/.env"
-LOG_FILE="$DEPLOY_DIR/app.log"
 
 cd "$BACKEND_DIR" || exit 1
 
@@ -21,12 +20,4 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # Run uvicorn (foreground — launchd manages stdout/stderr)
-exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-# test run 2
-# test run 3
-# test run 4
-# test run 5
-# docker test 2
-# docker test 3
-# docker test 4
-# docker test 5
+exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9999

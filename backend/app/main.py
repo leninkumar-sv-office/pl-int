@@ -1671,11 +1671,16 @@ def zerodha_login_page():
 
 
 @app.get("/api/zerodha/login-url")
-def get_zerodha_login_url():
+def get_zerodha_login_url(request: Request):
     """Get Kite Connect login URL for browser auth."""
     if not zerodha_service.is_configured():
         raise HTTPException(status_code=400, detail="Zerodha API key not configured in .env")
-    url = zerodha_service.get_login_url()
+    # Build callback URL from the request origin so it works for both
+    # localhost:9999 and pl.thirumagal.com
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost:9999"))
+    redirect_url = f"{scheme}://{host}/api/zerodha/callback"
+    url = zerodha_service.get_login_url(redirect_url=redirect_url)
     return {"login_url": url}
 
 
