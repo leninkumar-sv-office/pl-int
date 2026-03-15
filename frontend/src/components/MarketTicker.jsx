@@ -228,11 +228,11 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
 
   return (
     <div style={styles.bar}>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+      <div className="market-ticker-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
         {row1.map((t, i) => renderItem(t, i, row1.length))}
       </div>
       {row2.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, borderTop: '1px solid var(--border)' }}>
+        <div className="market-ticker-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, borderTop: '1px solid var(--border)' }}>
           {row2.map((t, i) => renderItem(t, i, row2.length))}
         </div>
       )}
