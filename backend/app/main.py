@@ -293,6 +293,7 @@ def _auto_provision_user(email: str, google_name: str):
 
     Runs on every login but is idempotent — skips if persona already exists.
     """
+    from app import drive_service
     email = email.lower()
     existing = get_users_for_email(email)
     if existing:
