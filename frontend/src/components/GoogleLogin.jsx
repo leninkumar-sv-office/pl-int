@@ -25,6 +25,11 @@ export default function GoogleLogin({ clientId, onSuccess }) {
           setLoading(true);
           try {
             const result = await googleLoginWithCode(response.code);
+            // Clear stale persona if email changed
+            const prevUser = JSON.parse(localStorage.getItem('authUser') || '{}');
+            if (prevUser.email && prevUser.email !== result.email) {
+              localStorage.removeItem('selectedUserId');
+            }
             localStorage.setItem('sessionToken', result.session_token);
             localStorage.setItem('authUser', JSON.stringify({
               email: result.email,

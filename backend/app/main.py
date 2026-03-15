@@ -288,6 +288,51 @@ def user_dumps_dir():
     return get_user_dumps_dir(uid, email=email)
 
 
+def _auto_provision_user(email: str, google_name: str):
+    """Auto-create persona, dumps dirs, and Drive folders for a new email.
+
+    Runs on every login but is idempotent — skips if persona already exists.
+    """
+    email = email.lower()
+    existing = get_users_for_email(email)
+    if existing:
+        # Already has persona(s) — just ensure Drive folder exists
+        import threading
+        threading.Thread(target=drive_service.init_drive_for_email, args=(email,), daemon=True).start()
+        return
+
+    # Create default persona from Google profile name
+    display_name = google_name.strip() or email.split("@")[0]
+    user_id = display_name.lower().replace(" ", "_")
+
+    # Ensure unique ID
+    users = get_users()
+    base_id = user_id
+    counter = 1
+    while any(u["id"] == user_id for u in users):
+        user_id = f"{base_id}_{counter}"
+        counter += 1
+
+    user = {
+        "id": user_id,
+        "name": display_name,
+        "avatar": display_name[0].upper(),
+        "color": "#4e7cff",
+        "email": email,
+    }
+    users.append(user)
+    save_users(users)
+
+    # Create dumps directories
+    get_user_dumps_dir(user_id, email=email)
+
+    # Init Drive folders in background
+    import threading
+    threading.Thread(target=drive_service.init_drive_for_email, args=(email,), daemon=True).start()
+
+    print(f"[App] Auto-provisioned persona '{display_name}' ({user_id}) for {email}")
+
+
 @app.get("/api/users")
 def list_users():
     """Get all configured users. If authenticated, returns only personas belonging to the user's email."""
@@ -458,13 +503,8 @@ def google_login_with_code(body: dict):
     except Exception as e:
         print(f"[Auth] Code exchange failed: {e}")
         raise HTTPException(401, "Failed to exchange authorization code")
-    # Initialize Drive folders for this email (creates pl/dumps/ in their Drive)
-    import threading
-    threading.Thread(
-        target=drive_service.init_drive_for_email,
-        args=(result["email"],),
-        daemon=True,
-    ).start()
+    # Auto-provision new user: persona + dumps dir + Drive folders
+    _auto_provision_user(result["email"], result["name"])
 
     session_token = auth_module.create_session_token(result["email"], result["name"])
     return {
