@@ -2585,9 +2585,9 @@ def update_rd_endpoint(rd_id: str, req: UpdateRDRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.delete("/api/recurring-deposits/{rd_id}")
-def delete_rd_endpoint(fd_id: str):
+def delete_rd_endpoint(rd_id: str):
     try:
-        return rd_delete(fd_id, base_dir=user_dumps_dir())
+        return rd_delete(rd_id, base_dir=user_dumps_dir())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

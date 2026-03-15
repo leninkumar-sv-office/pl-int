@@ -178,6 +178,37 @@ def upload_file(local_path, subfolder: str = None, email: str = ""):
     threading.Thread(target=_do_upload, daemon=True).start()
 
 
+def delete_file(filename: str, subfolder: str = None, email: str = ""):
+    """Delete a file from Drive (async). subfolder is relative to pl/ folder."""
+
+    def _do_delete():
+        try:
+            service = _get_service(email)
+            if not service:
+                return
+            if not _get_dumps_folder_id(email):
+                return
+
+            pl_id = _get_pl_folder_id(service, email)
+            if not pl_id:
+                return
+
+            target_folder = pl_id
+            if subfolder:
+                target_folder = _navigate_to_subfolder(service, pl_id, subfolder)
+
+            file_id = _find_file(service, filename, target_folder)
+            if file_id:
+                service.files().delete(fileId=file_id).execute()
+                print(f"[Drive] Deleted {filename}")
+            else:
+                print(f"[Drive] File not found for deletion: {filename}")
+        except Exception as e:
+            print(f"[Drive] Delete failed for {filename}: {e}")
+
+    threading.Thread(target=_do_delete, daemon=True).start()
+
+
 def download_file(filename: str, local_path, subfolder: str = None, email: str = "") -> bool:
     """Download a file from Drive to local path. subfolder is relative to pl/."""
     local_path = Path(local_path)

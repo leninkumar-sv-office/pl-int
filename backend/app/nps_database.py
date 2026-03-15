@@ -46,6 +46,23 @@ def _sync_to_drive(filepath: Path):
     except Exception:
         pass
 
+
+def _delete_from_drive(filepath: Path):
+    """Delete a file from Google Drive by its local path."""
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        parts = Path(rel).parts
+        email = next((p for p in parts if "@" in p), "")
+        if len(parts) > 1:
+            subfolder = "dumps/" + "/".join(parts[:-1])
+        else:
+            subfolder = "dumps"
+        drive_service.delete_file(filepath.name, subfolder=subfolder, email=email)
+    except Exception:
+        pass
+
 # Scheme short codes
 SCHEME_MAP = {"E": "Equity", "C": "Corporate Bonds", "G": "Government Securities"}
 
@@ -804,6 +821,7 @@ def delete(nps_id: str, base_dir=None) -> dict:
 
         xlsx_path = Path(item.get("_xlsx_path", ""))
         if xlsx_path.exists():
+            _delete_from_drive(xlsx_path)
             xlsx_path.unlink()
 
         return {"message": f"NPS {nps_id} deleted", "item": item}

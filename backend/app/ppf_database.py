@@ -66,6 +66,24 @@ def _sync_to_drive(filepath: Path):
         pass
 
 
+def _delete_from_drive(filepath: Path):
+    """Delete a file from Google Drive by its local path."""
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        parts = Path(rel).parts
+        # Extract email from path (first component containing '@')
+        email = next((p for p in parts if "@" in p), "")
+        if len(parts) > 1:
+            subfolder = "dumps/" + "/".join(parts[:-1])
+        else:
+            subfolder = "dumps"
+        drive_service.delete_file(filepath.name, subfolder=subfolder, email=email)
+    except Exception:
+        pass
+
+
 # PPF constants
 PPF_DEFAULT_RATE = 7.1   # current rate (%)
 PPF_TENURE_YEARS = 15
@@ -1062,7 +1080,7 @@ def update(ppf_id: str, data: dict, base_dir=None) -> dict:
 
 
 def delete(ppf_id: str, base_dir=None) -> dict:
-    """Delete a PPF account -- removes xlsx file."""
+    """Delete a PPF account -- removes xlsx file locally and from Drive."""
     ppf_dir = (Path(base_dir) / "PPF") if base_dir else PPF_DIR
     with _lock:
         filepath = _find_xlsx(ppf_id, ppf_dir=ppf_dir)
@@ -1071,8 +1089,11 @@ def delete(ppf_id: str, base_dir=None) -> dict:
 
         account = _parse_ppf_xlsx(filepath)
         meta_file = filepath.with_suffix(".meta.json")
+        # Delete from Drive first (async), then local
+        _delete_from_drive(filepath)
         filepath.unlink()
         if meta_file.exists():
+            _delete_from_drive(meta_file)
             meta_file.unlink()
         return {"message": f"PPF {ppf_id} deleted", "item": account}
 

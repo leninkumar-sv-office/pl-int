@@ -556,6 +556,9 @@ tr.highlight-profit:hover {
   }
   .header-actions .btn { padding: 8px 14px; font-size: 13px; }
 
+  /* Section header: wrap on tablet */
+  .section-header { flex-wrap: wrap; gap: 8px; }
+
   /* Summary cards: 3 columns on tablet */
   .summary-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 
@@ -592,6 +595,15 @@ tr.highlight-profit:hover {
 @media (max-width: 480px) {
   .app { padding: 8px; }
   .hide-mobile { display: none !important; }
+
+  /* Section header: stack vertically on phone */
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .section-badge { font-size: 11px; padding: 3px 8px; }
+  .section-title { font-size: 16px; }
 
   /* Summary: 2 columns */
   .summary-grid { grid-template-columns: repeat(2, 1fr); }

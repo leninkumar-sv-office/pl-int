@@ -58,6 +58,23 @@ def _sync_to_drive(filepath: Path):
         pass
 
 
+def _delete_from_drive(filepath: Path):
+    """Delete a file from Google Drive by its local path."""
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        parts = Path(rel).parts
+        email = next((p for p in parts if "@" in p), "")
+        if len(parts) > 1:
+            subfolder = "dumps/" + "/".join(parts[:-1])
+        else:
+            subfolder = "dumps"
+        drive_service.delete_file(filepath.name, subfolder=subfolder, email=email)
+    except Exception:
+        pass
+
+
 # ═══════════════════════════════════════════════════════════
 #  HELPERS
 # ═══════════════════════════════════════════════════════════
@@ -555,6 +572,7 @@ def delete(fd_id: str, base_dir=None) -> dict:
     if xlsx_dir.exists():
         for f in xlsx_dir.glob("*.xlsx"):
             if _gen_fd_id(f.stem) == fd_id:
+                _delete_from_drive(f)
                 f.unlink()
                 return {"message": f"FD {fd_id} deleted (xlsx)", "item": {"id": fd_id, "name": f.stem}}
 
