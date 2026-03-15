@@ -39,6 +39,11 @@ export async function getAuthStatus() {
   return data;
 }
 
+export async function getVersion() {
+  const { data } = await api.get('/version');
+  return data;
+}
+
 export async function googleLogin(idToken) {
   const { data } = await api.post('/auth/google', { token: idToken });
   return data;

@@ -122,7 +122,10 @@ jobs:
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
-          echo "Deploy directory ready"
+
+          # Write deploy tag for /api/version endpoint
+          echo "${{ steps.tag.outputs.tag }}" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"
+          echo "Deploy directory ready (tag: ${{ steps.tag.outputs.tag }})"
 
       # ── App mode: build frontend + venv + uvicorn ──────────
       - name: Build frontend

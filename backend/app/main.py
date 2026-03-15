@@ -156,7 +156,7 @@ async def auth_middleware(request: Request, call_next):
         # Allow auth endpoints, Zerodha browser pages, static files, and health checks through
         if not (path.startswith("/api/auth/") or path.startswith("/assets/")
                 or path == "/" or path == "/favicon.ico"
-                or path == "/health"
+                or path == "/health" or path == "/api/version"
                 or path.startswith("/api/zerodha/")
                 or not path.startswith("/api/")):
             auth_header = request.headers.get("authorization", "")
@@ -273,6 +273,16 @@ def add_user(req: AddUserRequest):
 # ══════════════════════════════════════════════════════════
 #  HEALTH CHECK
 # ══════════════════════════════════════════════════════════
+
+@app.get("/api/version")
+def get_version():
+    """Return the deployed version tag."""
+    tag_file = os.path.join(os.path.dirname(__file__), "..", "data", "deploy_tag.txt")
+    tag = "dev"
+    if os.path.exists(tag_file):
+        tag = open(tag_file).read().strip() or "dev"
+    return {"tag": tag}
+
 
 @app.get("/health")
 def health_check():
