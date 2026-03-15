@@ -118,15 +118,15 @@ def on_startup():
     _start_ticker_bg_refresh()
     print("[App] Background market ticker refresh started (every 60s)")
 
-    # Migrate existing tokens: seed drive_folder_id from env if missing
+    # Migrate: seed drive_folder_id for the primary email from env var
     try:
         default_folder_id = os.getenv("GOOGLE_DRIVE_DUMPS_FOLDER_ID", "").strip()
-        if default_folder_id:
-            all_tokens = auth_module._load_all_tokens()
-            for email_key, tokens in all_tokens.items():
-                if email_key and "@" in email_key and not tokens.get("drive_folder_id"):
-                    auth_module.set_drive_folder_id(email_key, default_folder_id)
-                    print(f"[App] Seeded drive_folder_id for {email_key}")
+        primary_email = os.getenv("USER_EMAIL", "").strip().lower()
+        if default_folder_id and primary_email:
+            existing = auth_module.get_drive_folder_id(primary_email)
+            if not existing:
+                auth_module.set_drive_folder_id(primary_email, default_folder_id)
+                print(f"[App] Seeded drive_folder_id for {primary_email}")
     except Exception as e:
         print(f"[App] Token migration skipped: {e}")
 
