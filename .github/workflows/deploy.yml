@@ -24,6 +24,7 @@ jobs:
       DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
       DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
       DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
+      USER_EMAIL: leninkumar.sv.ai@gmail.com
       DEPLOY_MODE: ${{ github.event.inputs.mode || 'app' }}
 
     steps:
@@ -124,6 +125,12 @@ jobs:
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
+
+          # Run email-scope migration (idempotent — safe on every deploy)
+          if [ -f "$DEPLOY_DIR/backend/scripts/migrate_to_email_scope.py" ]; then
+            python3 "$DEPLOY_DIR/backend/scripts/migrate_to_email_scope.py" \
+              --email-map "Lenin:leninkumar.sv.ai@gmail.com,Appa:leninkumar.sv.ai@gmail.com,Amma:leninkumar.sv.ai@gmail.com"
+          fi
 
           # Write deploy tag for /api/version endpoint
           echo "${{ steps.tag.outputs.tag }}" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"
