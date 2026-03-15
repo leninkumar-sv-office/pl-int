@@ -43,8 +43,8 @@ jobs:
             docker compose down --rmi all --remove-orphans 2>/dev/null || true
           docker image prune -f 2>/dev/null || true
 
-          # Kill any non-Docker process on port 8000
-          lsof -ti:8000 -sTCP:LISTEN | while read pid; do
+          # Kill any non-Docker process on port 9999
+          lsof -ti:9999 -sTCP:LISTEN | while read pid; do
             cmd=$(ps -p "$pid" -o comm= 2>/dev/null)
             if [ "$cmd" != "com.docker.ba" ] && [ "$cmd" != "vpnkit-bridge" ]; then
               kill -9 "$pid" 2>/dev/null || true
@@ -125,7 +125,7 @@ jobs:
             echo "  Attempt $i/24: $health"
             if [ "$health" = "healthy" ]; then
               echo "Container is healthy!"
-              curl -s http://localhost:8000/health | python3 -m json.tool
+              curl -s http://localhost:9999/health | python3 -m json.tool
               exit 0
             fi
             sleep 5
