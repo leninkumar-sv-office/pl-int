@@ -214,6 +214,10 @@ _user_dbs_lock = threading.Lock()
 
 
 def _get_default_user_id() -> str:
+    email = _current_email.get()
+    if email:
+        owned = get_users_for_email(email)
+        return owned[0]["id"] if owned else ""
     users = get_users()
     return users[0]["id"] if users else "lenin"
 
