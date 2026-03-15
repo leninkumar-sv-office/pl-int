@@ -64,7 +64,13 @@ def migrate(email_map: dict, dry_run=False):
                     shutil.move(str(old_path), str(new_path))
                 changed = True
         elif new_path.exists():
-            print(f"  OK   {new_path} already exists")
+            # Email-scoped path exists — remove stale flat folder if present
+            if old_path.exists() and old_path.parent == DUMPS_BASE:
+                print(f"  CLEAN {old_path} (stale — data already at {new_path})")
+                if not dry_run:
+                    shutil.rmtree(str(old_path))
+            else:
+                print(f"  OK   {new_path} already exists")
         else:
             print(f"  CREATE {new_path}")
             if not dry_run:
