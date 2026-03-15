@@ -117,7 +117,7 @@ jobs:
           docker compose --env-file .env up -d --build
           echo "Docker container started"
 
-      - name: Health check
+      - name: Health check (localhost)
         run: |
           echo "Waiting for container to be healthy..."
           for i in $(seq 1 24); do
@@ -134,3 +134,18 @@ jobs:
           echo "--- Container logs ---"
           docker compose -f "$DEPLOY_DIR/docker-compose.yml" logs --tail=50 2>/dev/null
           exit 1
+
+      - name: Health check (Cloudflare tunnel)
+        run: |
+          echo "Waiting 5 minutes for Cloudflare tunnel to pick up new container..."
+          sleep 300
+          echo "Checking https://pl.thirumagal.com/health ..."
+          status=$(curl -s -o /tmp/tunnel-health.json -w "%{http_code}" https://pl.thirumagal.com/health)
+          if [ "$status" = "200" ]; then
+            echo "Tunnel health check passed!"
+            cat /tmp/tunnel-health.json | python3 -m json.tool
+          else
+            echo "Tunnel health check failed (HTTP $status)"
+            cat /tmp/tunnel-health.json 2>/dev/null
+            exit 1
+          fi
