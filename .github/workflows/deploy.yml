@@ -35,6 +35,8 @@ jobs:
         id: tag
         run: |
           latest=$(git tag -l 'prod-*' --sort=-v:refname | head -1)
+          echo "prev_tag=${latest}" >> "$GITHUB_OUTPUT"
+
           if [ -z "$latest" ]; then
             next=1
           else
@@ -45,7 +47,7 @@ jobs:
           git tag "$tag"
           git push origin "$tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "Created tag: $tag"
+          echo "Created tag: $tag (previous: ${latest:-none})"
 
       - name: Stop old deployment
         run: |
@@ -217,3 +219,89 @@ jobs:
             cat /tmp/tunnel-health.json 2>/dev/null
             exit 1
           fi
+
+      # ── Rollback on failure ────────────────────────────────
+      - name: Rollback to previous tag
+        if: failure() && steps.tag.outputs.prev_tag != ''
+        run: |
+          PREV_TAG="${{ steps.tag.outputs.prev_tag }}"
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║  ROLLBACK: Deploying previous tag $PREV_TAG  "
+          echo "╚══════════════════════════════════════════════╝"
+
+          # Stop failed deployment
+          lsof -ti:9999 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+          cd "$DEPLOY_DIR" 2>/dev/null && \
+            docker compose down --rmi all --remove-orphans 2>/dev/null || true
+          sleep 1
+
+          # Backup data before rollback
+          if [ -d "$DEPLOY_DIR/backend/dumps" ]; then
+            mkdir -p /tmp/pl-dumps-backup
+            cp -a "$DEPLOY_DIR/backend/dumps/." /tmp/pl-dumps-backup/ 2>/dev/null || true
+          fi
+          if [ -d "$DEPLOY_DIR/backend/data" ]; then
+            mkdir -p /tmp/pl-data-backup
+            cp -a "$DEPLOY_DIR/backend/data/." /tmp/pl-data-backup/ 2>/dev/null || true
+          fi
+
+          # Clone previous tag
+          rm -rf "$DEPLOY_DIR"
+          git clone "$GITHUB_WORKSPACE" "$DEPLOY_DIR"
+          cd "$DEPLOY_DIR"
+          git checkout "$PREV_TAG"
+
+          # Restore data
+          mkdir -p "$DEPLOY_DIR/backend/dumps"
+          if [ -d /tmp/pl-dumps-backup ]; then
+            cp -a /tmp/pl-dumps-backup/. "$DEPLOY_DIR/backend/dumps/" 2>/dev/null || true
+            rm -rf /tmp/pl-dumps-backup
+          fi
+          if [ -d /tmp/pl-data-backup ]; then
+            cp -a /tmp/pl-data-backup/. "$DEPLOY_DIR/backend/data/" 2>/dev/null || true
+            rm -rf /tmp/pl-data-backup
+          fi
+
+          # Write .env
+          printf '%s\n' \
+            "ZERODHA_API_KEY=${{ secrets.ZERODHA_API_KEY }}" \
+            "ZERODHA_API_SECRET=${{ secrets.ZERODHA_API_SECRET }}" \
+            "ZERODHA_ACCESS_TOKEN=${{ secrets.ZERODHA_ACCESS_TOKEN }}" \
+            "ZERODHA_USER_ID=${{ secrets.ZERODHA_USER_ID }}" \
+            "ZERODHA_PASSWORD=${{ secrets.ZERODHA_PASSWORD }}" \
+            "ZERODHA_TOTP_SECRET=${{ secrets.ZERODHA_TOTP_SECRET }}" \
+            "AUTH_MODE=${{ secrets.AUTH_MODE }}" \
+            "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            "ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}" \
+            "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
+            > "$DEPLOY_DIR/.env"
+          chmod 600 "$DEPLOY_DIR/.env"
+          echo "$PREV_TAG" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"
+
+          # Deploy previous tag using same mode
+          if [ "$DEPLOY_MODE" = "docker" ]; then
+            docker compose --env-file .env up -d --build
+          else
+            cd "$DEPLOY_DIR/frontend" && npm ci --silent && npm run build
+            cd "$DEPLOY_DIR/backend"
+            python3 -m venv venv && source venv/bin/activate
+            pip install --quiet -r requirements.txt
+            set -a; source "$DEPLOY_DIR/.env"; set +a
+            (unset RUNNER_TRACKING_ID; nohup python3 -m uvicorn app.main:app \
+              --host 0.0.0.0 --port 9999 \
+              > "$DEPLOY_DIR/app.log" 2>&1 &)
+            sleep 3
+          fi
+
+          # Verify rollback
+          for i in $(seq 1 12); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9999/health 2>/dev/null || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "Rollback to $PREV_TAG successful!"
+              curl -s http://localhost:9999/health | python3 -m json.tool
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Rollback health check failed — manual intervention needed"
