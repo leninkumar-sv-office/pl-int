@@ -2,14 +2,14 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { getTickerHistory } from '../services/api';
 
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
+function useWindowWidth() {
+  const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= breakpoint);
+    const handler = () => setWidth(window.innerWidth);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
-  }, [breakpoint]);
-  return isMobile;
+  }, []);
+  return width;
 }
 
 const CHART_PERIODS = ['1D', '5D', '1M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
@@ -55,7 +55,9 @@ const ChangeLine = ({ label, pct, amt }) => {
 };
 
 export default function MarketTicker({ tickers, loading, lastUpdated }) {
-  const isMobile = useIsMobile();
+  const windowWidth = useWindowWidth();
+  const isMobile = windowWidth <= 480;
+  const isTablet = windowWidth > 480 && windowWidth <= 1024;
   const [expandedKey, setExpandedKey] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [chartPeriod, setChartPeriod] = useState('1y');
@@ -240,7 +242,7 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
 
   const fmtTime = lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
 
-  const gridCols = isMobile ? 2 : cols;
+  const gridCols = isMobile ? 2 : isTablet ? Math.min(4, cols) : cols;
 
   return (
     <div style={styles.bar}>
