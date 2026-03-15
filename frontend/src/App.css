@@ -540,6 +540,7 @@ tr.highlight-profit:hover {
 /* Mobile (≤768px) */
 @media (max-width: 768px) {
   .app { padding: 12px; }
+  .hide-mobile { display: none !important; }
 
   /* Header: stack vertically */
   .header {
@@ -619,6 +620,10 @@ tr.highlight-profit:hover {
   .stock-symbol { font-size: 13px; }
   .stock-name { font-size: 11px; }
 }
+
+/* ── Responsive utilities ───────────────────────────── */
+.hide-mobile { }
+.hide-tablet { }
 
 /* Hide number input spinners in filter row */
 input[type="number"]::-webkit-outer-spin-button,

@@ -1261,7 +1261,7 @@ export default function App() {
               </a>
             </div>
           )}
-          <div className="refresh-control">
+          <div className="refresh-control hide-mobile">
             <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Prices</span>
             <select
               className="refresh-select"
@@ -1275,7 +1275,7 @@ export default function App() {
               <option value={600}>10 min</option>
             </select>
           </div>
-          <div className="refresh-control" title="Full page data reload interval">
+          <div className="refresh-control hide-mobile" title="Full page data reload interval">
             <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Reload</span>
             <select
               className="refresh-select"
@@ -1328,7 +1328,7 @@ export default function App() {
             </button>
           ) : (
             <>
-              <button className="btn btn-ghost" onClick={openTradePlanner}>
+              <button className="btn btn-ghost hide-mobile" onClick={openTradePlanner}>
                 Trade Planner
               </button>
               <button className="btn btn-primary" onClick={() => setAddModalData({})}>
@@ -1337,7 +1337,7 @@ export default function App() {
             </>
           )}
           {deployTag && (
-            <span style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.6, marginLeft: 8, fontFamily: 'monospace' }}>
+            <span className="hide-mobile" style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.6, marginLeft: 8, fontFamily: 'monospace' }}>
               {deployTag}
             </span>
           )}

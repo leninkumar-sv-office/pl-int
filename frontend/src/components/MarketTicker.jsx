@@ -1,6 +1,16 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { getTickerHistory } from '../services/api';
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
 
 const CHART_PERIODS = ['1D', '5D', '1M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
 
@@ -45,6 +55,7 @@ const ChangeLine = ({ label, pct, amt }) => {
 };
 
 export default function MarketTicker({ tickers, loading, lastUpdated }) {
+  const isMobile = useIsMobile();
   const [expandedKey, setExpandedKey] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [chartPeriod, setChartPeriod] = useState('1y');
@@ -115,24 +126,25 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
     const isExpanded = expandedKey === t.key;
     return (
       <div key={t.key} style={{
-        ...styles.item,
-        borderRight: isLast ? 'none' : '1px solid var(--border)',
+        ...(isMobile ? styles.itemMobile : styles.item),
+        borderRight: isMobile ? 'none' : (isLast ? 'none' : '1px solid var(--border)'),
+        borderBottom: isMobile ? '1px solid var(--border)' : 'none',
         cursor: hasToken ? 'pointer' : 'default',
         background: isExpanded ? 'rgba(255,255,255,0.03)' : 'transparent',
         borderRadius: isExpanded ? '4px' : 0,
       }}
         onClick={() => handleTickerClick(t.key, hasToken)}
       >
-        <span style={styles.label}>{t.label}{t.unit ? <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '10px', marginLeft: '2px' }}>{t.unit.replace('₹', '')}</span> : null}</span>
+        <span style={isMobile ? styles.labelMobile : styles.label}>{t.label}{t.unit ? <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '10px', marginLeft: '2px' }}>{t.unit.replace('₹', '')}</span> : null}</span>
         {hasData ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ ...styles.price, color: priceColor }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: isMobile ? 4 : 6, flexWrap: 'wrap' }}>
+              <span style={{ ...(isMobile ? styles.priceMobile : styles.price), color: priceColor }}>
                 {formatPrice(t.price, t.type)}
               </span>
               {d !== 0 && (
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: isMobile ? '10px' : '11px',
                   fontWeight: 600,
                   color: d >= 0 ? 'var(--green)' : 'var(--red)',
                   background: d >= 0 ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
@@ -143,6 +155,7 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
                 </span>
               )}
             </div>
+            {!isMobile && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               <span style={{ fontSize: '10px', color: d >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 1D: {d >= 0 ? '+' : ''}{d.toFixed(2)}%, {dAmt || '+0'}
@@ -150,6 +163,7 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
               <ChangeLine label="7D" pct={w} amt={wAmt} />
               <ChangeLine label="1M" pct={m} amt={mAmt} />
             </div>
+            )}
           </div>
         ) : (
           <span style={{ ...styles.price, color: 'var(--text-muted)' }}>--</span>
@@ -226,13 +240,15 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
 
   const fmtTime = lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
 
+  const gridCols = isMobile ? 2 : cols;
+
   return (
     <div style={styles.bar}>
-      <div className="market-ticker-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+      <div className="market-ticker-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
         {row1.map((t, i) => renderItem(t, i, row1.length))}
       </div>
       {row2.length > 0 && (
-        <div className="market-ticker-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, borderTop: '1px solid var(--border)' }}>
+        <div className="market-ticker-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${gridCols}, 1fr)`, borderTop: '1px solid var(--border)' }}>
           {row2.map((t, i) => renderItem(t, i, row2.length))}
         </div>
       )}
@@ -261,6 +277,13 @@ const styles = {
     padding: '6px 12px',
     whiteSpace: 'nowrap',
   },
+  itemMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '2px',
+    padding: '8px 10px',
+  },
   label: {
     fontSize: '12px',
     fontWeight: 600,
@@ -268,8 +291,19 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.3px',
   },
+  labelMobile: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: 'var(--text-dim)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.3px',
+  },
   price: {
     fontSize: '14px',
+    fontWeight: 700,
+  },
+  priceMobile: {
+    fontSize: '13px',
     fontWeight: 700,
   },
 };
