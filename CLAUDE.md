@@ -4,7 +4,7 @@
 
 ```
 pl/
-├── backend/          # FastAPI (Python) — API server on port 8000
+├── backend/          # FastAPI (Python) — API server on port 9999
 │   ├── app/
 │   │   ├── main.py           # All API endpoints
 │   │   ├── auth.py           # Google SSO + JWT session tokens
@@ -18,7 +18,7 @@ pl/
 │   │   ├── App.jsx           # Main app with AuthGate, tabs, data loading
 │   │   ├── components/       # Tab components (MutualFundTable, etc.)
 │   │   └── services/api.js   # Axios API client with auth interceptor
-│   └── vite.config.js        # Proxy /api → localhost:8000
+│   └── vite.config.js        # Proxy /api → localhost:9999
 ├── tests/e2e/        # Playwright end-to-end tests
 │   ├── helpers.js            # Auth helpers (JWT generation, page setup)
 │   ├── market-ticker.spec.js
@@ -37,7 +37,7 @@ pl/
 
 ```bash
 # Backend
-cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 9999
 
 # Frontend
 cd frontend && npm run dev

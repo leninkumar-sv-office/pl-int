@@ -2,11 +2,11 @@ Generate a CONCISE daily market briefing dashboard from past 7 days of Business 
 
 ## Steps
 
-1. Fetch articles (past 7 days): `curl -s http://localhost:8000/api/advisor/articles`
-2. Fetch portfolio: `curl -s http://localhost:8000/api/portfolio/stock-summary`
-3. Fetch insights: `curl -s http://localhost:8000/api/advisor/insights`
-4. Fetch market ticker: `curl -s http://localhost:8000/api/market-ticker`
-5. If empty, refresh: `curl -s -X POST http://localhost:8000/api/advisor/refresh`
+1. Fetch articles (past 7 days): `curl -s http://localhost:9999/api/advisor/articles`
+2. Fetch portfolio: `curl -s http://localhost:9999/api/portfolio/stock-summary`
+3. Fetch insights: `curl -s http://localhost:9999/api/advisor/insights`
+4. Fetch market ticker: `curl -s http://localhost:9999/api/market-ticker`
+5. If empty, refresh: `curl -s -X POST http://localhost:9999/api/advisor/refresh`
 
 Read article BODIES for data extraction, but keep OUTPUT concise.
 
@@ -52,7 +52,7 @@ Skip no-news holdings — just list names at end.
 1-2 sentences MAX. What to DO, not what happened.
 
 ## PDF Generation
-After producing briefing: `curl -s -X POST http://localhost:8000/api/advisor/briefing-pdf -H "Content-Type: application/json" -d '{"markdown": "<briefing>"}'`
+After producing briefing: `curl -s -X POST http://localhost:9999/api/advisor/briefing-pdf -H "Content-Type: application/json" -d '{"markdown": "<briefing>"}'`
 
 ## Rules
 - BREVITY IS MANDATORY — dashboard for quick scanning

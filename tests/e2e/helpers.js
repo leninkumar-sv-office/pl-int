@@ -80,7 +80,7 @@ export async function switchTab(page, tabName) {
  */
 export async function apiGet(endpoint) {
   const token = generateJWT();
-  const res = await fetch(`http://localhost:8000${endpoint}`, {
+  const res = await fetch(`http://localhost:9999${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return res.json();

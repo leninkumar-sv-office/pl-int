@@ -27,7 +27,7 @@ cp backend/.env.example backend/.env
 docker compose up -d --build
 
 # 5. Verify
-curl http://localhost:8000/api/auth/status
+curl http://localhost:9999/api/auth/status
 ```
 
 ## Auto-start on boot (systemd)
@@ -64,7 +64,7 @@ tunnel: <TUNNEL_ID>
 credentials-file: /home/$USER/.cloudflared/<TUNNEL_ID>.json
 ingress:
   - hostname: yourdomain.com
-    service: http://127.0.0.1:8000
+    service: http://127.0.0.1:9999
   - service: http_status:404
 EOF
 

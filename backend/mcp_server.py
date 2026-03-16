@@ -2,7 +2,7 @@
 Portfolio Dashboard MCP Server
 
 Exposes all portfolio data and actions as MCP tools for AI agents.
-Proxies requests to the running FastAPI backend at http://localhost:8000.
+Proxies requests to the running FastAPI backend at http://localhost:9999.
 
 Usage:
   python mcp_server.py
@@ -13,7 +13,7 @@ import json
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-BASE_URL = "http://localhost:8000/api"
+BASE_URL = "http://localhost:9999/api"
 
 mcp = FastMCP(
     "Portfolio Dashboard",

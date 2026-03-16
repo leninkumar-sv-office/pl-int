@@ -2,10 +2,10 @@ Generate a comprehensive daily market briefing from Business Line articles.
 
 ## Steps
 
-1. Fetch articles: `curl -s http://localhost:8000/api/advisor/articles`
-2. Fetch portfolio: `curl -s http://localhost:8000/api/portfolio/stock-summary`
-3. Fetch insights: `curl -s http://localhost:8000/api/advisor/insights`
-4. If empty, refresh: `curl -s -X POST http://localhost:8000/api/advisor/refresh`
+1. Fetch articles: `curl -s http://localhost:9999/api/advisor/articles`
+2. Fetch portfolio: `curl -s http://localhost:9999/api/portfolio/stock-summary`
+3. Fetch insights: `curl -s http://localhost:9999/api/advisor/insights`
+4. If empty, refresh: `curl -s -X POST http://localhost:9999/api/advisor/refresh`
 
 Read the BODY of every article (not just headlines). Extract specific details:
 - Investment amounts, deal sizes, company names

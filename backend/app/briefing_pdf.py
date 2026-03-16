@@ -190,7 +190,7 @@ def _fetch_ticker_data():
     import time
     for attempt in range(3):
         try:
-            req = urllib.request.urlopen("http://localhost:8000/api/market-ticker", timeout=8)
+            req = urllib.request.urlopen("http://localhost:9999/api/market-ticker", timeout=8)
             data = json.loads(req.read())
             tickers = data.get("tickers", [])
             if tickers:

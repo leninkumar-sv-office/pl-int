@@ -34,7 +34,7 @@ REFRESH_INTERVAL = 300    # (used by frontend auto-refresh setting)
 MAX_RETRIES = 3           # retry attempts per source
 
 # Fallback toggle — Yahoo/Google are OFF by default.
-# Enable via: python -m uvicorn app.main:app --port 8000 --reload
+# Enable via: python -m uvicorn app.main:app --port 9999 --reload
 #   with env var: ENABLE_FALLBACK=1
 # Or at runtime via POST /api/settings/fallback
 ENABLE_YAHOO_GOOGLE = os.getenv("ENABLE_FALLBACK", "").strip().lower() in ("1", "true", "yes")

@@ -56,7 +56,7 @@ npm run test:report               # HTML report
 
 ## Prerequisites
 
-- Backend running on `localhost:8000`
+- Backend running on `localhost:9999`
 - Frontend running on `localhost:5173`
 - `AUTH_MODE=google` in `backend/.env`
 - Valid `backend/data/.jwt_secret` (auto-created on first backend start)

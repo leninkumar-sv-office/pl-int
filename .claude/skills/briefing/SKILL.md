@@ -11,29 +11,29 @@ Generate a comprehensive, detailed market briefing from the past 7 days of Busin
 
 1. **Fetch articles** from the backend (past 7 days from both sources):
    ```bash
-   curl -s http://localhost:8000/api/advisor/articles
+   curl -s http://localhost:9999/api/advisor/articles
    ```
    Returns a JSON array with fields: title, summary, body, section, url, source ("Business Line" or "The Hindu"), date (ISO format).
    Articles span the past 7 days via RSS feeds + page scraping.
 
 2. **Fetch portfolio holdings** for context:
    ```bash
-   curl -s http://localhost:8000/api/portfolio/stock-summary
+   curl -s http://localhost:9999/api/portfolio/stock-summary
    ```
 
 3. **Fetch advisor insights** (keyword-matched or AI-generated):
    ```bash
-   curl -s http://localhost:8000/api/advisor/insights
+   curl -s http://localhost:9999/api/advisor/insights
    ```
 
 4. If the articles list is empty or the backend is down, try refreshing first:
    ```bash
-   curl -s -X POST http://localhost:8000/api/advisor/refresh
+   curl -s -X POST http://localhost:9999/api/advisor/refresh
    ```
 
 5. **Fetch GIFT Nifty / market ticker data** for forecasting:
    ```bash
-   curl -s http://localhost:8000/api/market-ticker
+   curl -s http://localhost:9999/api/market-ticker
    ```
    This returns GIFT Nifty (GIFTNIFTY), Sensex, Nifty50, crude oil, gold, silver, USDINR with live prices and change %. Use GIFT Nifty to forecast next-day market direction (GIFT Nifty trades until 11:30 PM IST and signals where Indian markets will open).
 
@@ -49,7 +49,7 @@ Generate a comprehensive, detailed market briefing from the past 7 days of Busin
 
 8. **Generate PDF** — After producing the briefing markdown, save it as a PDF:
    ```bash
-   curl -s -X POST http://localhost:8000/api/advisor/briefing-pdf \
+   curl -s -X POST http://localhost:9999/api/advisor/briefing-pdf \
      -H "Content-Type: application/json" \
      -d "{\"markdown\": \"<the full briefing markdown>\"}"
    ```

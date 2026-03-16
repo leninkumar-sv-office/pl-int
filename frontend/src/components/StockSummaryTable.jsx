@@ -60,6 +60,7 @@ const HELD_COL_DEFS = [
   { id: 'buyPrice',  label: 'Buy Price' },
   { id: 'totalCost', label: 'Total Cost' },
   { id: 'current',   label: 'Current' },
+  { id: 'perUnit',   label: 'Per Unit' },
   { id: 'pl',        label: 'P&L' },
 ];
 const HELD_DEFAULT_HIDDEN = ['price'];
@@ -409,6 +410,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                   {hCol('buyPrice')  && <th style={heldTh}>Buy Price</th>}
                   {hCol('totalCost') && <th style={heldTh}>Total Cost</th>}
                   {hCol('current')   && <th style={heldTh}>Current</th>}
+                  {hCol('perUnit')   && <th style={heldTh}>Per Unit</th>}
                   {hCol('pl')        && <th style={heldTh}>P&L</th>}
                   <th style={heldTh}>Action</th>
                 </tr>
@@ -467,6 +469,30 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                           {cp > 0 ? formatINR(cp) : '--'}
                         </td>
                       )}
+                      {hCol('perUnit')   && (() => {
+                        const unitGain = cp > 0 ? cp - h.buy_price : 0;
+                        const unitPct = h.buy_price > 0 ? (unitGain / h.buy_price * 100) : 0;
+                        const unitPa = _daysSinceBuy > 0 && h.buy_price > 0
+                          ? (Math.pow(1 + unitGain / h.buy_price, 365 / _daysSinceBuy) - 1) * 100 : null;
+                        const clr = unitGain >= 0 ? 'var(--green)' : 'var(--red)';
+                        return (
+                        <td style={heldTd}>
+                          {cp > 0 ? (
+                            <div>
+                              <div style={{ fontWeight: 600, color: clr }}>{unitGain >= 0 ? '+' : ''}{formatINR(unitGain)}</div>
+                              <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                                {unitPct >= 0 ? '+' : ''}{unitPct.toFixed(2)}%
+                              </div>
+                              {unitPa !== null && (
+                                <div style={{ fontSize: '11px', color: clr, opacity: 0.85 }}>
+                                  {unitPa >= 0 ? '+' : ''}{unitPa.toFixed(2)}% p.a.
+                                </div>
+                              )}
+                            </div>
+                          ) : '--'}
+                        </td>
+                        );
+                      })()}
                       {hCol('pl')        && (() => {
                         const lotCost = h.buy_price * h.quantity;
                         const lotPct = lotCost > 0 ? (lotPL / lotCost * 100) : 0;

@@ -59,7 +59,7 @@ else
     echo "⚠️  Node.js not found. Starting backend only."
     echo "   Install Node.js to run the React frontend."
     echo ""
-    echo "🚀 Starting backend at http://127.0.0.1:8000"
+    echo "🚀 Starting backend at http://127.0.0.1:9999"
     echo "   API Docs: http://127.0.0.1:9999/docs"
     echo ""
 
