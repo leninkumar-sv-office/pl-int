@@ -1,0 +1,48 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  backend-tests:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python venv and install deps
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt --quiet
+
+      - name: Run backend tests with coverage
+        run: |
+          source venv/bin/activate
+          python -m pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=html:coverage-html \
+            -v --tb=short
+        env:
+          AUTH_MODE: local
+          ZERODHA_API_KEY: ""
+          ZERODHA_API_SECRET: ""
+
+  frontend-tests:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci --silent
+
+      - name: Run frontend tests
+        run: npx vitest run --reporter=verbose
