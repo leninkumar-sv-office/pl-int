@@ -56,16 +56,28 @@ If health check fails (Cloudflare tunnel may take a few minutes), wait 30s and r
 
 1. **Get failure logs:** `gh run view <RUN_ID> --log-failed`
 2. **Diagnose** the root cause from the logs
-3. **Fix** the issue in the codebase
-4. **Build frontend locally** if frontend files changed: `cd frontend && npm run build`
-5. **New commit** (never amend), push to main
-6. **Watch new CI/CD run** — back to Step 3
-7. **Max 5 retries** before asking user for help
+3. **Fix** the issue — apply fixes to BOTH local codebase AND remote if needed:
+   - **Test failures:** Fix the test or the code causing the failure locally, then push
+   - **Build errors:** Fix imports, missing deps, syntax errors locally, then push
+   - **Health check timeout:** SSH/check the deploy target if needed, fix startup issues
+   - **Missing frontend/dist:** Ensure `mkdir -p frontend/dist/assets` runs in CI before backend tests
+   - **Dependency issues:** Update `requirements.txt` or `package.json`, install locally to verify, then push
+   - **Environment issues:** Check `.env` secrets in GitHub Settings, fix workflow env vars
+4. **Run tests locally first** to verify the fix works before pushing:
+   - Backend: `cd backend && source venv/bin/activate && python -m pytest tests/ --tb=short -q`
+   - Frontend: `cd frontend && npx vitest run`
+5. **Build frontend locally** if frontend files changed: `cd frontend && npm run build`
+6. **New commit** (never amend), push to main
+7. **Watch new CI/CD run** — back to Step 3
+8. **Max 5 retries** before asking user for help
 
 ## Key Rules
 
 - Always use `gh run list` to get the correct run ID after each push
 - Always use `--exit-status` with `gh run watch` to detect failure
 - Read actual failing log output — don't guess what broke
-- Common failures: build errors, health check timeout, missing dependencies
+- **Fix issues in both local AND CI environments** — if CI has a different path, env, or missing dir, fix the workflow too
+- Run tests locally before pushing to avoid wasting CI cycles
+- Common failures: test failures, build errors, health check timeout, missing dependencies, missing frontend/dist
 - Deploy workflow runs in **app mode** (not Docker) by default
+- CI runs tests first (`test.yml`) — deploy is blocked until all tests pass
