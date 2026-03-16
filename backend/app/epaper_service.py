@@ -47,6 +47,14 @@ _TH_SECTIONS = [
     ("business", "TH-Business"),
 ]
 
+# Google News search queries for Indian financial news
+_GN_SEARCHES = [
+    ("Indian+stock+market+sensex+nifty", "GN-Markets"),
+    ("RBI+inflation+rupee+crude+oil+India", "GN-Macro"),
+    ("IPO+OR+mutual+fund+India", "GN-IPO/MF"),
+]
+_GN_BASE = "https://news.google.com"
+
 # Lookback window for article fetching
 _LOOKBACK_DAYS = 7
 
@@ -309,6 +317,123 @@ def _fetch_th_article_body(url: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════
+#  GOOGLE NEWS SCRAPING (RSS search)
+# ═══════════════════════════════════════════════════════════
+
+def _fetch_gn_rss_articles(query: str, section_name: str, lookback_days: int = 7) -> List[dict]:
+    """Fetch articles from Google News RSS search (past N days)."""
+    url = f"{_GN_BASE}/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            print(f"[GoogleNews] RSS {section_name} failed: {resp.status_code}")
+            return []
+
+        root = ET.fromstring(resp.content)
+        articles = []
+        cutoff = date.today() - timedelta(days=lookback_days)
+
+        for item in root.findall(".//item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            pub_el = item.find("pubDate")
+            source_el = item.find("source")
+            desc_el = item.find("description")
+
+            if title_el is None or link_el is None:
+                continue
+
+            title = title_el.text.strip() if title_el.text else ""
+            link = link_el.text.strip() if link_el.text else ""
+
+            if not title or len(title) < 15:
+                continue
+
+            # Skip articles from sources we already scrape directly
+            source_name = ""
+            if source_el is not None:
+                source_name = source_el.text.strip() if source_el.text else ""
+                source_lower = source_name.lower()
+                if any(s in source_lower for s in ["business line", "businessline", "the hindu", "thehindubusinessline"]):
+                    continue
+
+            # Filter by lookback window
+            art_date = None
+            if pub_el is not None and pub_el.text:
+                try:
+                    pub_date = parsedate_to_datetime(pub_el.text)
+                    art_date = pub_date.date().isoformat()
+                    if pub_date.date() < cutoff:
+                        continue
+                except Exception:
+                    pass
+
+            # Extract summary from description HTML
+            summary = ""
+            if desc_el is not None and desc_el.text:
+                soup = BeautifulSoup(desc_el.text, "html.parser")
+                summary = soup.get_text(strip=True)[:200]
+
+            # Clean title (Google News appends " - Source Name")
+            clean_title = title
+            if source_name and title.endswith(f" - {source_name}"):
+                clean_title = title[:-len(f" - {source_name}")].strip()
+
+            articles.append({
+                "title": clean_title,
+                "summary": summary,
+                "section": section_name,
+                "url": link,
+                "source": f"Google News ({source_name})" if source_name else "Google News",
+                "date": art_date or date.today().isoformat(),
+            })
+
+        return articles
+    except Exception as e:
+        print(f"[GoogleNews] Error fetching RSS {section_name}: {e}")
+        return []
+
+
+def _fetch_gn_article_body(url: str) -> str:
+    """Fetch article body from a Google News redirect URL (generic scraper)."""
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15, allow_redirects=True)
+        if resp.status_code != 200:
+            return ""
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        body_parts = []
+
+        # Try common article body selectors across news sites
+        el = soup.find(attrs={"itemprop": "articleBody"})
+        if not el:
+            el = soup.find("div", class_="artText")
+        if not el:
+            el = soup.find("div", class_="article-body")
+        if not el:
+            el = soup.find("div", class_="story-element")
+        if not el:
+            el = soup.find("div", class_="article__body")
+        if not el:
+            el = soup.find("div", class_="story-content")
+        if not el:
+            el = soup.find("div", class_="article_content")
+        if not el:
+            el = soup.find("article")
+
+        if el:
+            for p in el.find_all("p"):
+                text = p.get_text(strip=True)
+                if text and len(text) > 20:
+                    body_parts.append(text)
+
+        return "\n\n".join(body_parts)[:3000]
+    except Exception as e:
+        print(f"[GoogleNews] Error fetching article body: {e}")
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════
 #  COMBINED ARTICLE FETCHING
 # ═══════════════════════════════════════════════════════════
 
@@ -365,7 +490,21 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
 
     th_count = len(all_articles) - bl_count
     print(f"[EPaper] The Hindu: {th_count} articles")
-    print(f"[EPaper] Total: {len(all_articles)} articles from both sources (past {lookback_days} days)")
+
+    # --- Google News (RSS search for Indian financial news) ---
+    pre_gn = len(all_articles)
+    print(f"[EPaper] Fetching Google News articles (past {lookback_days} days)...")
+    for query, section_name in _GN_SEARCHES:
+        gn_articles = _fetch_gn_rss_articles(query, section_name, lookback_days)
+        for art in gn_articles:
+            if art["url"] not in seen_urls:
+                seen_urls.add(art["url"])
+                all_articles.append(art)
+        time.sleep(0.5)
+
+    gn_count = len(all_articles) - pre_gn
+    print(f"[EPaper] Google News: {gn_count} articles")
+    print(f"[EPaper] Total: {len(all_articles)} articles from all sources (past {lookback_days} days)")
 
     # Fetch full body for all articles (throttled)
     bodies_found = 0
@@ -373,6 +512,8 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         source = art.get("source", "Business Line")
         if source == "The Hindu":
             body = _fetch_th_article_body(art["url"])
+        elif source.startswith("Google News"):
+            body = _fetch_gn_article_body(art["url"])
         else:
             body = _fetch_article_body(art["url"])
         art["body"] = body
@@ -448,7 +589,7 @@ def generate_insights(articles: List[dict], portfolio_symbols: List[str]) -> Lis
     articles_block = "\n\n".join(article_texts)
     portfolio_str = ", ".join(portfolio_symbols) if portfolio_symbols else "No holdings data"
 
-    system_prompt = """You are an expert Indian financial advisor analyzing today's articles from Business Line and The Hindu newspapers.
+    system_prompt = """You are an expert Indian financial advisor analyzing today's articles from Business Line, The Hindu, and Google News.
 Your job is to extract ACTIONABLE insights for an investor. Focus on:
 
 1. **Direct stock impacts**: Any news about specific companies — investments, earnings, orders, regulatory changes, mergers, management changes
@@ -596,7 +737,7 @@ def chat(message: str, articles: List[dict], portfolio_symbols: List[str],
     context = "\n\n".join(article_summaries)
     portfolio_str = ", ".join(portfolio_symbols) if portfolio_symbols else "No portfolio data"
 
-    system_prompt = f"""You are an expert Indian financial advisor. You have access to today's Business Line newspaper articles and the user's stock portfolio.
+    system_prompt = f"""You are an expert Indian financial advisor. You have access to today's articles from Business Line, The Hindu, and Google News, plus the user's stock portfolio.
 
 USER'S PORTFOLIO: {portfolio_str}
 
@@ -656,12 +797,14 @@ def get_status() -> dict:
     cached = _articles_cache.get(today, [])
     bl_count = sum(1 for a in cached if a.get("source") == "Business Line")
     th_count = sum(1 for a in cached if a.get("source") == "The Hindu")
+    gn_count = sum(1 for a in cached if a.get("source", "").startswith("Google News"))
     return {
         "has_api_key": has_api_key(),
         "articles_cached": today in _articles_cache,
         "articles_count": len(cached),
         "bl_count": bl_count,
         "th_count": th_count,
+        "gn_count": gn_count,
         "insights_cached": today in _insights_cache,
         "insights_count": len(_insights_cache.get(today, [])),
     }

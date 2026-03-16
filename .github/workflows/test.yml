@@ -20,6 +20,9 @@ jobs:
           source venv/bin/activate
           pip install -r requirements.txt --quiet
 
+      - name: Create frontend dist stub for StaticFiles mount
+        run: mkdir -p ../frontend/dist/assets
+
       - name: Run backend tests with coverage
         run: |
           source venv/bin/activate
