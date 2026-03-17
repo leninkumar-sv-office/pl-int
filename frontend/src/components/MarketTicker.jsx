@@ -144,26 +144,14 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
               <span style={{ ...(isMobile ? styles.priceMobile : styles.price), color: priceColor }}>
                 {formatPrice(t.price, t.type)}
               </span>
-              <span style={{
-                fontSize: isMobile ? '10px' : '11px',
-                fontWeight: 600,
-                color: d === 0 ? 'var(--text-muted)' : d > 0 ? 'var(--green)' : 'var(--red)',
-                background: d === 0 ? 'rgba(255,255,255,0.06)' : d > 0 ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
-                padding: '1px 5px',
-                borderRadius: '3px',
-              }}>
-                {d > 0 ? '▲' : d < 0 ? '▼' : '–'} {Math.abs(d).toFixed(2)}%{dAmt ? `, ${dAmt}` : ''}
+              <span style={{ fontSize: isMobile ? '10px' : '11px', color: d >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {d >= 0 ? '+' : ''}{d.toFixed(2)}%{dAmt ? `, ${dAmt}` : ''}
               </span>
             </div>
-            {!isMobile && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              <span style={{ fontSize: '10px', color: d >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                1D: {d >= 0 ? '+' : ''}{d.toFixed(2)}%, {dAmt || '+0'}
-              </span>
               <ChangeLine label="7D" pct={w} amt={wAmt} />
-              <ChangeLine label="1M" pct={m} amt={mAmt} />
+              {!isMobile && <ChangeLine label="1M" pct={m} amt={mAmt} />}
             </div>
-            )}
           </div>
         ) : (
           <span style={{ ...styles.price, color: 'var(--text-muted)' }}>--</span>
