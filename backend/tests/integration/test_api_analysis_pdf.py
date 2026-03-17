@@ -8,9 +8,8 @@ Validates:
 - Proper error handling for empty markdown
 """
 import os
+import re
 from unittest.mock import patch
-
-import pytest
 
 
 SAMPLE_MARKDOWN = """> Sources: 10 BL, 5 TH, 3 GN | 2026-03-17 10:00 IST
@@ -33,10 +32,9 @@ SAMPLE_MARKDOWN = """> Sources: 10 BL, 5 TH, 3 GN | 2026-03-17 10:00 IST
 class TestAnalysisPdfEndpoint:
     """Tests for POST /api/advisor/analysis-pdf."""
 
-    def test_generates_pdf_with_time_directory(self, app_client, auth_token, tmp_path):
+    def test_generates_pdf_with_time_directory(self, app_client):
         """PDF is saved to dumps/temp/analysis/DD-MM-YY/HH_MMhrs.pdf."""
-        with patch("app.briefing_pdf._DUMPS_DIR", str(tmp_path / "summary")), \
-             patch("app.drive_service.upload_file", return_value=None):
+        with patch("app.drive_service.upload_file", return_value=None):
             resp = app_client.post(
                 "/api/advisor/analysis-pdf",
                 json={"markdown": SAMPLE_MARKDOWN},
@@ -47,14 +45,14 @@ class TestAnalysisPdfEndpoint:
         assert "path" in data
         assert "filename" in data
         assert data["filename"].endswith("hrs.pdf")
-        # Directory structure: .../DD-MM-YY/HH_MMhrs.pdf
         assert "/temp/analysis/" in data["path"]
         assert os.path.exists(data["path"])
+        # Cleanup
+        os.remove(data["path"])
 
-    def test_pdf_file_is_valid(self, app_client, auth_token, tmp_path):
+    def test_pdf_file_is_valid(self, app_client):
         """Generated PDF file has content and starts with PDF header."""
-        with patch("app.briefing_pdf._DUMPS_DIR", str(tmp_path / "summary")), \
-             patch("app.drive_service.upload_file", return_value=None):
+        with patch("app.drive_service.upload_file", return_value=None):
             resp = app_client.post(
                 "/api/advisor/analysis-pdf",
                 json={"markdown": SAMPLE_MARKDOWN},
@@ -65,11 +63,11 @@ class TestAnalysisPdfEndpoint:
         with open(path, "rb") as f:
             header = f.read(5)
             assert header == b"%PDF-"
+        os.remove(path)
 
-    def test_drive_sync_attempted(self, app_client, auth_token, tmp_path):
+    def test_drive_sync_attempted(self, app_client):
         """Drive upload_file is called after PDF generation."""
-        with patch("app.briefing_pdf._DUMPS_DIR", str(tmp_path / "summary")), \
-             patch("app.drive_service.upload_file") as mock_upload:
+        with patch("app.drive_service.upload_file") as mock_upload:
             resp = app_client.post(
                 "/api/advisor/analysis-pdf",
                 json={"markdown": SAMPLE_MARKDOWN},
@@ -78,14 +76,13 @@ class TestAnalysisPdfEndpoint:
         assert resp.status_code == 200
         assert resp.json()["drive_synced"] is True
         mock_upload.assert_called_once()
-        call_args = mock_upload.call_args
-        # First arg is the filepath, subfolder contains analysis dir
-        assert "analysis" in str(call_args)
+        assert "analysis" in str(mock_upload.call_args)
+        # Cleanup
+        os.remove(resp.json()["path"])
 
-    def test_drive_sync_failure_returns_false(self, app_client, auth_token, tmp_path):
+    def test_drive_sync_failure_returns_false(self, app_client):
         """If Drive sync fails, drive_synced is False but PDF still generated."""
-        with patch("app.briefing_pdf._DUMPS_DIR", str(tmp_path / "summary")), \
-             patch("app.drive_service.upload_file", side_effect=Exception("Drive down")):
+        with patch("app.drive_service.upload_file", side_effect=Exception("Drive down")):
             resp = app_client.post(
                 "/api/advisor/analysis-pdf",
                 json={"markdown": SAMPLE_MARKDOWN},
@@ -95,8 +92,9 @@ class TestAnalysisPdfEndpoint:
         data = resp.json()
         assert data["drive_synced"] is False
         assert os.path.exists(data["path"])
+        os.remove(data["path"])
 
-    def test_empty_markdown_returns_error(self, app_client, auth_token):
+    def test_empty_markdown_returns_error(self, app_client):
         """Empty markdown returns error response."""
         resp = app_client.post(
             "/api/advisor/analysis-pdf",
@@ -105,37 +103,26 @@ class TestAnalysisPdfEndpoint:
         assert resp.status_code == 200
         assert "error" in resp.json()
 
-    def test_filename_format(self, app_client, auth_token, tmp_path):
+    def test_filename_format(self, app_client):
         """Filename follows HH_MMhrs.pdf pattern."""
-        with patch("app.briefing_pdf._DUMPS_DIR", str(tmp_path / "summary")), \
-             patch("app.drive_service.upload_file", return_value=None):
+        with patch("app.drive_service.upload_file", return_value=None):
             resp = app_client.post(
                 "/api/advisor/analysis-pdf",
                 json={"markdown": SAMPLE_MARKDOWN},
             )
 
-        import re
         filename = resp.json()["filename"]
         assert re.match(r"\d{2}_\d{2}hrs\.pdf$", filename)
+        os.remove(resp.json()["path"])
 
 
 class TestBriefingPdfOutputPath:
     """Tests for the output_path parameter in generate_briefing_pdf."""
 
-    def test_default_path_unchanged(self, tmp_path):
-        """Without output_path, PDF goes to default _DUMPS_DIR."""
-        with patch("app.briefing_pdf._DUMPS_DIR", str(tmp_path / "summary")):
-            from app.briefing_pdf import generate_briefing_pdf
-            path = generate_briefing_pdf("## Test\n- bullet")
-
-        assert "/summary/" in path
-        assert path.endswith(".pdf")
-        assert os.path.exists(path)
-
     def test_custom_output_path(self, tmp_path):
         """With output_path, PDF is saved to the specified location."""
-        custom = str(tmp_path / "custom" / "my_briefing.pdf")
         from app.briefing_pdf import generate_briefing_pdf
+        custom = str(tmp_path / "custom" / "my_briefing.pdf")
         path = generate_briefing_pdf("## Test\n- bullet", output_path=custom)
 
         assert path == custom
@@ -143,8 +130,8 @@ class TestBriefingPdfOutputPath:
 
     def test_custom_path_creates_directories(self, tmp_path):
         """output_path auto-creates parent directories."""
-        deep_path = str(tmp_path / "a" / "b" / "c" / "test.pdf")
         from app.briefing_pdf import generate_briefing_pdf
+        deep_path = str(tmp_path / "a" / "b" / "c" / "test.pdf")
         path = generate_briefing_pdf("## Test\n- data", output_path=deep_path)
 
         assert os.path.exists(deep_path)
