@@ -80,6 +80,16 @@ Generate a comprehensive, detailed market briefing from the past 7 days of Busin
    ```
    Report the PDF file path to the user.
 
+10. **Generate analysis PDF** — Save an additional copy to the time-organized analysis directory and sync to Google Drive:
+    ```bash
+    curl -s -X POST http://localhost:9999/api/advisor/analysis-pdf \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $TOKEN" \
+      -d "{\"markdown\": \"<the full briefing markdown>\"}"
+    ```
+    This saves the PDF to `dumps/temp/analysis/DD-MM-YY/HH_MMhrs.pdf` (e.g., `dumps/temp/analysis/17-03-26/10_00hrs.pdf`) with full styling, colored tables, dashboard metrics, sector bars, and action cards. It also automatically syncs the file to Google Drive.
+    Report both the analysis PDF path and whether Drive sync succeeded.
+
 ## Output Format
 
 Start with:

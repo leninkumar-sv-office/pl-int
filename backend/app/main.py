@@ -2883,6 +2883,52 @@ async def generate_briefing_pdf(request: Request):
     return {"path": filepath, "filename": filename}
 
 
+@app.post("/api/advisor/analysis-pdf")
+async def generate_analysis_pdf(request: Request):
+    """Generate a styled PDF to dumps/temp/analysis/DD-MM-YY/HH_MMhrs.pdf and sync to Drive.
+
+    Body: {"markdown": "..."}
+    Returns: {"path": "...", "filename": "...", "drive_synced": true/false}
+    """
+    from .briefing_pdf import generate_briefing_pdf as gen_pdf
+    from datetime import datetime as dt
+
+    body = await request.json()
+    md = body.get("markdown", "")
+    if not md:
+        return {"error": "No markdown provided"}
+
+    now = dt.now()
+    date_dir = now.strftime("%d-%m-%y")
+    hour_label = now.strftime("%H_%M") + "hrs"
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "dumps", "temp", "analysis", date_dir)
+    os.makedirs(base_dir, exist_ok=True)
+    output_path = os.path.join(base_dir, f"{hour_label}.pdf")
+
+    filepath = gen_pdf(md, output_path=output_path)
+    filename = os.path.basename(filepath)
+
+    # Sync to Google Drive
+    drive_synced = False
+    try:
+        from . import drive_service
+        email = ""
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            from .auth import verify_session_token
+            user = verify_session_token(auth_header[7:])
+            if user:
+                email = user.get("email", "")
+        subfolder = f"dumps/temp/analysis/{date_dir}"
+        drive_service.upload_file(filepath, subfolder=subfolder, email=email)
+        drive_synced = True
+        print(f"[Analysis] PDF synced to Drive: {subfolder}/{filename}")
+    except Exception as e:
+        print(f"[Analysis] Drive sync failed: {e}")
+
+    return {"path": filepath, "filename": filename, "drive_synced": drive_synced}
+
+
 # ══════════════════════════════════════════════════════════
 #  STATIC FILE SERVING (Production)
 # ══════════════════════════════════════════════════════════

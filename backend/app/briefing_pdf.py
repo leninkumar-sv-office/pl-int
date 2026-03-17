@@ -770,12 +770,21 @@ def _render_table(pdf, rows):
 
 # ─── Main generator ──────────────────────────────────────────────
 
-def generate_briefing_pdf(markdown_text: str) -> str:
-    """Parse a markdown briefing and generate a styled PDF."""
-    os.makedirs(_DUMPS_DIR, exist_ok=True)
+def generate_briefing_pdf(markdown_text: str, output_path: str = None) -> str:
+    """Parse a markdown briefing and generate a styled PDF.
+
+    Args:
+        markdown_text: The markdown briefing content.
+        output_path: Optional custom output path. If None, saves to dumps/summary/.
+    """
     now = datetime.now()
-    filename = now.strftime("%Y-%m-%d_%H%M%S") + ".pdf"
-    filepath = os.path.join(_DUMPS_DIR, filename)
+    if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        filepath = output_path
+    else:
+        os.makedirs(_DUMPS_DIR, exist_ok=True)
+        filename = now.strftime("%Y-%m-%d_%H%M%S") + ".pdf"
+        filepath = os.path.join(_DUMPS_DIR, filename)
 
     date_str = now.strftime("%B %d, %Y %I:%M %p")
     pdf = BriefingPDF(f"Market Briefing - {date_str}")
