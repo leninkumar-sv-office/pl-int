@@ -140,15 +140,11 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
         <span style={isMobile ? styles.labelMobile : styles.label}>{t.label}{t.unit ? <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '10px', marginLeft: '2px' }}>{t.unit.replace('₹', '')}</span> : null}</span>
         {hasData ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: isMobile ? 4 : 6, flexWrap: 'wrap' }}>
-              <span style={{ ...(isMobile ? styles.priceMobile : styles.price), color: priceColor }}>
-                {formatPrice(t.price, t.type)}
-              </span>
-              <span style={{ fontSize: isMobile ? '10px' : '11px', color: d >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                {d >= 0 ? '+' : ''}{d.toFixed(2)}%{dAmt ? `, ${dAmt}` : ''}
-              </span>
-            </div>
+            <span style={{ ...(isMobile ? styles.priceMobile : styles.price), color: priceColor }}>
+              {formatPrice(t.price, t.type)}
+            </span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              <ChangeLine label="1D" pct={d} amt={dAmt} />
               <ChangeLine label="7D" pct={w} amt={wAmt} />
               {!isMobile && <ChangeLine label="1M" pct={m} amt={mAmt} />}
             </div>
