@@ -218,8 +218,8 @@ jobs:
 
       - name: Health check (Cloudflare tunnel)
         run: |
-          echo "Waiting 5 minutes for Cloudflare tunnel to pick up new deployment..."
-          sleep 300
+          echo "Waiting 1 minute for Cloudflare tunnel to pick up new deployment..."
+          sleep 60
           echo "Checking https://pl.thirumagal.com/health ..."
           status=$(curl -s -o /tmp/tunnel-health.json -w "%{http_code}" https://pl.thirumagal.com/health)
           if [ "$status" = "200" ]; then
