@@ -144,18 +144,16 @@ export default function MarketTicker({ tickers, loading, lastUpdated }) {
               <span style={{ ...(isMobile ? styles.priceMobile : styles.price), color: priceColor }}>
                 {formatPrice(t.price, t.type)}
               </span>
-              {d !== 0 && (
-                <span style={{
-                  fontSize: isMobile ? '10px' : '11px',
-                  fontWeight: 600,
-                  color: d >= 0 ? 'var(--green)' : 'var(--red)',
-                  background: d >= 0 ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
-                  padding: '1px 5px',
-                  borderRadius: '3px',
-                }}>
-                  {d >= 0 ? '▲' : '▼'} {Math.abs(d).toFixed(2)}%{dAmt ? `, ${dAmt}` : ''}
-                </span>
-              )}
+              <span style={{
+                fontSize: isMobile ? '10px' : '11px',
+                fontWeight: 600,
+                color: d === 0 ? 'var(--text-muted)' : d > 0 ? 'var(--green)' : 'var(--red)',
+                background: d === 0 ? 'rgba(255,255,255,0.06)' : d > 0 ? 'rgba(0,210,106,0.12)' : 'rgba(255,71,87,0.12)',
+                padding: '1px 5px',
+                borderRadius: '3px',
+              }}>
+                {d > 0 ? '▲' : d < 0 ? '▼' : '–'} {Math.abs(d).toFixed(2)}%{dAmt ? `, ${dAmt}` : ''}
+              </span>
             </div>
             {!isMobile && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
