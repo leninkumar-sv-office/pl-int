@@ -64,8 +64,8 @@
     "label": "Nikkei",
     "type": "index",
     "unit": "",
-    "price": 53882.71,
-    "change": -1142.66,
+    "price": 53878.99,
+    "change": -1146.38,
     "change_pct": -2.08,
     "source": "yahoo/google"
   },
@@ -74,9 +74,9 @@
     "label": "SGD/INR",
     "type": "forex",
     "unit": "",
-    "price": 72.18,
-    "change": 0.0,
-    "change_pct": 0.0,
+    "price": 72.19,
+    "change": 0.02,
+    "change_pct": 0.02,
     "source": "yahoo/google"
   },
   {
