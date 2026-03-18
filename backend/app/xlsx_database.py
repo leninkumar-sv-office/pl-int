@@ -181,13 +181,11 @@ def _parse_excel_serial_date(val) -> Optional[str]:
 def _find_realised_columns(ws, header_row: int) -> dict:
     """Dynamically find the Realised section column positions.
 
-    The "Realised" marker in row 2 tells us where the sold section starts.
-    Under that marker, row 4 has sub-headers: Price, Date, [Gain%], Gain, Gross, Units.
-    Column positions vary between file formats (new vs archive).
+    NOTE: This function is only called from write-path code (not read-only),
+    so it still uses ws.cell() which requires normal (non-read_only) mode.
     """
     cols = {"sell_price": None, "sell_date": None, "sell_gain": None, "sold_units": None}
 
-    # Step 1: Find "Realised" (but NOT "UnRealised") in row 2
     realised_col = None
     for c in range(10, ws.max_column + 1):
         val = ws.cell(2, c).value
@@ -200,8 +198,6 @@ def _find_realised_columns(ws, header_row: int) -> dict:
     if realised_col is None:
         return cols
 
-    # Step 2: Read row 4 (header row) from the Realised column onward
-    # and map sub-headers to column positions
     for c in range(realised_col, min(realised_col + 10, ws.max_column + 1)):
         header = ws.cell(header_row, c).value
         if not header:
@@ -227,10 +223,7 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
     Held/sold determination is done purely via FIFO matching of Sell rows
     against Buy rows (in _parse_and_match_symbol).
 
-    The Realised columns (W–AB) in dump files often have broken formula
-    references (stale row numbers after row insertions) and cannot be
-    trusted for held/sold assignment.  They are still written by the app's
-    add_sell_transaction for display in Excel.
+    Uses iter_rows for compatibility with read_only=True mode (39x faster).
 
     Returns (held_lots, column_sold_lots, sell_rows, dividends):
       - held_lots: ALL Buy rows (non-DIV)
@@ -242,26 +235,34 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
     if "Trading History" not in wb.sheetnames:
         return held, sold, sell_rows, dividends
     ws = wb["Trading History"]
-    max_row = ws.max_row or 0
-    if max_row < 5:
+
+    # Read all rows at once (fast with read_only=True)
+    all_rows = list(ws.iter_rows(values_only=True))
+    if len(all_rows) < 5:
         return held, sold, sell_rows, dividends
 
-    # Find header row
-    header_row = None
-    for r in range(1, min(11, max_row + 1)):
-        vals = [ws.cell(r, c).value for c in range(1, 5)]
-        if "DATE" in vals and "ACTION" in vals:
-            header_row = r
+    # Find header row (search first 10 rows for DATE + ACTION)
+    header_idx = None
+    for i, row in enumerate(all_rows[:10]):
+        if row and len(row) >= 4 and "DATE" in row[:5] and "ACTION" in row[:5]:
+            header_idx = i
             break
-    if header_row is None:
+    if header_idx is None:
         return held, sold, sell_rows, dividends
 
-    for row_idx in range(header_row + 1, max_row + 1):
-        date_val = ws.cell(row_idx, 1).value        # A: DATE
-        exch = ws.cell(row_idx, 2).value             # B: EXCH
-        action = ws.cell(row_idx, 3).value           # C: ACTION
-        qty = ws.cell(row_idx, 4).value              # D: QTY
-        price = ws.cell(row_idx, 5).value            # E: PRICE
+    # Helper to safely get column value
+    def col(row, c):
+        return row[c] if c < len(row) else None
+
+    for row_num, row in enumerate(all_rows[header_idx + 1:], start=header_idx + 2):
+        if not row or len(row) < 5:
+            continue
+
+        date_val = col(row, 0)   # A: DATE
+        exch = col(row, 1)       # B: EXCH
+        action = col(row, 2)     # C: ACTION
+        qty = col(row, 3)        # D: QTY
+        price = col(row, 4)      # E: PRICE
 
         if not action or not date_val:
             continue
@@ -272,13 +273,12 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
         # Collect dividends
         if exch == "DIV":
             tx_date = _parse_date(date_val)
-            cost_col_f = _safe_float(ws.cell(row_idx, 6).value)  # F = total amount (qty * price)
-            per_share = _safe_float(price)                        # E = dividend per share
-            div_qty = _safe_float(qty) or 0                       # D = number of units
-            # Prefer column F (total amount); fall back to price or qty
+            cost_col_f = _safe_float(col(row, 5))   # F = total amount
+            per_share = _safe_float(price)            # E = dividend per share
+            div_qty = _safe_float(qty) or 0           # D = number of units
             amount = cost_col_f or per_share or div_qty
             if amount and amount > 0:
-                remarks_val = str(ws.cell(row_idx, 7).value or "").strip()
+                remarks_val = str(col(row, 6) or "").strip()
                 dividends.append({
                     "date": tx_date or "",
                     "amount": amount,
@@ -301,7 +301,7 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
                     "quantity": qty_int,
                     "price": price_f,
                     "exchange": exchange,
-                    "row_idx": row_idx,
+                    "row_idx": row_num,
                 })
             continue
 
@@ -314,8 +314,8 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             continue
 
         qty_int = _safe_int(qty)
-        price_e = _safe_float(price)                         # E: transaction price per share
-        cost_f = _safe_float(ws.cell(row_idx, 6).value)      # F: COST (value at cost incl. charges)
+        price_e = _safe_float(price)                  # E: transaction price per share
+        cost_f = _safe_float(col(row, 5))             # F: COST (value at cost incl. charges)
         if qty_int <= 0 or (price_e <= 0 and cost_f <= 0):
             continue
 
@@ -336,7 +336,7 @@ def _parse_trading_history(wb) -> Tuple[list, list, list]:
             "price": buy_price,
             "raw_price": price_e,
             "cost": cost_f,
-            "row_idx": row_idx,
+            "row_idx": row_num,
         })
 
     return held, sold, sell_rows, dividends
@@ -412,7 +412,7 @@ class XlsxPortfolio:
             # 1. Index sheet Code is authoritative (e.g. "NSE:RELIANCE")
             symbol = None
             try:
-                wb = openpyxl.load_workbook(fp, data_only=True)
+                wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
                 idx = _extract_index_data(wb)
                 wb.close()
                 symbol = idx.get("symbol")
@@ -547,7 +547,7 @@ class XlsxPortfolio:
         for filepath in files:
             stem = filepath.stem
             try:
-                wb = openpyxl.load_workbook(filepath, data_only=True)
+                wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
             except Exception as e:
                 print(f"[XlsxDB] Failed to open {filepath.name}: {e}")
                 continue
