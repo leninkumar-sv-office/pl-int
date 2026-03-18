@@ -21,16 +21,12 @@ jobs:
   # test:
   #   uses: ./.github/workflows/test.yml
 
-  tag-and-deploy:
+  tag:
     # needs: test
     runs-on: self-hosted
-    env:
-      DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
-      DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
-      DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
-      USER_EMAIL: leninkumar.sv.ai@gmail.com
-      DEPLOY_MODE: ${{ github.event.inputs.mode || 'app' }}
-
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      prev_tag: ${{ steps.tag.outputs.prev_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +50,22 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Created tag: $tag (previous: ${latest:-none})"
 
+  deploy:
+    needs: tag
+    if: false  # Deployment disabled — re-enable by removing this line
+    runs-on: self-hosted
+    env:
+      DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
+      DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
+      DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
+      USER_EMAIL: leninkumar.sv.ai@gmail.com
+      DEPLOY_MODE: ${{ github.event.inputs.mode || 'app' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Stop old deployment
         run: |
           echo "Stopping old deployment..."
@@ -75,7 +87,7 @@ jobs:
 
       - name: Clone and prepare
         run: |
-          echo "── Deploying ${{ steps.tag.outputs.tag }} (mode: $DEPLOY_MODE) ──"
+          echo "── Deploying ${{ needs.tag.outputs.tag }} (mode: $DEPLOY_MODE) ──"
 
           # Backup dumps and data before cleaning
           if [ -d "$DEPLOY_DIR" ]; then
@@ -93,7 +105,7 @@ jobs:
           # Fresh clone
           git clone "$GITHUB_WORKSPACE" "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
-          git checkout ${{ steps.tag.outputs.tag }}
+          git checkout ${{ needs.tag.outputs.tag }}
 
           # Restore dumps
           mkdir -p "$DEPLOY_DIR/backend/dumps"
@@ -137,8 +149,8 @@ jobs:
           fi
 
           # Write deploy tag for /api/version endpoint
-          echo "${{ steps.tag.outputs.tag }}" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"
-          echo "Deploy directory ready (tag: ${{ steps.tag.outputs.tag }})"
+          echo "${{ needs.tag.outputs.tag }}" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"
+          echo "Deploy directory ready (tag: ${{ needs.tag.outputs.tag }})"
 
       # ── App mode: build frontend + venv + uvicorn ──────────
       - name: Build frontend
@@ -233,9 +245,9 @@ jobs:
 
       # ── Rollback on failure ────────────────────────────────
       - name: Rollback to previous tag
-        if: failure() && steps.tag.outputs.prev_tag != ''
+        if: failure() && needs.tag.outputs.prev_tag != ''
         run: |
-          PREV_TAG="${{ steps.tag.outputs.prev_tag }}"
+          PREV_TAG="${{ needs.tag.outputs.prev_tag }}"
           echo "╔══════════════════════════════════════════════╗"
           echo "║  ROLLBACK: Deploying previous tag $PREV_TAG  "
           echo "╚══════════════════════════════════════════════╝"
