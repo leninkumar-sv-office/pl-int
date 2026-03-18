@@ -1315,6 +1315,13 @@ def get_stock_summary():
         symbols_with_alt.add((sym, alt))
     live_data = stock_service.get_cached_prices(list(symbols_with_alt)) if base_symbols else {}
 
+    # Live-fetch any watchlist stocks missing from cache
+    missing = [(sym, meta["exchange"]) for sym, meta in _watchlist_meta.items()
+               if not live_data.get(f"{sym}.{meta['exchange']}")]
+    if missing:
+        fresh = stock_service.fetch_multiple(missing)
+        live_data.update(fresh)
+
     # Group holdings by symbol
     held_by_symbol: dict = {}
     for h in holdings:
