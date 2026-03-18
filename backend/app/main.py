@@ -1291,16 +1291,14 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
 @app.get("/api/portfolio/stock-summary", response_model=List[StockSummaryItem])
 def get_stock_summary():
     """Get per-stock aggregated data showing held + sold quantities."""
-    holdings = udb().get_all_holdings()
-    sold_positions = udb().get_all_sold()
-    dividends_by_symbol = udb().get_dividends_by_symbol()
+    db = udb()
+    holdings, sold_positions, dividends_by_symbol = db.get_all_data()
 
     # Collect all symbols: held + sold + watchlist (files with 0 transactions)
     base_symbols = set((h.symbol, h.exchange) for h in holdings)
     for s in sold_positions:
         base_symbols.add((s.symbol, s.exchange))
     # Add watchlist-only stocks from file map (no xlsx I/O — use cached instrument names)
-    db = udb()
     held_syms = {h.symbol for h in holdings}
     sold_syms = {s.symbol for s in sold_positions}
     _watchlist_meta = {}
@@ -1696,8 +1694,7 @@ def _do_price_refresh():
         db.reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
-        holdings = db.get_all_holdings()
-        sold = db.get_all_sold()
+        holdings, sold, _ = db.get_all_data()
         held_syms = {h.symbol for h in holdings}
         sold_syms = {s.symbol for s in sold}
         symbols = list(set(
@@ -1724,8 +1721,7 @@ def trigger_price_refresh():
         reindex_result = db.reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
-        holdings = db.get_all_holdings()
-        sold = db.get_all_sold()
+        holdings, sold, _ = db.get_all_data()
         held_syms = {h.symbol for h in holdings}
         sold_syms = {s.symbol for s in sold}
         symbols = list(set(

@@ -661,29 +661,47 @@ class XlsxPortfolio:
 
     # ── Public READ API ───────────────────────────────────
 
-    def get_all_holdings(self) -> List[Holding]:
-        """Get all current holdings across every stock file."""
+    def get_all_data(self):
+        """Get all holdings, sold positions, and dividends in a SINGLE pass.
+
+        Returns (holdings: List[Holding], sold: List[SoldPosition], dividends_by_symbol: dict).
+        This is much faster than calling get_all_holdings() + get_all_sold() +
+        get_dividends_by_symbol() separately, as it iterates the file map only once.
+        """
         all_holdings: List[Holding] = []
+        all_sold: List[SoldPosition] = []
+        dividends_by_symbol = {}
         self._holding_index.clear()
         self._holding_file.clear()
 
-        # Snapshot to avoid "dict changed size during iteration" from bg reindex
         file_snapshot = dict(self._file_map)
         for symbol, primary_fp in file_snapshot.items():
             try:
-                holdings, _, _ = self._get_stock_data(symbol)
+                holdings, sold, dividends = self._get_stock_data(symbol)
                 for h in holdings:
                     self._holding_index[h.id] = h
                     self._holding_file[h.id] = primary_fp
                 all_holdings.extend(holdings)
+                all_sold.extend(sold)
+                if dividends:
+                    dividends_by_symbol[symbol] = {
+                        "amount": sum(d["amount"] for d in dividends),
+                        "count": len(dividends),
+                        "units": sum(d.get("units", 0) for d in dividends),
+                    }
             except Exception as e:
                 print(f"[XlsxDB] Error reading {symbol}: {e}")
 
-        return all_holdings
+        return all_holdings, all_sold, dividends_by_symbol
+
+    def get_all_holdings(self) -> List[Holding]:
+        """Get all current holdings across every stock file."""
+        holdings, _, _ = self.get_all_data()
+        return holdings
 
     def get_holding_by_id(self, holding_id: str) -> Optional[Holding]:
         """Lookup a specific holding by its deterministic ID."""
-        # Try index first (populated by get_all_holdings)
+        # Try index first (populated by get_all_holdings/get_all_data)
         if holding_id in self._holding_index:
             return self._holding_index[holding_id]
         # Fallback: full scan
@@ -692,37 +710,16 @@ class XlsxPortfolio:
 
     def get_all_sold(self) -> List[SoldPosition]:
         """Get all sold positions (FIFO-derived) across every stock file."""
-        all_sold: List[SoldPosition] = []
-        # Snapshot to avoid "dict changed size during iteration" from bg reindex
-        symbols = list(self._file_map.keys())
-        for symbol in symbols:
-            try:
-                _, sold, _ = self._get_stock_data(symbol)
-                all_sold.extend(sold)
-            except Exception as e:
-                print(f"[XlsxDB] Error reading sold for {symbol}: {e}")
-        return all_sold
+        _, sold, _ = self.get_all_data()
+        return sold
 
     def get_dividends_by_symbol(self) -> dict:
         """Get dividend totals grouped by symbol.
 
         Returns {symbol: {"amount": total, "count": n_entries, "units": total_units}}.
         """
-        result = {}
-        # Snapshot to avoid "dict changed size during iteration" from bg reindex
-        symbols = list(self._file_map.keys())
-        for symbol in symbols:
-            try:
-                _, _, dividends = self._get_stock_data(symbol)
-                if dividends:
-                    result[symbol] = {
-                        "amount": sum(d["amount"] for d in dividends),
-                        "count": len(dividends),
-                        "units": sum(d.get("units", 0) for d in dividends),
-                    }
-            except Exception as e:
-                print(f"[XlsxDB] Error reading dividends for {symbol}: {e}")
-        return result
+        _, _, dividends = self.get_all_data()
+        return dividends
 
     # ── Public WRITE API ──────────────────────────────────
 
