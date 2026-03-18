@@ -1264,7 +1264,7 @@ export default function App() {
             </div>
           )}
           <div className="refresh-control hide-mobile">
-            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Live Prices</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Prices Reload</span>
             <select
               className="refresh-select"
               value={refreshInterval}
