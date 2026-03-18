@@ -113,31 +113,39 @@ def _parse_rd_xlsx(filepath: Path) -> dict:
     account_number = _extract_account_number(name)
 
     # ── Read metadata (data_only=True for cached non-formula values) ──
-    wb = openpyxl.load_workbook(str(filepath), data_only=True)
+    wb = openpyxl.load_workbook(str(filepath), data_only=True, read_only=True)
     ws = wb["Index"]
 
-    start_date_raw = ws.cell(1, 2).value                     # B1
-    maturity_months_raw = ws.cell(1, 8).value or 60           # H1
-    bank = ws.cell(1, 11).value or "Post Office"              # K1
-
-    interest_payout = ws.cell(2, 8).value or "Maturity"       # H2
-    frequency = ws.cell(2, 11).value or 4                     # K2
-
-    rate_decimal = ws.cell(3, 2).value or 0                   # B3
-    sip = ws.cell(3, 8).value or 0                            # H3
-
+    # Preload rows for read_only mode
+    all_rows = list(ws.iter_rows(min_row=1, max_row=3, values_only=True))
     wb.close()
+
+    row1 = all_rows[0] if len(all_rows) > 0 else ()
+    row2 = all_rows[1] if len(all_rows) > 1 else ()
+    row3 = all_rows[2] if len(all_rows) > 2 else ()
+
+    start_date_raw = row1[1] if len(row1) > 1 else None       # B1
+    maturity_months_raw = (row1[7] if len(row1) > 7 else None) or 60   # H1
+    bank = (row1[10] if len(row1) > 10 else None) or "Post Office"    # K1
+
+    interest_payout = (row2[7] if len(row2) > 7 else None) or "Maturity"  # H2
+    frequency = (row2[10] if len(row2) > 10 else None) or 4              # K2
+
+    rate_decimal = (row3[1] if len(row3) > 1 else None) or 0   # B3
+    sip = (row3[7] if len(row3) > 7 else None) or 0            # H3
 
     # ── Check for special first-payment (read WITHOUT data_only) ──
     first_payment = None
     try:
-        wb_formula = openpyxl.load_workbook(str(filepath))
+        wb_formula = openpyxl.load_workbook(str(filepath), read_only=True)
         ws_formula = wb_formula["Index"]
-        e6_val = ws_formula.cell(6, 5).value
-        # If E6 is a number (not a formula string), it's hardcoded
-        if isinstance(e6_val, (int, float)):
-            first_payment = float(e6_val)
+        formula_rows = list(ws_formula.iter_rows(min_row=6, max_row=6, values_only=True))
         wb_formula.close()
+        if formula_rows:
+            e6_val = formula_rows[0][4] if len(formula_rows[0]) > 4 else None  # E6 (col 5, 0-indexed=4)
+            # If E6 is a number (not a formula string), it's hardcoded
+            if isinstance(e6_val, (int, float)):
+                first_payment = float(e6_val)
     except Exception:
         pass
 

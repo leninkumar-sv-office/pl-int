@@ -124,21 +124,27 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
     Reads ONLY metadata from rows 1-3.
     Computes ALL installments and totals in Python.
     """
-    wb = openpyxl.load_workbook(str(filepath), data_only=True)
+    wb = openpyxl.load_workbook(str(filepath), data_only=True, read_only=True)
     ws = wb["Index"]
     name = filepath.stem
 
-    # ── Metadata rows 1-3 ────────────────────────────────
-    start_date_raw = ws.cell(1, 2).value                     # B1: start date
-    maturity_years = ws.cell(1, 8).value or 5                # H1: years
-    bank = ws.cell(1, 11).value or "Unknown"                 # K1: bank
-
-    interest_payout = ws.cell(2, 8).value or "Quarterly"     # H2: payout type
-
-    rate_decimal = ws.cell(3, 2).value or 0                  # B3: rate as decimal (0.0625)
-    sip = ws.cell(3, 8).value or 0                           # H3: SIP / principal
-
+    # ── Preload rows for read_only mode ───────────────────
+    all_rows = list(ws.iter_rows(min_row=1, max_row=3, values_only=True))
     wb.close()
+
+    # ── Metadata rows 1-3 ────────────────────────────────
+    row1 = all_rows[0] if len(all_rows) > 0 else ()
+    row2 = all_rows[1] if len(all_rows) > 1 else ()
+    row3 = all_rows[2] if len(all_rows) > 2 else ()
+
+    start_date_raw = row1[1] if len(row1) > 1 else None      # B1: start date
+    maturity_years = (row1[7] if len(row1) > 7 else None) or 5   # H1: years
+    bank = (row1[10] if len(row1) > 10 else None) or "Unknown"  # K1: bank
+
+    interest_payout = (row2[7] if len(row2) > 7 else None) or "Quarterly"  # H2: payout type
+
+    rate_decimal = (row3[1] if len(row3) > 1 else None) or 0   # B3: rate as decimal (0.0625)
+    sip = (row3[7] if len(row3) > 7 else None) or 0            # H3: SIP / principal
 
     # ── Convert & derive ─────────────────────────────────
     start_dt = _to_date(start_date_raw) or date.today()

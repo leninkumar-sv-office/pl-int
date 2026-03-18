@@ -569,7 +569,8 @@ def fifo_match_mf(buys: list, sells: list):
 # ═══════════════════════════════════════════════════════════
 
 def _extract_mf_index_data(wb) -> dict:
-    """Read metadata from the Index sheet of a mutual fund xlsx."""
+    """Read metadata from the Index sheet of a mutual fund xlsx.
+    Compatible with read_only=True workbooks (uses iter_rows, not ws.cell)."""
     data = {
         "fund_code": None,
         "current_nav": 0.0,
@@ -581,12 +582,14 @@ def _extract_mf_index_data(wb) -> dict:
     if "Index" not in wb.sheetnames:
         return data
     ws = wb["Index"]
-    max_row = ws.max_row or 0
-    if max_row == 0:
-        return data
 
-    for row in ws.iter_rows(min_row=1, max_row=min(15, max_row), values_only=False):
-        vals = [c.value for c in row]
+    # Read up to 15 rows using iter_rows (compatible with read_only mode)
+    row_count = 0
+    for row in ws.iter_rows(values_only=True):
+        row_count += 1
+        if row_count > 15:
+            break
+        vals = list(row)
         if len(vals) >= 3:
             label = vals[1]
             value = vals[2]
@@ -613,6 +616,7 @@ def _extract_mf_index_data(wb) -> dict:
 
 def _parse_mf_trading_history(wb) -> Tuple[list, list]:
     """Parse Buy and Sell rows from MF Trading History sheet.
+    Compatible with read_only=True workbooks (uses iter_rows, not ws.cell).
 
     Returns (buy_lots, sell_rows).
     """
@@ -620,28 +624,31 @@ def _parse_mf_trading_history(wb) -> Tuple[list, list]:
     if "Trading History" not in wb.sheetnames:
         return buys, sells
     ws = wb["Trading History"]
-    max_row = ws.max_row or 0
-    if max_row < 5:
+
+    # Preload all rows as tuples for read_only compatibility
+    all_rows = list(ws.iter_rows(values_only=True))
+    if len(all_rows) < 5:
         return buys, sells
 
-    # Find header row
+    # Find header row (1-indexed row number for row_idx tracking)
     header_row = None
-    for r in range(1, min(11, max_row + 1)):
-        vals = [ws.cell(r, c).value for c in range(1, 5)]
+    for r_idx in range(min(10, len(all_rows))):
+        vals = list(all_rows[r_idx][:4]) if len(all_rows[r_idx]) >= 4 else list(all_rows[r_idx])
         if "DATE" in vals and "ACTION" in vals:
-            header_row = r
+            header_row = r_idx  # 0-indexed
             break
     if header_row is None:
         return buys, sells
 
-    for row_idx in range(header_row + 1, max_row + 1):
-        date_val = ws.cell(row_idx, 1).value      # A: DATE
-        exch = ws.cell(row_idx, 2).value           # B: EXCH
-        action = ws.cell(row_idx, 3).value         # C: ACTION
-        units_val = ws.cell(row_idx, 4).value      # D: Units (float)
-        nav_val = ws.cell(row_idx, 5).value        # E: NAV
-        cost_val = ws.cell(row_idx, 6).value       # F: COST
-        remarks_val = ws.cell(row_idx, 7).value    # G: REMARKS
+    for r_idx in range(header_row + 1, len(all_rows)):
+        row = all_rows[r_idx]
+        date_val = row[0] if len(row) > 0 else None       # A: DATE
+        # exch = row[1] if len(row) > 1 else None          # B: EXCH (unused)
+        action = row[2] if len(row) > 2 else None          # C: ACTION
+        units_val = row[3] if len(row) > 3 else None       # D: Units (float)
+        nav_val = row[4] if len(row) > 4 else None         # E: NAV
+        cost_val = row[5] if len(row) > 5 else None        # F: COST
+        remarks_val = row[6] if len(row) > 6 else None     # G: REMARKS
 
         if not action or not date_val:
             continue
@@ -666,6 +673,7 @@ def _parse_mf_trading_history(wb) -> Tuple[list, list]:
             continue
 
         remarks = str(remarks_val or "").strip()
+        row_idx_1based = r_idx + 1  # convert to 1-indexed for compatibility
 
         if action == "Buy":
             buy_price = cost / units if cost > 0 and units > 0 else nav
@@ -675,7 +683,7 @@ def _parse_mf_trading_history(wb) -> Tuple[list, list]:
                 "nav": round(nav, 4),
                 "buy_price": round(buy_price, 4),
                 "cost": round(cost, 2),
-                "row_idx": row_idx,
+                "row_idx": row_idx_1based,
                 "remarks": remarks,
             })
         elif action == "Sell":
@@ -684,7 +692,7 @@ def _parse_mf_trading_history(wb) -> Tuple[list, list]:
                 "units": round(units, 6),
                 "nav": round(nav, 4),
                 "cost": round(cost, 2),
-                "row_idx": row_idx,
+                "row_idx": row_idx_1based,
                 "remarks": remarks,
             })
 
@@ -722,7 +730,7 @@ class MFXlsxPortfolio:
                 continue
 
             try:
-                wb = openpyxl.load_workbook(fp, data_only=True)
+                wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
                 idx = _extract_mf_index_data(wb)
                 wb.close()
             except Exception as e:
@@ -788,7 +796,7 @@ class MFXlsxPortfolio:
         name = self._name_map.get(fund_code, fund_code)
 
         try:
-            wb = openpyxl.load_workbook(filepath, data_only=True)
+            wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
         except Exception as e:
             print(f"[MF-XlsxDB] Failed to open {filepath.name}: {e}")
             return [], [], {}

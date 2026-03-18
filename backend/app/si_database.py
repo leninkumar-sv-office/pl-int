@@ -123,33 +123,36 @@ def _load(si_file: Path = None) -> list:
     if not si_file.exists():
         return []
     try:
-        wb = openpyxl.load_workbook(str(si_file), data_only=True)
+        wb = openpyxl.load_workbook(str(si_file), data_only=True, read_only=True)
     except Exception as e:
         print(f"[SI] Error loading {si_file}: {e}")
         return []
 
     ws = wb.active
+    all_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+
     items = []
-    for row in range(2, ws.max_row + 1):
-        row_id = ws.cell(row, _COLS["id"]).value
+    for row in all_rows[1:]:  # skip header row (index 0)
+        # _COLS values are 1-indexed; convert to 0-indexed
+        row_id = row[_COLS["id"] - 1] if len(row) >= _COLS["id"] else None
         if not row_id:
             continue
         items.append({
             "id": str(row_id),
-            "bank": str(ws.cell(row, _COLS["bank"]).value or ""),
-            "beneficiary": str(ws.cell(row, _COLS["beneficiary"]).value or ""),
-            "amount": float(ws.cell(row, _COLS["amount"]).value or 0),
-            "frequency": str(ws.cell(row, _COLS["frequency"]).value or "Monthly"),
-            "purpose": str(ws.cell(row, _COLS["purpose"]).value or "SIP"),
-            "mandate_type": str(ws.cell(row, _COLS["mandate_type"]).value or "NACH"),
-            "account_number": str(ws.cell(row, _COLS["account_number"]).value or ""),
-            "start_date": _to_date_str(ws.cell(row, _COLS["start_date"]).value),
-            "expiry_date": _to_date_str(ws.cell(row, _COLS["expiry_date"]).value),
-            "alert_days": int(ws.cell(row, _COLS["alert_days"]).value or 30),
-            "status": str(ws.cell(row, _COLS["status"]).value or "Active"),
-            "remarks": str(ws.cell(row, _COLS["remarks"]).value or ""),
+            "bank": str((row[_COLS["bank"] - 1] if len(row) >= _COLS["bank"] else None) or ""),
+            "beneficiary": str((row[_COLS["beneficiary"] - 1] if len(row) >= _COLS["beneficiary"] else None) or ""),
+            "amount": float((row[_COLS["amount"] - 1] if len(row) >= _COLS["amount"] else None) or 0),
+            "frequency": str((row[_COLS["frequency"] - 1] if len(row) >= _COLS["frequency"] else None) or "Monthly"),
+            "purpose": str((row[_COLS["purpose"] - 1] if len(row) >= _COLS["purpose"] else None) or "SIP"),
+            "mandate_type": str((row[_COLS["mandate_type"] - 1] if len(row) >= _COLS["mandate_type"] else None) or "NACH"),
+            "account_number": str((row[_COLS["account_number"] - 1] if len(row) >= _COLS["account_number"] else None) or ""),
+            "start_date": _to_date_str(row[_COLS["start_date"] - 1] if len(row) >= _COLS["start_date"] else None),
+            "expiry_date": _to_date_str(row[_COLS["expiry_date"] - 1] if len(row) >= _COLS["expiry_date"] else None),
+            "alert_days": int((row[_COLS["alert_days"] - 1] if len(row) >= _COLS["alert_days"] else None) or 30),
+            "status": str((row[_COLS["status"] - 1] if len(row) >= _COLS["status"] else None) or "Active"),
+            "remarks": str((row[_COLS["remarks"] - 1] if len(row) >= _COLS["remarks"] else None) or ""),
         })
-    wb.close()
     return items
 
 

@@ -236,18 +236,22 @@ def _parse_contributions_json(raw_val) -> list:
     return []
 
 
-def _scan_data_rows(ws, tenure_months: int) -> list:
+def _scan_data_rows(all_rows: list, tenure_months: int) -> list:
     """Scan xlsx data rows (row 6+) for withdrawals (col 8) and
     one-time contributions (col 9).  Also falls back to H4 (legacy
     contributions JSON) if cols 8-9 have no data.
-    Returns a contributions list."""
+    Returns a contributions list.
+
+    all_rows: list of tuples from iter_rows(values_only=True), 0-indexed.
+    """
     contributions = []
-    for r in range(6, 6 + tenure_months):
-        row_date = _to_date(ws.cell(r, 4).value)  # column 4: date
+    for r_idx in range(5, min(5 + tenure_months, len(all_rows))):  # row 6 = index 5
+        row = all_rows[r_idx]
+        row_date = _to_date(row[3] if len(row) > 3 else None)  # column 4 (0-indexed=3): date
         if row_date is None:
             break
-        withdrawn = _to_float(ws.cell(r, 8).value, 0)   # column 8: Withdrawn
-        extra = _to_float(ws.cell(r, 9).value, 0)       # column 9: Contribution
+        withdrawn = _to_float(row[7] if len(row) > 7 else None, 0)   # column 8 (0-indexed=7): Withdrawn
+        extra = _to_float(row[8] if len(row) > 8 else None, 0)       # column 9 (0-indexed=8): Contribution
         if withdrawn > 0:
             contributions.append({
                 "date": row_date.strftime("%Y-%m-%d"),
@@ -263,7 +267,9 @@ def _scan_data_rows(ws, tenure_months: int) -> list:
 
     # Fallback: if cols 8-9 had no data, try legacy H4 contributions JSON
     if not contributions:
-        h4_contributions = _parse_contributions_json(ws.cell(4, 8).value)
+        row4 = all_rows[3] if len(all_rows) > 3 else ()
+        h4_val = row4[7] if len(row4) > 7 else None  # H4 (0-indexed: row 3, col 7)
+        h4_contributions = _parse_contributions_json(h4_val)
         if h4_contributions:
             contributions = h4_contributions
 
@@ -276,27 +282,36 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
     Reads metadata from rows 1-4, scans data rows for withdrawals/contributions
     (columns 8-9), and computes ALL monthly installments in Python.
     """
-    wb = openpyxl.load_workbook(str(filepath), data_only=True)
+    wb = openpyxl.load_workbook(str(filepath), data_only=True, read_only=True)
     ws = wb["Index"]
     name = filepath.stem
 
+    # -- Preload all rows for read_only mode --
+    all_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+
     # -- Metadata rows 1-4 --
-    start_date_raw = ws.cell(1, 2).value                          # B1: start date
-    maturity_years = _to_float(ws.cell(1, 8).value, PPF_TENURE_YEARS)  # H1: years
-    bank = _to_str(ws.cell(1, 11).value, "Post Office")          # K1: bank
+    row1 = all_rows[0] if len(all_rows) > 0 else ()
+    row2 = all_rows[1] if len(all_rows) > 1 else ()
+    row3 = all_rows[2] if len(all_rows) > 2 else ()
+    row4 = all_rows[3] if len(all_rows) > 3 else ()
+
+    start_date_raw = row1[1] if len(row1) > 1 else None           # B1: start date
+    maturity_years = _to_float(row1[7] if len(row1) > 7 else None, PPF_TENURE_YEARS)  # H1: years
+    bank = _to_str(row1[10] if len(row1) > 10 else None, "Post Office")  # K1: bank
 
     # H2: interest payout type (always "Annually" for PPF)
-    sip_frequency = _to_str(ws.cell(2, 11).value, "monthly")     # K2: sip_frequency
+    sip_frequency = _to_str(row2[10] if len(row2) > 10 else None, "monthly")  # K2: sip_frequency
 
-    rate_decimal = _to_float(ws.cell(3, 2).value, 0)             # B3: rate as decimal
-    sip_amount = _to_float(ws.cell(3, 8).value, 0)               # H3: SIP amount
-    account_number = _to_str(ws.cell(3, 11).value)               # K3: account number
+    rate_decimal = _to_float(row3[1] if len(row3) > 1 else None, 0)    # B3: rate as decimal
+    sip_amount = _to_float(row3[7] if len(row3) > 7 else None, 0)      # H3: SIP amount
+    account_number = _to_str(row3[10] if len(row3) > 10 else None)     # K3: account number
 
-    sip_end_date_raw = ws.cell(4, 2).value                        # B4: sip end date
-    remarks = _to_str(ws.cell(4, 5).value)                        # E4: remarks
+    sip_end_date_raw = row4[1] if len(row4) > 1 else None              # B4: sip end date
+    remarks = _to_str(row4[4] if len(row4) > 4 else None)              # E4: remarks
 
     # K4: SIP phases JSON (only for multi-phase accounts)
-    sip_phases_raw = ws.cell(4, 11).value
+    sip_phases_raw = row4[10] if len(row4) > 10 else None
 
     # -- Convert & derive --
     start_dt = _to_date(start_date_raw) or date.today()
@@ -318,8 +333,7 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
         sip_phases = _build_single_phase(sip_amount, sip_frequency, start_dt, sip_end_dt)
 
     # -- Contributions & withdrawals: scan data rows (cols 8-9) --
-    contributions = _scan_data_rows(ws, tenure_months)
-    wb.close()
+    contributions = _scan_data_rows(all_rows, tenure_months)
 
     # Build a lookup: (year, month) -> total contribution amount for that month
     contrib_by_month = {}
@@ -770,29 +784,33 @@ def _migrate_old_xlsx(ppf_dir: Path = None):
         if f.name.startswith("~$"):
             continue
         try:
-            wb = openpyxl.load_workbook(str(f), data_only=True)
+            wb = openpyxl.load_workbook(str(f), data_only=True, read_only=True)
             ws = wb["Index"]
-            a1_val = _to_str(ws.cell(1, 1).value)
+            mig_rows = list(ws.iter_rows(min_row=1, max_row=3, values_only=True))
+            wb.close()
+
+            row1 = mig_rows[0] if len(mig_rows) > 0 else ()
+            row2 = mig_rows[1] if len(mig_rows) > 1 else ()
+            row3 = mig_rows[2] if len(mig_rows) > 2 else ()
+
+            a1_val = _to_str(row1[0] if len(row1) > 0 else None)
             # Old format has "Account Name" label in A1
             if a1_val != "Account Name":
-                wb.close()
                 continue
 
             # Read old-format metadata
-            account_name = _to_str(ws.cell(1, 2).value, "PPF Account")
-            bank = _to_str(ws.cell(1, 4).value, "Post Office")
-            account_number = _to_str(ws.cell(1, 6).value)
-            interest_rate = _to_float(ws.cell(1, 8).value, PPF_DEFAULT_RATE)
+            account_name = _to_str(row1[1] if len(row1) > 1 else None, "PPF Account")
+            bank = _to_str(row1[3] if len(row1) > 3 else None, "Post Office")
+            account_number = _to_str(row1[5] if len(row1) > 5 else None)
+            interest_rate = _to_float(row1[7] if len(row1) > 7 else None, PPF_DEFAULT_RATE)
 
-            start_date = _to_str(ws.cell(2, 2).value)
-            tenure_years = int(_to_float(ws.cell(2, 4).value, PPF_TENURE_YEARS))
-            sip_amount = _to_float(ws.cell(2, 8).value, 0)
+            start_date = _to_str(row2[1] if len(row2) > 1 else None)
+            tenure_years = int(_to_float(row2[3] if len(row2) > 3 else None, PPF_TENURE_YEARS))
+            sip_amount = _to_float(row2[7] if len(row2) > 7 else None, 0)
 
-            sip_frequency = _to_str(ws.cell(3, 2).value, "monthly")
-            sip_end_date = _to_str(ws.cell(3, 4).value) or None
-            remarks_val = _to_str(ws.cell(3, 6).value)
-
-            wb.close()
+            sip_frequency = _to_str(row3[1] if len(row3) > 1 else None, "monthly")
+            sip_end_date = _to_str(row3[3] if len(row3) > 3 else None) or None
+            remarks_val = _to_str(row3[5] if len(row3) > 5 else None)
 
             print(f"[PPF] Migrating old-format xlsx: {f.name}")
 
@@ -829,10 +847,11 @@ def _migrate_h4_to_cols(ppf_dir: Path = None):
         if f.name.startswith("~$"):
             continue
         try:
-            wb = openpyxl.load_workbook(str(f), data_only=True)
+            wb = openpyxl.load_workbook(str(f), data_only=True, read_only=True)
             ws = wb["Index"]
-            h4_val = ws.cell(4, 8).value
+            h4_rows = list(ws.iter_rows(min_row=4, max_row=4, values_only=True))
             wb.close()
+            h4_val = h4_rows[0][7] if h4_rows and len(h4_rows[0]) > 7 else None
             if not h4_val:
                 continue
             # H4 has data — parse the file and re-save to migrate

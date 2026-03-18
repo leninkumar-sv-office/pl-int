@@ -525,26 +525,35 @@ def _write_xlsx(filepath: Path, account: dict, transactions: list):
 
 def _read_xlsx(filepath: Path) -> dict:
     """Read NPS account data from xlsx."""
-    wb = openpyxl.load_workbook(filepath, data_only=True)
+    wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
     ws = wb.active
 
+    # Preload all rows for read_only mode
+    all_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+
+    row1 = all_rows[0] if len(all_rows) > 0 else ()
+    row2 = all_rows[1] if len(all_rows) > 1 else ()
+    row3 = all_rows[2] if len(all_rows) > 2 else ()
+    row4 = all_rows[3] if len(all_rows) > 3 else ()
+
     account = {
-        "pran": _to_str(ws.cell(1, 2).value),
-        "current_value": _to_float(ws.cell(1, 5).value),
-        "start_date": _to_str(ws.cell(1, 8).value),
-        "account_name": _to_str(ws.cell(1, 11).value) or "NPS Account",
-        "tier": _to_str(ws.cell(2, 2).value) or "Tier I",
-        "xirr": _to_str(ws.cell(2, 5).value),
-        "scheme_preference": _to_str(ws.cell(2, 8).value),
-        "fund_manager": _to_str(ws.cell(2, 11).value),
-        "status": _to_str(ws.cell(3, 2).value) or "Active",
-        "nominee": _to_str(ws.cell(3, 8).value),
-        "remarks": _to_str(ws.cell(3, 11).value),
+        "pran": _to_str(row1[1] if len(row1) > 1 else None),
+        "current_value": _to_float(row1[4] if len(row1) > 4 else None),
+        "start_date": _to_str(row1[7] if len(row1) > 7 else None),
+        "account_name": _to_str(row1[10] if len(row1) > 10 else None) or "NPS Account",
+        "tier": _to_str(row2[1] if len(row2) > 1 else None) or "Tier I",
+        "xirr": _to_str(row2[4] if len(row2) > 4 else None),
+        "scheme_preference": _to_str(row2[7] if len(row2) > 7 else None),
+        "fund_manager": _to_str(row2[10] if len(row2) > 10 else None),
+        "status": _to_str(row3[1] if len(row3) > 1 else None) or "Active",
+        "nominee": _to_str(row3[7] if len(row3) > 7 else None),
+        "remarks": _to_str(row3[10] if len(row3) > 10 else None),
     }
 
     # Parse scheme splits from H4
     try:
-        splits_raw = ws.cell(4, 8).value
+        splits_raw = row4[7] if len(row4) > 7 else None
         if splits_raw:
             account["scheme_splits"] = json.loads(splits_raw)
     except (json.JSONDecodeError, TypeError):
@@ -552,7 +561,7 @@ def _read_xlsx(filepath: Path) -> dict:
 
     # Parse contributions from E4
     try:
-        contribs_raw = ws.cell(4, 5).value
+        contribs_raw = row4[4] if len(row4) > 4 else None
         if contribs_raw:
             account["contributions"] = json.loads(contribs_raw)
     except (json.JSONDecodeError, TypeError):
@@ -560,18 +569,18 @@ def _read_xlsx(filepath: Path) -> dict:
 
     # Parse schemes summary from K4
     try:
-        schemes_raw = ws.cell(4, 11).value
+        schemes_raw = row4[10] if len(row4) > 10 else None
         if schemes_raw and schemes_raw.startswith("["):
             account["schemes_summary"] = json.loads(schemes_raw)
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # Read transactions from row 6+
+    # Read transactions from row 6+ (index 5+)
     transactions = []
-    for row in ws.iter_rows(min_row=6, max_row=ws.max_row, values_only=False):
-        if row[1].value is None:
+    for row in all_rows[5:]:  # row 6 onwards (0-indexed = 5)
+        if len(row) <= 1 or row[1] is None:
             continue
-        d = row[1].value
+        d = row[1]
         if isinstance(d, (datetime, date)):
             d = d.strftime("%Y-%m-%d") if isinstance(d, datetime) else d.strftime("%Y-%m-%d")
         else:
@@ -579,11 +588,11 @@ def _read_xlsx(filepath: Path) -> dict:
 
         txn = {
             "date": d,
-            "scheme": _to_str(row[2].value),
-            "description": _to_str(row[3].value),
-            "amount": _to_float(row[4].value),
-            "nav": _to_float(row[5].value),
-            "units": _to_float(row[6].value),
+            "scheme": _to_str(row[2] if len(row) > 2 else None),
+            "description": _to_str(row[3] if len(row) > 3 else None),
+            "amount": _to_float(row[4] if len(row) > 4 else None),
+            "nav": _to_float(row[5] if len(row) > 5 else None),
+            "units": _to_float(row[6] if len(row) > 6 else None),
         }
         transactions.append(txn)
 
