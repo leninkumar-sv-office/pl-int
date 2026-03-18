@@ -1308,19 +1308,12 @@ def get_stock_summary():
             base_symbols.add((sym, exch))
             _watchlist_meta[sym] = {"exchange": exch, "name": name_val}
 
-    # Build price request with both exchanges for fallback
+    # Always fetch live prices — users expect current data on page load
     symbols_with_alt = set(base_symbols)
     for sym, exch in base_symbols:
         alt = "NSE" if exch == "BSE" else "BSE"
         symbols_with_alt.add((sym, alt))
-    live_data = stock_service.get_cached_prices(list(symbols_with_alt)) if base_symbols else {}
-
-    # Live-fetch any watchlist stocks missing from cache
-    missing = [(sym, meta["exchange"]) for sym, meta in _watchlist_meta.items()
-               if not live_data.get(f"{sym}.{meta['exchange']}")]
-    if missing:
-        fresh = stock_service.fetch_multiple(missing)
-        live_data.update(fresh)
+    live_data = stock_service.fetch_multiple(list(symbols_with_alt)) if base_symbols else {}
 
     # Group holdings by symbol
     held_by_symbol: dict = {}
