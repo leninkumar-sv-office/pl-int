@@ -637,6 +637,9 @@ def track_stocks(symbols: List[Dict]):
         added.append({"symbol": symbol, "exchange": exchange, "name": name})
     # Rebuild file map so new files are indexed
     db._build_file_map()
+    # Pre-fetch prices so they're in cache immediately
+    if added:
+        stock_service.fetch_multiple([(s["symbol"], s["exchange"]) for s in added])
     return {"added": added, "count": len(added)}
 
 
@@ -1308,12 +1311,12 @@ def get_stock_summary():
             base_symbols.add((sym, exch))
             _watchlist_meta[sym] = {"exchange": exch, "name": name_val}
 
-    # Always fetch live prices — users expect current data on page load
+    # Use cached prices (fast, consistent — background refresh keeps them fresh)
     symbols_with_alt = set(base_symbols)
     for sym, exch in base_symbols:
         alt = "NSE" if exch == "BSE" else "BSE"
         symbols_with_alt.add((sym, alt))
-    live_data = stock_service.fetch_multiple(list(symbols_with_alt)) if base_symbols else {}
+    live_data = stock_service.get_cached_prices(list(symbols_with_alt)) if base_symbols else {}
 
     # Group holdings by symbol
     held_by_symbol: dict = {}
