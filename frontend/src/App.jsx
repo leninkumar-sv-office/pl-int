@@ -1264,12 +1264,12 @@ export default function App() {
             </div>
           )}
           <div className="refresh-control hide-mobile">
-            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Prices</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Live Prices</span>
             <select
               className="refresh-select"
               value={refreshInterval}
               onChange={handleIntervalChange}
-              title="Price refresh interval (live fetch from Zerodha)"
+              title="How often Zerodha prices are fetched and cached locally"
             >
               <option value={60}>1 min</option>
               <option value={120}>2 min</option>
@@ -1277,8 +1277,8 @@ export default function App() {
               <option value={600}>10 min</option>
             </select>
           </div>
-          <div className="refresh-control hide-mobile" title="Full page data reload interval">
-            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Reload</span>
+          <div className="refresh-control hide-mobile" title="How often the full page reloads all data from backend">
+            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Page Reload</span>
             <select
               className="refresh-select"
               value={pageRefreshInterval}
