@@ -180,5 +180,29 @@
     "SGDINR": 72.07,
     "USDINR": 92.43,
     "CRUDEOIL": 9076.0
+  },
+  "2026-03-17": {
+    "SENSEX": 75502.85,
+    "NIFTY50": 23408.8,
+    "GIFTNIFTY": 23390.0,
+    "GOLD": 15553.7,
+    "SILVER": 261.09,
+    "SGX": 4868.69,
+    "NIKKEI": 53751.15,
+    "SGDINR": 72.14,
+    "USDINR": 92.37,
+    "CRUDEOIL": 8823.0
+  },
+  "2026-03-18": {
+    "SENSEX": 76070.84,
+    "NIFTY50": 23581.15,
+    "GIFTNIFTY": 23613.0,
+    "GOLD": 15610.0,
+    "SILVER": 260.5,
+    "SGX": 4935.97,
+    "NIKKEI": 53700.39,
+    "SGDINR": 72.36,
+    "USDINR": 92.46,
+    "CRUDEOIL": 8900.0
   }
 }
