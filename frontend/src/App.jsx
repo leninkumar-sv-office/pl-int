@@ -1278,7 +1278,7 @@ export default function App() {
             </select>
           </div>
           <div className="refresh-control hide-mobile" title="How often the full page reloads all data from backend">
-            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Page Reload</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Files Reload</span>
             <select
               className="refresh-select"
               value={pageRefreshInterval}
