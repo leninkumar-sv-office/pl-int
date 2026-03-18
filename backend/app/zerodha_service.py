@@ -1032,9 +1032,9 @@ def lookup_instrument_name(symbol: str, exchange: str = "NSE") -> str:
     return _instrument_names.get(key, "")
 
 
-def search_instruments(query: str, exchange: str = "") -> list:
+def search_instruments(query: str, exchange: str = "", limit: int = 50) -> list:
     """Search instruments by symbol or name prefix.
-    Returns up to 10 matches: [{symbol, name, exchange}]."""
+    Returns up to `limit` matches: [{symbol, name, exchange}]."""
     if not _instrument_names_loaded:
         _load_instruments()
     q = query.upper().strip()
@@ -1047,7 +1047,7 @@ def search_instruments(query: str, exchange: str = "") -> list:
             continue
         if sym.startswith(q) or q in name.upper():
             results.append({"symbol": sym, "name": name, "exchange": exch})
-            if len(results) >= 10:
+            if len(results) >= limit:
                 break
     # Sort: exact prefix matches first, then alphabetical
     results.sort(key=lambda r: (0 if r["symbol"].startswith(q) else 1, r["symbol"]))

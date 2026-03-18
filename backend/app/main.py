@@ -29,7 +29,7 @@ from .models import (
     CDSLCASUpload, MFImportPayload,
     DividendStatementUpload,
 )
-from .xlsx_database import xlsx_db as db, XlsxPortfolio
+from .xlsx_database import xlsx_db as db, XlsxPortfolio, _sync_to_drive
 from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache, MFXlsxPortfolio
 from .config import get_users, save_users, get_user_dumps_dir, get_user_email, get_users_for_email
 from . import stock_service
@@ -615,6 +615,40 @@ def get_portfolio():
             ))
 
     return result
+
+
+@app.post("/api/portfolio/track")
+def track_stocks(symbols: List[Dict]):
+    """Add stocks to tracking (creates xlsx with no transactions).
+    Accepts [{symbol, exchange, name}]. Skips already-tracked symbols."""
+    db = udb()
+    added = []
+    for s in symbols:
+        symbol = s.get("symbol", "").upper()
+        exchange = s.get("exchange", "NSE").upper()
+        name = s.get("name", symbol)
+        if not symbol:
+            continue
+        # Skip if already tracked (has an xlsx file)
+        if db._find_file_for_symbol(symbol):
+            continue
+        filepath = db._create_stock_file(symbol, exchange, name)
+        _sync_to_drive(filepath)
+        added.append({"symbol": symbol, "exchange": exchange, "name": name})
+    # Rebuild file map so new files are indexed
+    db._build_file_map()
+    return {"added": added, "count": len(added)}
+
+
+@app.get("/api/stock/search-untracked")
+def search_untracked(q: str = "", exchange: str = "NSE", limit: int = 50):
+    """Search Zerodha instruments excluding symbols already in portfolio."""
+    db = udb()
+    # Get all tracked symbols from the file map (includes 0-qty stocks)
+    tracked = set(db._file_map.keys())
+    results = zerodha_service.search_instruments(q, exchange)
+    filtered = [r for r in results if r["symbol"].upper() not in tracked]
+    return filtered[:limit]
 
 
 @app.post("/api/portfolio/add", response_model=Holding)

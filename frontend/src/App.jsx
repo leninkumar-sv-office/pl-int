@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
 import AddStockModal from './components/AddStockModal';
+import TrackStocksModal from './components/TrackStocksModal';
 import SellStockModal from './components/SellStockModal';
 import BulkSellModal from './components/BulkSellModal';
 import TransactionHistory from './components/TransactionHistory';
@@ -122,6 +123,7 @@ export default function App() {
   const [activeTab, _setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'stocks');
   const setActiveTab = (tab) => { localStorage.setItem('activeTab', tab); _setActiveTab(tab); };
   const [addModalData, setAddModalData] = useState(null); // null = closed, {} = open empty, {symbol,...} = pre-filled
+  const [showTrackStocks, setShowTrackStocks] = useState(false);
   const [sellTarget, setSellTarget] = useState(null);
   const [dividendTarget, setDividendTarget] = useState(null); // {symbol, exchange}
   const [bulkSellItems, setBulkSellItems] = useState(null); // null = closed, [...] = open
@@ -1331,6 +1333,9 @@ export default function App() {
               <button className="btn btn-ghost hide-mobile" onClick={openTradePlanner}>
                 Trade Planner
               </button>
+              <button className="btn btn-ghost" onClick={() => setShowTrackStocks(true)}>
+                + Watchlist
+              </button>
               <button className="btn btn-primary" onClick={() => setAddModalData({})}>
                 + Add Stock
               </button>
@@ -1494,6 +1499,13 @@ export default function App() {
           initialData={addModalData}
           onAdd={handleAddStock}
           onClose={() => setAddModalData(null)}
+        />
+      )}
+
+      {showTrackStocks && (
+        <TrackStocksModal
+          onClose={() => setShowTrackStocks(false)}
+          onAdded={() => { loadPortfolio(); loadStockSummary(); }}
         />
       )}
 

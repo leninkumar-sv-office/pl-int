@@ -138,6 +138,16 @@ export async function searchStock(query, exchange = 'NSE') {
   return data;
 }
 
+export async function searchUntracked(query, exchange = 'NSE') {
+  const { data } = await api.get('/stock/search-untracked', { params: { q: query, exchange } });
+  return data;
+}
+
+export async function trackStocks(symbols) {
+  const { data } = await api.post('/portfolio/track', symbols);
+  return data;
+}
+
 export async function getStockHistory(symbol, exchange = 'NSE', period = '1y') {
   const { data } = await api.get(`/stock/${encodeURIComponent(symbol)}/history`,
     { params: { exchange, period } });
