@@ -68,9 +68,11 @@ def on_startup():
     # ── Pre-warm xlsx caches so first request is fast ──
     t0 = time.time()
     try:
-        holdings = db.get_all_holdings()  # parses all xlsx files → populates cache
-        sold = db.get_all_sold()
-        symbols = list(set((h.symbol, h.exchange) for h in holdings))
+        holdings, sold, _ = db.get_all_data()  # single pass — parses all xlsx → populates cache
+        symbols = list(set(
+            [(h.symbol, h.exchange) for h in holdings] +
+            [(s.symbol, s.exchange) for s in sold]
+        ))
         stock_service.get_cached_prices(symbols)  # populates price cache from JSON
         elapsed = time.time() - t0
         print(f"[App] Pre-warmed caches: {len(holdings)} holdings, "

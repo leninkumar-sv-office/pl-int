@@ -1284,7 +1284,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         const sumCurrentVal = heldStocks.reduce((s, st) => s + (st.current_value || 0), 0);
         const sumUPL = heldStocks.reduce((s, st) => s + (st.unrealized_profit || 0) + (st.unrealized_loss || 0), 0);
         const uplPct = sumInvested > 0 ? (sumUPL / sumInvested) * 100 : 0;
-        const sumRPL = stocks.reduce((s, st) => s + (st.realized_pl || 0), 0) + 359359;
+        const sumRPL = stocks.reduce((s, st) => s + (st.realized_pl || 0), 0);
         const sumDiv = stocks.reduce((s, st) => s + (st.total_dividend || 0), 0);
         return (
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', marginBottom: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
