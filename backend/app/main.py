@@ -1296,23 +1296,14 @@ def get_stock_summary():
     base_symbols = set((h.symbol, h.exchange) for h in holdings)
     for s in sold_positions:
         base_symbols.add((s.symbol, s.exchange))
-    # Add watchlist-only stocks from file map
+    # Add watchlist-only stocks from file map (no xlsx I/O — use cached instrument names)
     db = udb()
-    _watchlist_meta = {}  # symbol → {exchange, name}
+    held_syms = {h.symbol for h in holdings}
+    sold_syms = {s.symbol for s in sold_positions}
+    _watchlist_meta = {}
     for sym in db._file_map:
-        if not any(h.symbol == sym for h in holdings) and not any(s.symbol == sym for s in sold_positions):
+        if sym not in held_syms and sym not in sold_syms:
             exch = "NSE"
-            try:
-                import openpyxl
-                wb = openpyxl.load_workbook(db._file_map[sym], read_only=True, data_only=True)
-                idx = wb["Index"] if "Index" in wb.sheetnames else None
-                if idx:
-                    code_cell = str(idx.cell(1, 3).value or "")
-                    if ":" in code_cell:
-                        exch = code_cell.split(":")[0]
-                wb.close()
-            except Exception:
-                pass
             name_val = zerodha_service.lookup_instrument_name(sym, exch) or sym
             base_symbols.add((sym, exch))
             _watchlist_meta[sym] = {"exchange": exch, "name": name_val}
