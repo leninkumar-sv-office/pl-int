@@ -22,13 +22,15 @@ git branch --show-current
 
 ## Step 2a: Commit and Push (on main)
 
-- Stage relevant files — skip `.DS_Store`, `.env`, credentials, `__pycache__`, `*.pyc`
+- **Add files first:** `git add` all relevant changed and untracked files by name
+- Skip `.DS_Store`, `.env`, credentials, `__pycache__`, `*.pyc`, lock files, debug/temp files
 - Do NOT use `git add -A` — add specific files by name
 - Commit with a clear message
 - Push: `git push origin main`
 
 ## Step 2b: Merge Feature Branch to Main
 
+- **Add files first:** `git add` all relevant changed and untracked files by name (same skip rules as 2a)
 - Commit on current branch, push it
 - Switch to main: `git checkout main && git pull origin main`
 - Merge: `git merge <branch-name>`
