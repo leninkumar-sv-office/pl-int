@@ -390,8 +390,8 @@ class XlsxPortfolio:
         The non-archive file is treated as the primary (for writes).
 
         Symbol resolution order (no hardcoded map):
-          1. Zerodha/NSE name→symbol lookup (dynamic, always fresh)
-          2. Index sheet in the xlsx file (has "Code" like "NSE:RELIANCE")
+          1. Index sheet Code (authoritative — set at file creation, e.g. "NSE:RELIANCE")
+          2. Zerodha/NSE name→symbol lookup (dynamic, always fresh)
           3. Derive from filename as last resort
         """
         # Ensure Zerodha/NSE symbol data is loaded (cached to disk, fast)
@@ -409,18 +409,19 @@ class XlsxPortfolio:
 
             clean = stem.replace("Archive_", "").replace(" - Archive", "").strip()
 
-            # 1. Dynamic lookup: Zerodha/NSE name → symbol
-            symbol = _sym_resolver.resolve_by_name(clean)
+            # 1. Index sheet Code is authoritative (e.g. "NSE:RELIANCE")
+            symbol = None
+            try:
+                wb = openpyxl.load_workbook(fp, data_only=True)
+                idx = _extract_index_data(wb)
+                wb.close()
+                symbol = idx.get("symbol")
+            except Exception:
+                pass
 
-            # 2. Fallback: read Index sheet from xlsx (has Code like "NSE:RELIANCE")
+            # 2. Fallback: Zerodha/NSE name→symbol lookup
             if not symbol:
-                try:
-                    wb = openpyxl.load_workbook(fp, data_only=True)
-                    idx = _extract_index_data(wb)
-                    wb.close()
-                    symbol = idx.get("symbol")
-                except Exception:
-                    pass
+                symbol = _sym_resolver.resolve_by_name(clean)
 
             # 3. Last resort: derive from filename heuristic
             if not symbol:
@@ -599,7 +600,7 @@ class XlsxPortfolio:
                 "quantity": r["remaining"],
                 "price": r["price"],
                 "raw_price": r.get("raw_price", r["price"]),
-                "cost": round(r["price"] * r["remaining"], 2),
+                "cost": round((r["cost"] / r["quantity"]) * r["remaining"], 2) if r.get("quantity", 0) > 0 and r.get("cost", 0) > 0 else round(r["price"] * r["remaining"], 2),
                 "row_idx": r.get("row_idx", 0),
             } for r in remaining if r["remaining"] > 0]
 
