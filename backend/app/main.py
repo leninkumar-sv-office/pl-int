@@ -1687,19 +1687,23 @@ def get_price_status():
 
 
 def _do_price_refresh():
-    """Worker: reindex xlsx files then fetch live prices."""
+    """Worker: reindex xlsx files then fetch live prices (including watchlist)."""
     try:
-        udb().reindex()
+        db = udb()
+        db.reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
-        holdings = udb().get_all_holdings()
-        sold = udb().get_all_sold()
-        if not holdings and not sold:
-            return
+        holdings = db.get_all_holdings()
+        sold = db.get_all_sold()
+        held_syms = {h.symbol for h in holdings}
+        sold_syms = {s.symbol for s in sold}
         symbols = list(set(
             [(h.symbol, h.exchange) for h in holdings] +
-            [(s.symbol, s.exchange) for s in sold]
+            [(s.symbol, s.exchange) for s in sold] +
+            [(sym, "NSE") for sym in db._file_map if sym not in held_syms and sym not in sold_syms]
         ))
+        if not symbols:
+            return
         res = stock_service.fetch_multiple(symbols)
         live = sum(1 for v in res.values() if not v.is_manual)
         print(f"[PriceRefresh] Done: {live} live, {len(res)-live} fallback / {len(symbols)} stocks")
@@ -1713,17 +1717,21 @@ def trigger_price_refresh():
     Re-scans dumps/ for new xlsx files, then fetches live prices synchronously."""
     t0 = time.time()
     try:
-        reindex_result = udb().reindex()
+        db = udb()
+        reindex_result = db.reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
-        holdings = udb().get_all_holdings()
-        sold = udb().get_all_sold()
-        if not holdings and not sold:
-            return {"message": "No holdings found", "stocks": 0, "reindex": reindex_result}
+        holdings = db.get_all_holdings()
+        sold = db.get_all_sold()
+        held_syms = {h.symbol for h in holdings}
+        sold_syms = {s.symbol for s in sold}
         symbols = list(set(
             [(h.symbol, h.exchange) for h in holdings] +
-            [(s.symbol, s.exchange) for s in sold]
+            [(s.symbol, s.exchange) for s in sold] +
+            [(sym, "NSE") for sym in db._file_map if sym not in held_syms and sym not in sold_syms]
         ))
+        if not symbols:
+            return {"message": "No holdings found", "stocks": 0, "reindex": reindex_result}
         res = stock_service.fetch_multiple(symbols)
         live = sum(1 for v in res.values() if not v.is_manual)
         fb = sum(1 for v in res.values() if v.is_manual)
