@@ -1292,12 +1292,32 @@ def get_stock_summary():
     sold_positions = udb().get_all_sold()
     dividends_by_symbol = udb().get_dividends_by_symbol()
 
-    # Use cached prices (instant, no network calls)
-    # Request both BSE and NSE for each symbol so exchange fallback works
-    # Include BOTH held and sold symbols so fully-sold stocks get live data too
+    # Collect all symbols: held + sold + watchlist (files with 0 transactions)
     base_symbols = set((h.symbol, h.exchange) for h in holdings)
     for s in sold_positions:
         base_symbols.add((s.symbol, s.exchange))
+    # Add watchlist-only stocks from file map
+    db = udb()
+    _watchlist_meta = {}  # symbol → {exchange, name}
+    for sym in db._file_map:
+        if not any(h.symbol == sym for h in holdings) and not any(s.symbol == sym for s in sold_positions):
+            exch = "NSE"
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(db._file_map[sym], read_only=True, data_only=True)
+                idx = wb["Index"] if "Index" in wb.sheetnames else None
+                if idx:
+                    code_cell = str(idx.cell(1, 3).value or "")
+                    if ":" in code_cell:
+                        exch = code_cell.split(":")[0]
+                wb.close()
+            except Exception:
+                pass
+            name_val = zerodha_service.lookup_instrument_name(sym, exch) or sym
+            base_symbols.add((sym, exch))
+            _watchlist_meta[sym] = {"exchange": exch, "name": name_val}
+
+    # Build price request with both exchanges for fallback
     symbols_with_alt = set(base_symbols)
     for sym, exch in base_symbols:
         alt = "NSE" if exch == "BSE" else "BSE"
@@ -1319,6 +1339,11 @@ def get_stock_summary():
         if key not in sold_by_symbol:
             sold_by_symbol[key] = {"lots": [], "exchange": s.exchange, "name": s.name}
         sold_by_symbol[key]["lots"].append(s)
+
+    # Add watchlist stocks to held_by_symbol (with empty lots)
+    for sym, meta in _watchlist_meta.items():
+        if sym not in held_by_symbol:
+            held_by_symbol[sym] = {"lots": [], "exchange": meta["exchange"], "name": meta["name"]}
 
     # Combine all symbols
     all_symbols = set(list(held_by_symbol.keys()) + list(sold_by_symbol.keys()))
