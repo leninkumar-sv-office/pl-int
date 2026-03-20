@@ -1529,6 +1529,7 @@ def get_stock_summary():
                 total_dividend=round(dividends_by_symbol.get(sym, {}).get("amount", 0), 2),
                 dividend_count=dividends_by_symbol.get(sym, {}).get("count", 0),
                 dividend_units=dividends_by_symbol.get(sym, {}).get("units", 0),
+                last_buy_date=max((h.buy_date for h in held_lots), default=""),
                 num_held_lots=len(held_lots),
                 num_sold_lots=len(sold_lots),
                 profitable_qty=profitable_qty,

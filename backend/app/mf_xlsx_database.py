@@ -991,6 +991,7 @@ class MFXlsxPortfolio:
                 "stcg_unrealized_pl": round(stcg_upl, 2),
                 "ltcg_realized_pl": round(ltcg_rpl, 2),
                 "stcg_realized_pl": round(stcg_rpl, 2),
+                "last_buy_date": max((h.buy_date for h in holdings), default=""),
                 "num_held_lots": len(holdings),
                 "num_sold_lots": len(sold),
                 "week_52_high": nav_changes.get("week_52_high", 0.0) or w52_high,

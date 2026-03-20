@@ -567,6 +567,11 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
                       {fd.name && fd.name !== fd.bank && (
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{fd.bank}</div>
                       )}
+                      {fd.start_date && (
+                        <div style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.7, marginTop: '1px' }}>
+                          Since: {new Date(fd.start_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                        </div>
+                      )}
                     </td>
                     {col('type') && <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: tc.bg, color: tc.color }}>{fd.type || 'FD'}</span>

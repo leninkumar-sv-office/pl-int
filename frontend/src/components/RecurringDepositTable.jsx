@@ -597,6 +597,11 @@ export default function RecurringDepositTable({ deposits, loading, rdDashboard, 
                       {rd.account_number && (
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{rd.account_number}</div>
                       )}
+                      {rd.start_date && (
+                        <div style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.7, marginTop: '1px' }}>
+                          Since: {new Date(rd.start_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                        </div>
+                      )}
                     </td>
                     {col('monthlyAmt') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(rd.monthly_amount)}</td>}
                     {col('rate') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{rd.interest_rate}%</td>}
