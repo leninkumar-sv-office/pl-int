@@ -8,11 +8,11 @@ on:
       mode:
         description: 'Deploy mode'
         required: true
-        default: 'app'
+        default: 'docker'
         type: choice
         options:
-          - app
           - docker
+          - app
 
 permissions:
   contents: write
@@ -52,14 +52,13 @@ jobs:
 
   deploy:
     needs: tag
-    if: false  # Deployment disabled — re-enable by removing this line
     runs-on: self-hosted
     env:
       DOCKER_HOST: unix:///Users/lenin/.docker/run/docker.sock
       DEPLOY_DIR: /Users/lenin/Desktop/workspace/pl-auto
       DEV_DUMPS: /Users/lenin/Desktop/workspace/pl/backend/dumps
       USER_EMAIL: leninkumar.sv.ai@gmail.com
-      DEPLOY_MODE: ${{ github.event.inputs.mode || 'app' }}
+      DEPLOY_MODE: ${{ github.event.inputs.mode || 'docker' }}
 
     steps:
       - uses: actions/checkout@v4

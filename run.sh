@@ -33,15 +33,15 @@ if command -v node &> /dev/null; then
 
     echo ""
     echo "🚀 Starting services..."
-    echo "   Backend:  http://127.0.0.1:9999"
+    echo "   Backend:  http://127.0.0.1:9998"
     echo "   Frontend: http://localhost:5173"
     echo ""
-    echo "   API Docs: http://127.0.0.1:9999/docs"
+    echo "   API Docs: http://127.0.0.1:9998/docs"
     echo ""
 
     # Start backend in background
     cd "$BACKEND_DIR"
-    python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9999 --reload &
+    python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9998 --reload &
     BACKEND_PID=$!
 
     # Start frontend
@@ -59,10 +59,10 @@ else
     echo "⚠️  Node.js not found. Starting backend only."
     echo "   Install Node.js to run the React frontend."
     echo ""
-    echo "🚀 Starting backend at http://127.0.0.1:9999"
-    echo "   API Docs: http://127.0.0.1:9999/docs"
+    echo "🚀 Starting backend at http://127.0.0.1:9998"
+    echo "   API Docs: http://127.0.0.1:9998/docs"
     echo ""
 
     cd "$BACKEND_DIR"
-    python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9999 --reload
+    python3 -m uvicorn app.main:app --host 0.0.0.0 --port 9998 --reload
 fi

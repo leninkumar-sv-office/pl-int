@@ -155,7 +155,11 @@ def on_shutdown():
 # CORS for React dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173",
+        "http://localhost:9998", "http://127.0.0.1:9998",
+        "http://localhost:9999", "http://127.0.0.1:9999",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
