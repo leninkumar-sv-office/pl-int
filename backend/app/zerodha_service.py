@@ -853,7 +853,7 @@ def fetch_market_tickers() -> Dict[str, dict]:
             "price": round(ltp, 2),
             "change": round(change, 2),
             "change_pct": round(pct, 2),
-            "instrument": inst_key,  # Track which Kite instrument matched
+            "instrument": inst_key,
             "instrument_token": info.get("instrument_token"),
         })
 
@@ -875,13 +875,13 @@ _TICKER_HIST_TTL = 6 * 3600  # 6 hours
 
 
 def fetch_ticker_historical_changes(ticker_data: Dict[str, dict]) -> Dict[str, dict]:
-    """Compute 7D/1M changes for market tickers using Kite Historical Data API.
+    """Compute 1D/7D/1M changes for market tickers using Kite Historical Data API.
 
     Args:
-        ticker_data: {key: {price, instrument_token, ...}} from fetch_market_tickers()
+        ticker_data: {key: {instrument_token, price, ...}} from fetch_market_tickers()
 
     Returns:
-        {key: {week_change_pct, month_change_pct}}
+        {key: {day_change, day_change_pct, week_change_pct, month_change_pct}}
     """
     if not is_session_valid():
         return {}
@@ -901,6 +901,7 @@ def fetch_ticker_historical_changes(ticker_data: Dict[str, dict]) -> Dict[str, d
             cached = _ticker_hist_cache.get(key)
             if cached and (now_ts - cached.get("fetched_at", 0)) < _TICKER_HIST_TTL:
                 results[key] = {
+                    "prev_day_close": cached.get("prev_day_close", 0.0),
                     "week_change_pct": cached["week_change_pct"],
                     "month_change_pct": cached["month_change_pct"],
                 }
@@ -918,9 +919,37 @@ def fetch_ticker_historical_changes(ticker_data: Dict[str, dict]) -> Dict[str, d
         if not candles:
             continue
 
-        latest_close = candles[-1][4] if len(candles[-1]) >= 5 else 0
+        # Apply divisor so historical candle prices match the displayed price scale
+        divisor = data.get("divisor", 1) or 1
+
+        latest_close = candles[-1][4] / divisor if len(candles[-1]) >= 5 else 0
         if latest_close <= 0:
             continue
+
+        # Use current LTP if available (more accurate during market hours)
+        current_price = data.get("price", latest_close) or latest_close
+
+        # Find prev_day_close: the close of the trading day BEFORE the most recent one
+        # This ensures 1D change works both during and after market hours.
+        # During market hours: last candle = yesterday → prev = day-before-yesterday
+        #   But current_price is live LTP, so 1D = LTP - yesterday's close (good)
+        # After market hours: last candle = today → prev = yesterday
+        #   And current_price = today's close, so 1D = today's close - yesterday's close (good)
+        # We find the last two unique trading day closes from candles.
+        recent_closes = []  # [(date_str, close_price), ...] most recent first
+        seen_dates = set()
+        for c in reversed(candles):
+            try:
+                ts = c[0][:10] if isinstance(c[0], str) else str(c[0])[:10]
+            except (TypeError, AttributeError):
+                continue
+            if ts not in seen_dates and len(c) >= 5 and c[4] > 0:
+                recent_closes.append((ts, c[4] / divisor))
+                seen_dates.add(ts)
+                if len(recent_closes) >= 2:
+                    break
+
+        prev_day_close = recent_closes[1][1] if len(recent_closes) >= 2 else 0.0
 
         target_7d = now - timedelta(days=7)
         target_30d = now - timedelta(days=30)
@@ -934,14 +963,14 @@ def fetch_ticker_historical_changes(ticker_data: Dict[str, dict]) -> Dict[str, d
             except (ValueError, TypeError, AttributeError):
                 continue
             if candle_date <= target_7d:
-                close_7d = c[4] if len(c) >= 5 else 0
+                close_7d = (c[4] / divisor) if len(c) >= 5 else 0
             if candle_date <= target_30d:
-                close_30d = c[4] if len(c) >= 5 else 0
+                close_30d = (c[4] / divisor) if len(c) >= 5 else 0
 
-        week_pct = round((latest_close - close_7d) / close_7d * 100, 2) if close_7d > 0 else 0.0
-        month_pct = round((latest_close - close_30d) / close_30d * 100, 2) if close_30d > 0 else 0.0
+        week_pct = round((current_price - close_7d) / close_7d * 100, 2) if close_7d > 0 else 0.0
+        month_pct = round((current_price - close_30d) / close_30d * 100, 2) if close_30d > 0 else 0.0
 
-        result = {"week_change_pct": week_pct, "month_change_pct": month_pct}
+        result = {"prev_day_close": prev_day_close, "week_change_pct": week_pct, "month_change_pct": month_pct}
         results[key] = result
 
         with _ticker_hist_lock:

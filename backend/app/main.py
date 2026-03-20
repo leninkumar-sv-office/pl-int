@@ -2091,7 +2091,8 @@ def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
     """Add week_change_pct and month_change_pct.
     Kite tickers: use Zerodha Historical Data API.
     Non-Kite tickers: use local ticker history file."""
-    # Build {key: {instrument_token, ...}} from tickers that have tokens
+    # Build {key: {instrument_token, price, divisor, ...}} from tickers that have tokens
+    meta_map = {m["key"]: m for m in MARKET_TICKER_SYMBOLS}
     ticker_data = {}
     non_kite_keys = set()
     for t in tickers:
@@ -2099,7 +2100,8 @@ def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
         t.setdefault("month_change_pct", 0.0)
         token = t.get("instrument_token")
         if token and t.get("price", 0) > 0:
-            ticker_data[t["key"]] = {"instrument_token": token}
+            divisor = meta_map.get(t["key"], {}).get("divisor", 1)
+            ticker_data[t["key"]] = {"instrument_token": token, "price": t["price"], "divisor": divisor}
         elif t.get("price", 0) > 0:
             non_kite_keys.add(t["key"])
 
@@ -2109,6 +2111,13 @@ def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
         for t in tickers:
             ch = changes.get(t["key"])
             if ch:
+                # Compute 1D change from prev_day_close + current LTP if live change is 0
+                prev_close = ch.get("prev_day_close", 0)
+                if t.get("change_pct", 0) == 0 and prev_close > 0 and t.get("price", 0) > 0:
+                    day_change = round(t["price"] - prev_close, 2)
+                    day_pct = round((t["price"] - prev_close) / prev_close * 100, 2)
+                    t["change"] = day_change
+                    t["change_pct"] = day_pct
                 t["week_change_pct"] = ch["week_change_pct"]
                 t["month_change_pct"] = ch["month_change_pct"]
 
@@ -2230,10 +2239,10 @@ def _refresh_tickers_once():
     summary = ", ".join(f"{v} {k}" for k, v in by_source.items())
     print(f"[MarketTicker] Refresh done: {summary}")
 
-    # Save to file (merge-safe) and update cache
-    _save_ticker_file(results)
+    # Record history first, then enrich with 1D/7D/1M changes, then save
     _record_ticker_history(results)
     _enrich_ticker_changes(results)
+    _save_ticker_file(results)
     with _ticker_lock:
         _ticker_cache = results
         _ticker_cache_time = time.time()
