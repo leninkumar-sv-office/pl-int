@@ -69,7 +69,11 @@ jobs:
         run: |
           echo "Stopping old deployment..."
 
-          # Stop Docker container if running
+          # Stop Docker container by name (always works regardless of directory)
+          docker stop pl-dashboard 2>/dev/null || true
+          docker rm -f pl-dashboard 2>/dev/null || true
+
+          # Also try docker compose down from deploy dir
           cd "$DEPLOY_DIR" 2>/dev/null && \
             docker compose down --rmi all --remove-orphans 2>/dev/null || true
           docker image prune -f 2>/dev/null || true
