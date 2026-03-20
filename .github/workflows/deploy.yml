@@ -267,7 +267,8 @@ jobs:
             cp -a "$DEPLOY_DIR/backend/data/." /tmp/pl-data-backup/ 2>/dev/null || true
           fi
 
-          # Clone previous tag
+          # Clone previous tag (cd /tmp first to avoid getcwd errors after rm)
+          cd /tmp
           rm -rf "$DEPLOY_DIR"
           git clone "$GITHUB_WORKSPACE" "$DEPLOY_DIR"
           cd "$DEPLOY_DIR"
