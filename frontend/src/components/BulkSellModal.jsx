@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -14,6 +15,7 @@ const formatINR = (num) => {
  *   onClose: () => void
  */
 export default function BulkSellModal({ items, onSell, onClose }) {
+  useEscapeKey(onClose);
   const [sellDate, setSellDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });

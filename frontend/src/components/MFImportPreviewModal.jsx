@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -34,6 +35,7 @@ const dupRowBg = 'rgba(251,191,36,0.10)';
 const dupRowBorder = '1px solid rgba(251,191,36,0.25)';
 
 export default function MFImportPreviewModal({ data, onConfirm, onCancel }) {
+  useEscapeKey(onCancel);
   const [confirming, setConfirming] = useState(false);
 
   if (!data) return null;

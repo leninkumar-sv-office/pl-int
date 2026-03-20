@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function SIPConfigModal({ fund, existingSIP, onSave, onDelete, onClose }) {
+  useEscapeKey(onClose);
   const fundName = (fund.name || '').replace(/ - Direct Plan.*| - Direct Growth.*| Direct Growth.*/i, '');
   const isEdit = !!existingSIP;
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function AddSIModal({ onAdd, onClose, initialData }) {
+  useEscapeKey(onClose);
   const isEdit = !!(initialData?.id);
   const [form, setForm] = useState({
     bank: initialData?.bank || '',

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 import { lookupStockName } from '../services/api';
 
 export default function AddStockModal({ onAdd, onClose, initialData }) {
+  useEscapeKey(onClose);
   const [form, setForm] = useState({
     symbol: initialData?.symbol || '',
     exchange: initialData?.exchange || 'NSE',

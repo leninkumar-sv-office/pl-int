@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -24,6 +25,7 @@ const sipFreqLabel = (freq) => {
 const isOneTime = (data) => data?.sip_end_date && data?.sip_end_date === data?.start_date;
 
 export default function AddPPFModal({ onSubmit, onClose, initialData, mode = 'add' }) {
+  useEscapeKey(onClose);
   // mode: 'add' | 'edit' | 'contribution'
   const isEdit = mode === 'edit';
   const isContribution = mode === 'contribution';

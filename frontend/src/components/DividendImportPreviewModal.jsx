@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function DividendImportPreviewModal({ data, existingSymbols = new Set(), onConfirm, onCancel }) {
+  useEscapeKey(onCancel);
   const [confirming, setConfirming] = useState(false);
   const [symbolEdits, setSymbolEdits] = useState({});
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function SellStockModal({ holding, onSell, onClose }) {
+  useEscapeKey(onClose);
   const h = holding.holding;
   const live = holding.live;
   const currentPrice = live?.current_price || 0;

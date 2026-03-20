@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function ImportPreviewModal({ data, existingSymbols = new Set(), stockSummary = [], onConfirm, onCancel }) {
+  useEscapeKey(onCancel);
   const [confirming, setConfirming] = useState(false);
   // Editable symbol overrides: { index: newSymbol }
   const [symbolEdits, setSymbolEdits] = useState({});

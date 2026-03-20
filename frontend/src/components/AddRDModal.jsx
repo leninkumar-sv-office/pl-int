@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -13,6 +14,7 @@ const COMPOUNDING_OPTIONS = [
 ];
 
 export default function AddRDModal({ onAdd, onClose, initialData, mode }) {
+  useEscapeKey(onClose);
   // mode: 'add' | 'edit' | 'installment'
   const isEdit = mode === 'edit';
   const isInstallment = mode === 'installment';

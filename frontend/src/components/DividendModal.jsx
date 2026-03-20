@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 export default function DividendModal({ symbol, exchange, onSubmit, onClose }) {
+  useEscapeKey(onClose);
   const today = new Date().toISOString().split('T')[0];
   const [amount, setAmount] = useState('');
   const [dividendDate, setDividendDate] = useState(today);

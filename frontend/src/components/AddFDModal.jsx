@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -13,6 +14,7 @@ const PAYOUT_OPTIONS = [
 ];
 
 export default function AddFDModal({ onAdd, onClose, initialData }) {
+  useEscapeKey(onClose);
   const isEdit = !!(initialData?.id);
   const [form, setForm] = useState({
     bank: initialData?.bank || '',

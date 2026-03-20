@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function RedeemMFModal({ fund, onRedeem, onClose }) {
+  useEscapeKey(onClose);
   const currentNav = fund.current_nav || 0;
   const totalHeldUnits = fund.total_held_units || 0;
   const avgNav = fund.avg_nav || 0;

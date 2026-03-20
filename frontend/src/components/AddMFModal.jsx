@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 import { searchMFInstruments } from '../services/api';
 
 const formatINR = (num) => {
@@ -7,6 +8,7 @@ const formatINR = (num) => {
 };
 
 export default function AddMFModal({ onAdd, onClose, initialData, funds }) {
+  useEscapeKey(onClose);
   const [form, setForm] = useState({
     fund_code: initialData?.fund_code || '',
     fund_name: initialData?.name || initialData?.fund_name || '',

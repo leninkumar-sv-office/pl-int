@@ -1,8 +1,10 @@
 import React, { useState, useRef, useCallback } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 import { searchUntracked, trackStocks, lookupStockName } from '../services/api';
 import toast from 'react-hot-toast';
 
 export default function TrackStocksModal({ onClose, onAdded }) {
+  useEscapeKey(onClose);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState(new Map()); // symbol → {symbol, exchange, name}

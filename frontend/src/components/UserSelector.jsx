@@ -12,11 +12,13 @@ export default function UserSelector({ currentUserId, onUserChange }) {
     getUsers().then(setUsers).catch(() => {});
   }, []);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click or Escape key
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setAdding(false); } };
+    const escHandler = (e) => { if (e.key === 'Escape') { setOpen(false); setAdding(false); } };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', escHandler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', escHandler); };
   }, []);
 
   const currentUser = users.find(u => u.id === currentUserId) || users[0];

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -6,6 +7,7 @@ const formatINR = (num) => {
 };
 
 export default function AddInsuranceModal({ onAdd, onClose, initialData }) {
+  useEscapeKey(onClose);
   const isEdit = !!(initialData?.id);
   const [form, setForm] = useState({
     policy_name: initialData?.policy_name || '',

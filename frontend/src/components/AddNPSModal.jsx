@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 const TIER_OPTIONS = ['Tier I', 'Tier II'];
 const FUND_MANAGERS = [
@@ -17,6 +18,7 @@ const SCHEME_OPTIONS = ['Auto Choice', 'Active Choice', 'Aggressive (LC75)', 'Mo
 const STATUS_OPTIONS = ['Active', 'Frozen', 'Closed'];
 
 export default function AddNPSModal({ onSubmit, onClose, initialData, mode = 'add' }) {
+  useEscapeKey(onClose);
   // mode: 'add' | 'edit' | 'contribution'
   const isEdit = mode === 'edit';
   const isContribution = mode === 'contribution';
