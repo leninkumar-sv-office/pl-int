@@ -1238,9 +1238,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         {f.num_held_lots} lot{f.num_held_lots !== 1 ? 's' : ''}
                         {f.num_sold_lots > 0 && <span> &bull; {f.num_sold_lots} redeemed</span>}
                       </div>
-                      {f.last_buy_date && (
+                      {f.last_tx_date && (
                         <div style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.7, marginTop: '1px' }}>
-                          Last buy: {new Date(f.last_buy_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                          Last {f.last_tx_type?.toLowerCase() || 'buy'}: {new Date(f.last_tx_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
                         </div>
                       )}
                     </td>

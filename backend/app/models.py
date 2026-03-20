@@ -153,7 +153,8 @@ class StockSummaryItem(BaseModel):
     ltcg_sold_latest_sell: str = ""
     stcg_sold_earliest_buy: str = ""
     stcg_sold_latest_sell: str = ""
-    last_buy_date: str = ""          # most recent buy_date among held lots
+    last_tx_date: str = ""           # most recent transaction date (buy or sell)
+    last_tx_type: str = ""           # "Buy" or "Sell"
     num_held_lots: int = 0           # individual held lot count
     num_sold_lots: int = 0           # individual sold lot count
     profitable_qty: int = 0          # shares where lot buy_price < current_price
@@ -214,7 +215,8 @@ class MFSummaryItem(BaseModel):
     stcg_unrealized_pl: float = 0.0
     ltcg_realized_pl: float = 0.0
     stcg_realized_pl: float = 0.0
-    last_buy_date: str = ""          # most recent buy_date among held lots
+    last_tx_date: str = ""           # most recent transaction date (buy or redeem)
+    last_tx_type: str = ""           # "Buy" or "Redeem"
     num_held_lots: int = 0
     num_sold_lots: int = 0
     week_52_high: float = 0.0

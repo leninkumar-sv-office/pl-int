@@ -1863,9 +1863,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         {live?.is_manual && <span className="manual-badge">Manual</span>}
                       </div>
                       <div className="stock-name">{stock.name}</div>
-                      {stock.last_buy_date && (
+                      {stock.last_tx_date && (
                         <div style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.7, marginTop: '1px' }}>
-                          Last buy: {new Date(stock.last_buy_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
+                          Last {stock.last_tx_type?.toLowerCase() || 'buy'}: {new Date(stock.last_tx_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
                         </div>
                       )}
                     </td>
