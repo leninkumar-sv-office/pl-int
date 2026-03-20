@@ -24,6 +24,9 @@ from .models import StockLiveData
 from .xlsx_database import xlsx_db as db
 from . import zerodha_service
 
+import logging
+logger = logging.getLogger(__name__)
+
 # ═══════════════════════════════════════════════════════════
 #  CONFIG
 # ═══════════════════════════════════════════════════════════
@@ -81,7 +84,7 @@ def _save_prices_file(prices: Dict[str, dict]):
         except Exception:
             pass
     except Exception as e:
-        print(f"[StockService] Failed to save prices file: {e}")
+        logger.error(f"[StockService] Failed to save prices file: {e}")
 
 
 def _load_prices_file() -> Dict[str, dict]:
@@ -147,7 +150,7 @@ def _build_xlsx():
             _xlsx_idx[sym] = {"price": 0, "w52h": 0, "w52l": 0}
     _xlsx_built = True
     ok = sum(1 for v in _xlsx_idx.values() if v["price"] > 0)
-    print(f"[StockService] xlsx fallback: {ok}/{len(_xlsx_idx)} with prices")
+    logger.info(f"[StockService] xlsx fallback: {ok}/{len(_xlsx_idx)} with prices")
 
 
 def _xlsx_single(symbol: str) -> dict:
@@ -244,7 +247,7 @@ def _download_batch(tickers: List[str]) -> Dict[str, float]:
                     except Exception:
                         pass
     except Exception as e:
-        print(f"[StockService] Batch error: {e}")
+        logger.error(f"[StockService] Batch error: {e}")
     return prices
 
 
@@ -256,7 +259,7 @@ def _download_batch_with_retry(tickers: List[str]) -> Dict[str, float]:
             return prices
         if attempt < MAX_RETRIES - 1:
             delay = (attempt + 1) * 2 + random.uniform(0, 1)
-            print(f"[StockService] Yahoo retry {attempt + 1}/{MAX_RETRIES} "
+            logger.warning(f"[StockService] Yahoo retry {attempt + 1}/{MAX_RETRIES} "
                   f"for {len(tickers)} tickers, wait {delay:.1f}s...")
             time.sleep(delay)
     return {}
@@ -330,10 +333,10 @@ def _fetch_via_zerodha(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         quotes = zerodha_service.fetch_quotes(symbols)
         if quotes:
             ok = sum(1 for v in quotes.values() if v.get("price", 0) > 0)
-            print(f"[StockService] Zerodha: {ok}/{len(symbols)} quotes")
+            logger.info(f"[StockService] Zerodha: {ok}/{len(symbols)} quotes")
         return quotes
     except Exception as e:
-        print(f"[StockService] Zerodha error: {e}")
+        logger.error(f"[StockService] Zerodha error: {e}")
         return {}
 
 
@@ -445,7 +448,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                 if to_save:
                     _save_prices_file(to_save)
         except Exception as e:
-            print(f"[StockService] 52-week fetch error: {e}")
+            logger.error(f"[StockService] 52-week fetch error: {e}")
             # Fallback: try to preserve existing 52-week from JSON/xlsx
             saved_prices = _load_prices_file()
             for sym, exch in zerodha_symbols:
@@ -465,7 +468,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
     if not still_need:
         zerodha_got = len(need) - len(still_need)
         if zerodha_got > 0:
-            print(f"[StockService] All {zerodha_got} prices from Zerodha")
+            logger.info(f"[StockService] All {zerodha_got} prices from Zerodha")
         return results
 
     # ── SOURCE 2 & 3: YAHOO / GOOGLE (only if ENABLE_YAHOO_GOOGLE) ──
@@ -487,7 +490,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
 
             prices = _download_batch_with_retry(batch)
             all_prices.update(prices)
-            print(f"[StockService] Yahoo batch {bnum}/{total_batches}: "
+            logger.info(f"[StockService] Yahoo batch {bnum}/{total_batches}: "
                   f"{len(prices)}/{len(batch)} OK")
 
             if i + BATCH_SIZE < len(all_ys):
@@ -495,7 +498,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
 
         yahoo_got = len(all_prices)
         if yahoo_got > 0:
-            print(f"[StockService] Yahoo total: {yahoo_got}/{len(all_ys)}")
+            logger.info(f"[StockService] Yahoo total: {yahoo_got}/{len(all_ys)}")
 
         # Google Finance fallback
         missing_from_yahoo = [ys for ys in all_ys if ys not in all_prices]
@@ -509,7 +512,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                     gf_got += 1
                 time.sleep(random.uniform(0.3, 0.8))
             if gf_got > 0:
-                print(f"[StockService] Google Finance: {gf_got}/{len(missing_from_yahoo)}")
+                logger.info(f"[StockService] Google Finance: {gf_got}/{len(missing_from_yahoo)}")
     else:
         # Build ymap for the fallback chain below (stale cache / JSON / xlsx)
         for sym, exch in still_need:
@@ -517,7 +520,7 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
             ymap[ys] = (sym, exch)
         if still_need:
             missed = [f"{s}.{e}" for s, e in still_need]
-            print(f"[StockService] {len(still_need)} stocks not on Zerodha — "
+            logger.warning(f"[StockService] {len(still_need)} stocks not on Zerodha — "
                   f"fallback: {', '.join(missed)}")
 
     # ── BUILD RESULTS + fallback chain ─────────────────────
@@ -714,7 +717,7 @@ def fetch_market_ticker(meta: dict) -> dict:
                         "change_pct": round(pct, 2),
                     }
     except Exception as e:
-        print(f"[MarketTicker] Yahoo chart API failed for {meta['key']}: {e}")
+        logger.error(f"[MarketTicker] Yahoo chart API failed for {meta['key']}: {e}")
 
     # Source 2: Google Finance scraping
     gf_sym = _GF_TICKER_MAP.get(meta["key"])
@@ -751,7 +754,7 @@ def fetch_yahoo_ticker_historical(meta: dict) -> dict:
     try:
         resp = _requests.get(url, headers=headers, timeout=10)
         if resp.status_code != 200:
-            print(f"[MarketTicker] Yahoo chart API {resp.status_code} for {meta['key']}")
+            logger.warning(f"[MarketTicker] Yahoo chart API {resp.status_code} for {meta['key']}")
             return result
 
         data = resp.json()
@@ -794,7 +797,7 @@ def fetch_yahoo_ticker_historical(meta: dict) -> dict:
             result["month_change_pct"] = round((latest_price - price_30d) / price_30d * 100, 2)
 
     except Exception as e:
-        print(f"[MarketTicker] Yahoo chart API failed for {meta['key']}: {e}")
+        logger.error(f"[MarketTicker] Yahoo chart API failed for {meta['key']}: {e}")
 
     return result
 
@@ -842,7 +845,7 @@ def bulk_update_prices(prices: Dict[str, dict]):
         updated += 1
     if to_save:
         _save_prices_file(to_save)
-    print(f"[StockService] Bulk updated {updated} prices (saved to file)")
+    logger.info(f"[StockService] Bulk updated {updated} prices (saved to file)")
     return updated
 
 
@@ -883,9 +886,9 @@ def _initial_live_fetch():
         with _refresh_lock:
             _last_refresh_time = time.time()
             _last_refresh_status = f"ok: {live} live, {fb} fallback / {len(syms)}"
-        print(f"[StockService] Initial fetch: {live} zerodha, {fb} cached / {len(syms)} stocks")
+        logger.info(f"[StockService] Initial fetch: {live} zerodha, {fb} cached / {len(syms)} stocks")
     except Exception as e:
-        print(f"[StockService] Initial fetch error: {e}")
+        logger.error(f"[StockService] Initial fetch error: {e}")
         with _refresh_lock:
             _last_refresh_status = f"error: {e}"
             _last_refresh_time = time.time()

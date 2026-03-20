@@ -20,12 +20,15 @@ Usage:
 import csv
 import io
 import json
+import logging
 import os
 import re
 import time
 import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ── State ──
 _ISIN_MAP: Dict[str, Tuple[str, str, str]] = {}  # ISIN → (symbol, exchange, name)
@@ -105,7 +108,7 @@ def _load_from_network() -> Tuple[Dict, Dict]:
 
     # ── Source 1: NSE EQUITY_L.csv (ISIN → symbol) ──
     try:
-        print("[SymbolResolver] Downloading NSE equity list...")
+        logger.info("[SymbolResolver] Downloading NSE equity list...")
         req = urllib.request.Request(_NSE_EQUITY_URL, headers={
             "User-Agent": _UA,
             "Accept": "text/csv,text/plain,*/*",
@@ -140,13 +143,13 @@ def _load_from_network() -> Tuple[Dict, Dict]:
             if norm:
                 name_map[norm] = symbol
 
-        print(f"[SymbolResolver] NSE: {len(isin_map)} ISIN mappings")
+        logger.info(f"[SymbolResolver] NSE: {len(isin_map)} ISIN mappings")
     except Exception as e:
-        print(f"[SymbolResolver] NSE download failed: {e}")
+        logger.error(f"[SymbolResolver] NSE download failed: {e}")
 
     # ── Source 2: Zerodha instruments (name → symbol) ──
     try:
-        print("[SymbolResolver] Downloading Zerodha instruments...")
+        logger.info("[SymbolResolver] Downloading Zerodha instruments...")
         req = urllib.request.Request(_ZERODHA_URL, headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
@@ -169,10 +172,10 @@ def _load_from_network() -> Tuple[Dict, Dict]:
                 name_map[norm] = tradingsymbol
             zcount += 1
 
-        print(f"[SymbolResolver] Zerodha: {zcount} equity entries, "
-              f"total name mappings: {len(name_map)}")
+        logger.info(f"[SymbolResolver] Zerodha: {zcount} equity entries, "
+                    f"total name mappings: {len(name_map)}")
     except Exception as e:
-        print(f"[SymbolResolver] Zerodha download failed: {e}")
+        logger.error(f"[SymbolResolver] Zerodha download failed: {e}")
 
     return isin_map, name_map
 
@@ -188,9 +191,9 @@ def _save_cache(isin_map: Dict, name_map: Dict):
         }
         with open(_CACHE_FILE, "w") as f:
             json.dump(cache, f)
-        print(f"[SymbolResolver] Cached {len(isin_map)} ISIN + {len(name_map)} name mappings")
+        logger.info(f"[SymbolResolver] Cached {len(isin_map)} ISIN + {len(name_map)} name mappings")
     except Exception as e:
-        print(f"[SymbolResolver] Cache write failed: {e}")
+        logger.error(f"[SymbolResolver] Cache write failed: {e}")
 
 
 def _load_cache() -> Tuple[Optional[Dict], Optional[Dict], float]:
@@ -206,7 +209,7 @@ def _load_cache() -> Tuple[Optional[Dict], Optional[Dict], float]:
         isin_map = {k: tuple(v) for k, v in isin_raw.items()}
         return isin_map, name_map, ts
     except Exception as e:
-        print(f"[SymbolResolver] Cache read failed: {e}")
+        logger.error(f"[SymbolResolver] Cache read failed: {e}")
         return None, None, 0
 
 
@@ -225,7 +228,7 @@ def _do_load():
         _NAME_MAP.update(cached_name)
         _LOADED_OK = True
         _LOADED_AT = now
-        print(f"[SymbolResolver] Loaded from cache: {len(_ISIN_MAP)} ISIN, {len(_NAME_MAP)} names")
+        logger.info(f"[SymbolResolver] Loaded from cache: {len(_ISIN_MAP)} ISIN, {len(_NAME_MAP)} names")
         return
 
     # Download fresh
@@ -246,10 +249,10 @@ def _do_load():
         _NAME_MAP.clear()
         _NAME_MAP.update(cached_name)
         _LOADED_OK = True
-        print("[SymbolResolver] Network failed, using stale cache")
+        logger.warning("[SymbolResolver] Network failed, using stale cache")
     else:
         _LOADED_OK = False
-        print("[SymbolResolver] WARNING: No symbol data available")
+        logger.warning("[SymbolResolver] No symbol data available")
 
 
 # ═══════════════════════════════════════════════════════════

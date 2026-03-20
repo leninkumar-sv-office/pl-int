@@ -22,6 +22,9 @@ import openpyxl
 
 from .models import SIItem
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # ═══════════════════════════════════════════════════════════
 #  FILE PATH
@@ -125,7 +128,7 @@ def _load(si_file: Path = None) -> list:
     try:
         wb = openpyxl.load_workbook(str(si_file), data_only=True, read_only=True)
     except Exception as e:
-        print(f"[SI] Error loading {si_file}: {e}")
+        logger.error(f"[SI] Error loading {si_file}: {e}")
         return []
 
     ws = wb.active

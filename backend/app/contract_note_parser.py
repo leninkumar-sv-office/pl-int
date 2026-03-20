@@ -25,12 +25,15 @@ Extraction strategies (tried in order):
 Each strategy tries "Equity Segment" section first, then "Annexure B" as fallback.
 """
 
+import logging
 import os
 import re
 import subprocess
 import tempfile
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 # Symbol resolution uses the shared symbol_resolver module
@@ -76,7 +79,7 @@ def _resolve_symbol(isin: str, sec_name: str,
     zerodha_symbol = _sym_resolver.resolve_by_name(sec_name)
     if zerodha_symbol:
         exchange = exchange_map.get(isin, "NSE")
-        print(f"[ContractNote] Resolved '{sec_name}' → {zerodha_symbol} via Zerodha name match")
+        logger.info(f"[ContractNote] Resolved '{sec_name}' → {zerodha_symbol} via Zerodha name match")
         return zerodha_symbol, exchange, sec_name.title()
 
     # 3. Last resort: derive from security name
@@ -84,7 +87,7 @@ def _resolve_symbol(isin: str, sec_name: str,
     default_exchange = "NSE"
     company_name = sec_name.title()
     exchange = exchange_map.get(isin, default_exchange)
-    print(f"[ContractNote] WARNING: Could not resolve ISIN {isin}, derived symbol: {symbol}")
+    logger.warning(f"[ContractNote] Could not resolve ISIN {isin}, derived symbol: {symbol}")
     return symbol, exchange, company_name
 
 
@@ -138,7 +141,7 @@ def _parse_nums_from_row(numbers: list, sec_name: str, isin: str,
         other_levies = float(numbers[8])
         net_after = float(numbers[9])
     except (ValueError, IndexError) as e:
-        print(f"[ContractNote] Parse error for {sec_name}: {e}")
+        logger.error(f"[ContractNote] Parse error for {sec_name}: {e}")
         return False
 
     symbol, exchange, company_name = _resolve_symbol(isin, sec_name, exchange_map)
@@ -187,7 +190,7 @@ def _parse_equity_segment_row(isin: str, sec_name: str, numbers: List[float],
 
         # numbers[10] = net_qty, numbers[11] = net_obligation (unused)
     except (ValueError, IndexError) as e:
-        print(f"[ContractNote] Equity Segment parse error for {sec_name}: {e} | nums={numbers}")
+        logger.error(f"[ContractNote] Equity Segment parse error for {sec_name}: {e} | nums={numbers}")
         return False
 
     symbol, exchange, company_name = _resolve_symbol(isin, sec_name, exchange_map)
@@ -246,7 +249,7 @@ def extract_text_from_pdf(pdf_path: str, layout: bool = True) -> str:
     except ImportError:
         pass
     except Exception as e:
-        print(f"[ContractNote] pdfplumber failed (layout={layout}): {e}")
+        logger.error(f"[ContractNote] pdfplumber failed (layout={layout}): {e}")
 
     # Fallback: pdftotext CLI (requires poppler-utils), only for layout mode
     if layout:
@@ -260,7 +263,7 @@ def extract_text_from_pdf(pdf_path: str, layout: bool = True) -> str:
         except FileNotFoundError:
             pass
         except Exception as e:
-            print(f"[ContractNote] pdftotext CLI failed: {e}")
+            logger.error(f"[ContractNote] pdftotext CLI failed: {e}")
 
     raise RuntimeError(
         "PDF text extraction failed. Install pdfplumber (pip install pdfplumber) "
@@ -376,12 +379,12 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
             # Pick preferred section: Equity Segment > Annexure B
             if has_equity_segment:
                 preferred = "equity_segment"
-                print("[ContractNote] Table extraction: preferring 'Equity Segment' (single page, reliable)")
+                logger.debug("[ContractNote] Table extraction: preferring 'Equity Segment' (single page, reliable)")
             elif has_annexure_b:
                 preferred = "annexure_b"
-                print("[ContractNote] Table extraction: using 'Annexure B' (no Equity Segment found)")
+                logger.debug("[ContractNote] Table extraction: using 'Annexure B' (no Equity Segment found)")
             else:
-                print("[ContractNote] Table extraction: neither section found")
+                logger.debug("[ContractNote] Table extraction: neither section found")
                 return []
 
             in_section = False
@@ -395,11 +398,11 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
                     if preferred == "annexure_b" and "ANNEXURE B" in page_text:
                         in_section = True
                         section_type = "annexure_b"
-                        print("[ContractNote] Table extraction: entered 'Annexure B' section")
+                        logger.debug("[ContractNote] Table extraction: entered 'Annexure B' section")
                     elif preferred == "equity_segment" and "EQUITY SEGMENT" in page_text:
                         in_section = True
                         section_type = "equity_segment"
-                        print("[ContractNote] Table extraction: entered 'Equity Segment' section")
+                        logger.debug("[ContractNote] Table extraction: entered 'Equity Segment' section")
                 else:
                     # Continue in current section if its marker is on this page
                     if section_type == "equity_segment" and "EQUITY SEGMENT" in page_text:
@@ -546,12 +549,10 @@ def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
                             )
 
     except Exception as e:
-        print(f"[ContractNote] pdfplumber table extraction error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"[ContractNote] pdfplumber table extraction error: {e}", exc_info=True)
         return []
 
-    print(f"[ContractNote] Strategy 1 (table extraction, section={section_type}): {len(transactions)} transactions")
+    logger.info(f"[ContractNote] Strategy 1 (table extraction, section={section_type}): {len(transactions)} transactions")
     return transactions
 
 
@@ -588,22 +589,22 @@ def _parse_text_section(text: str, trade_date: str,
         section_start = eq_idx
         section_end_marker = "OBLIGATION DETAILS"
         section_type = "equity_segment"
-        print(f"[ContractNote] Text parser: preferring 'Equity Segment' at pos {eq_idx}")
+        logger.debug(f"[ContractNote] Text parser: preferring 'Equity Segment' at pos {eq_idx}")
     else:
         ann_idx = upper_text.find("ANNEXURE B")
         if ann_idx >= 0:
             section_start = ann_idx
             section_end_marker = "DESCRIPTION OF SERVICE"
             section_type = "annexure_b"
-            print(f"[ContractNote] Text parser: using 'Annexure B' at pos {ann_idx} (no Equity Segment)")
+            logger.debug(f"[ContractNote] Text parser: using 'Annexure B' at pos {ann_idx} (no Equity Segment)")
 
     if section_start < 0:
-        print("[ContractNote] Text parser: neither 'Equity Segment' nor 'Annexure B' found")
+        logger.debug("[ContractNote] Text parser: neither 'Equity Segment' nor 'Annexure B' found")
         return transactions
 
     section_text = text[section_start:]
     raw_lines = section_text.split("\n")
-    print(f"[ContractNote] Text parser: section={section_type}, {len(raw_lines)} lines to scan")
+    logger.debug(f"[ContractNote] Text parser: section={section_type}, {len(raw_lines)} lines to scan")
 
     # ── Determine which pattern to use for line detection ──
     # Equity Segment: lines start with ISIN (e.g. "INE783E01023   HIGH ENERGY   10.00 ...")
@@ -709,7 +710,7 @@ def _parse_text_section(text: str, trade_date: str,
                 trade_date, transactions,
             )
 
-    print(f"[ContractNote] Text parser ({section_type}): {len(transactions)} transactions")
+    logger.info(f"[ContractNote] Text parser ({section_type}): {len(transactions)} transactions")
     return transactions
 
 
@@ -797,9 +798,9 @@ def _parse_obligation_details(text: str) -> dict:
 
     total = sum(charges.values())
     if total > 0:
-        print(f"[ContractNote] Obligation Details: STT={charges['stt']}, "
-              f"GST={charges['gst']}, ExchChg={charges['exchange_charges']}, "
-              f"SEBI={charges['sebi_fees']}, StampDuty={charges['stamp_duty']}")
+        logger.info(f"[ContractNote] Obligation Details: STT={charges['stt']}, "
+                    f"GST={charges['gst']}, ExchChg={charges['exchange_charges']}, "
+                    f"SEBI={charges['sebi_fees']}, StampDuty={charges['stamp_duty']}")
     return charges
 
 
@@ -829,8 +830,8 @@ def _prorate_obligation_charges(transactions: List[dict], charges: dict):
     if total_abs_value <= 0:
         return
 
-    print(f"[ContractNote] Prorating {total_charges:.2f} in charges "
-          f"across {len(transactions)} transactions (total value={total_abs_value:.2f})")
+    logger.info(f"[ContractNote] Prorating {total_charges:.2f} in charges "
+                f"across {len(transactions)} transactions (total value={total_abs_value:.2f})")
 
     for t in transactions:
         abs_value = abs(t.get("net_total_after_levies", 0))
@@ -893,23 +894,23 @@ def parse_contract_note(pdf_path: str) -> dict:
     exchange_map = _extract_exchange_map(text)
 
     # ── Strategy 1: pdfplumber direct table extraction ──
-    print("[ContractNote] Trying Strategy 1: pdfplumber table extraction...")
+    logger.debug("[ContractNote] Trying Strategy 1: pdfplumber table extraction...")
     transactions = _parse_pdfplumber_tables(
         pdf_path, trade_date, exchange_map)
 
     # ── Strategy 2: text-based parsing with layout mode ──
     if not transactions:
-        print("[ContractNote] Trying Strategy 2: layout-mode text parsing...")
+        logger.debug("[ContractNote] Trying Strategy 2: layout-mode text parsing...")
         transactions = _parse_text_section(text, trade_date, exchange_map)
 
     # ── Strategy 3: text-based parsing without layout mode ──
     if not transactions:
-        print("[ContractNote] Trying Strategy 3: plain-text parsing (no layout)...")
+        logger.debug("[ContractNote] Trying Strategy 3: plain-text parsing (no layout)...")
         try:
             plain_text = extract_text_from_pdf(pdf_path, layout=False)
             transactions = _parse_text_section(plain_text, trade_date, exchange_map)
         except Exception as e:
-            print(f"[ContractNote] Plain text fallback failed: {e}")
+            logger.error(f"[ContractNote] Plain text fallback failed: {e}")
 
     # ── Deduplicate transactions within same PDF ──
     # Same stock can appear in both Equity Segment tables and text fallback,
@@ -926,7 +927,7 @@ def parse_contract_note(pdf_path: str) -> dict:
         seen_fps.add(fp)
         unique_transactions.append(t)
     if dups_removed > 0:
-        print(f"[ContractNote] Removed {dups_removed} duplicate transaction(s) within same PDF")
+        logger.info(f"[ContractNote] Removed {dups_removed} duplicate transaction(s) within same PDF")
     transactions = unique_transactions
 
     # ── Prorate Obligation Details charges for Equity Segment transactions ──
@@ -940,9 +941,9 @@ def parse_contract_note(pdf_path: str) -> dict:
         obligation = _parse_obligation_details(text)
         if obligation and sum(obligation.values()) > 0:
             _prorate_obligation_charges(transactions, obligation)
-            print(f"[ContractNote] Prorated obligation charges into {len(transactions)} transactions")
+            logger.info(f"[ContractNote] Prorated obligation charges into {len(transactions)} transactions")
         else:
-            print("[ContractNote] No obligation details found or zero charges — skipping proration")
+            logger.info("[ContractNote] No obligation details found or zero charges — skipping proration")
 
     buys = sum(1 for t in transactions if t["action"] == "Buy")
     sells = sum(1 for t in transactions if t["action"] == "Sell")
@@ -984,7 +985,7 @@ def parse_contract_note(pdf_path: str) -> dict:
                         f.write(plain)
                     except Exception:
                         f.write("(plain text extraction failed)")
-                print(f"[ContractNote] Debug text saved to: {debug_path}")
+                logger.debug(f"[ContractNote] Debug text saved to: {debug_path}")
             except Exception:
                 pass
 

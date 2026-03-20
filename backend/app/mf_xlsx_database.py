@@ -14,6 +14,7 @@ Key differences from stock xlsx:
 """
 
 import hashlib
+import logging
 import re
 import threading
 import time
@@ -21,6 +22,8 @@ import random
 from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 import requests as _requests
 import openpyxl
@@ -97,11 +100,11 @@ def _fetch_amfi_navs() -> Dict[str, float]:
         if mapping:
             _amfi_isin_nav = mapping
             _amfi_fetch_time = time.time()
-            print(f"[MF-NAV] Fetched {len(mapping)} ISINs from AMFI")
+            logger.info(f"[MF-NAV] Fetched {len(mapping)} ISINs from AMFI")
 
         return _amfi_isin_nav
     except Exception as e:
-        print(f"[MF-NAV] AMFI fetch error: {e}")
+        logger.error(f"[MF-NAV] AMFI fetch error: {e}")
         return _amfi_isin_nav
 
 
@@ -211,7 +214,7 @@ def _save_scheme_map(mapping: Dict[str, int]):
         with open(_SCHEME_MAP_FILE, "w") as f:
             json.dump(mapping, f, indent=2)
     except Exception as e:
-        print(f"[MF-MFAPI] Failed to save scheme map: {e}")
+        logger.error(f"[MF-MFAPI] Failed to save scheme map: {e}")
 
 
 def _search_mfapi_scheme(fund_name: str) -> Optional[int]:
@@ -252,7 +255,7 @@ def _search_mfapi_scheme(fund_name: str) -> Optional[int]:
                     # Fall back to first result
                     return int(results[0]["schemeCode"])
         except Exception as e:
-            print(f"[MF-MFAPI] Search error for '{search_q}': {e}")
+            logger.error(f"[MF-MFAPI] Search error for '{search_q}': {e}")
     return None
 
 
@@ -268,7 +271,7 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
             data = resp.json()
             return data.get("data", [])
     except Exception as e:
-        print(f"[MF-MFAPI] Fetch error for scheme {scheme_code}: {e}")
+        logger.error(f"[MF-MFAPI] Fetch error for scheme {scheme_code}: {e}")
     return None
 
 
@@ -302,9 +305,9 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         if scheme_code:
             scheme_map[fund_code] = scheme_code
             _save_scheme_map(scheme_map)
-            print(f"[MF-MFAPI] Mapped {fund_name[:40]} → scheme {scheme_code}")
+            logger.info(f"[MF-MFAPI] Mapped {fund_name[:40]} → scheme {scheme_code}")
         else:
-            print(f"[MF-MFAPI] No scheme found for {fund_name[:40]}")
+            logger.warning(f"[MF-MFAPI] No scheme found for {fund_name[:40]}")
             # Cache the miss so we don't retry every call
             with _nav_change_cache_lock:
                 _nav_change_cache[fund_code] = {
@@ -709,7 +712,7 @@ class MFXlsxPortfolio:
     def __init__(self, mf_dir: str | Path):
         self.mf_dir = Path(mf_dir)
         if not self.mf_dir.exists():
-            print(f"[MF-XlsxDB] Mutual Funds directory not found: {self.mf_dir}")
+            logger.warning(f"[MF-XlsxDB] Mutual Funds directory not found: {self.mf_dir}")
             self.mf_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
 
@@ -734,21 +737,21 @@ class MFXlsxPortfolio:
                 idx = _extract_mf_index_data(wb)
                 wb.close()
             except Exception as e:
-                print(f"[MF-XlsxDB] Failed to read {fp.name}: {e}")
+                logger.error(f"[MF-XlsxDB] Failed to read {fp.name}: {e}")
                 continue
 
             fund_code = idx.get("fund_code")
             if not fund_code:
                 # Use filename as fallback code
                 fund_code = fp.stem
-                print(f"[MF-XlsxDB] No fund code for {fp.name}, using filename")
+                logger.warning(f"[MF-XlsxDB] No fund code for {fp.name}, using filename")
 
             fund_name = fp.stem
             self._file_map[fund_code] = fp
             self._name_map[fund_code] = fund_name
             count += 1
 
-        print(f"[MF-XlsxDB] Indexed {count} mutual fund files")
+        logger.info(f"[MF-XlsxDB] Indexed {count} mutual fund files")
 
     def reindex(self):
         """Re-scan the MF directory for new/modified files."""
@@ -767,7 +770,7 @@ class MFXlsxPortfolio:
                     parts.append(f"+{len(added)}")
                 if removed:
                     parts.append(f"-{len(removed)}")
-                print(f"[MF-XlsxDB] Reindex: {len(new_codes)} funds ({', '.join(parts)} changed)")
+                logger.info(f"[MF-XlsxDB] Reindex: {len(new_codes)} funds ({', '.join(parts)} changed)")
 
     # ── Cache Layer ───────────────────────────────────────
 
@@ -798,7 +801,7 @@ class MFXlsxPortfolio:
         try:
             wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
         except Exception as e:
-            print(f"[MF-XlsxDB] Failed to open {filepath.name}: {e}")
+            logger.error(f"[MF-XlsxDB] Failed to open {filepath.name}: {e}")
             return [], [], {}
 
         idx_data = _extract_mf_index_data(wb)
@@ -885,7 +888,7 @@ class MFXlsxPortfolio:
                 holdings, _, _ = self._get_fund_data(fund_code)
                 all_holdings.extend(holdings)
             except Exception as e:
-                print(f"[MF-XlsxDB] Error reading {fund_code}: {e}")
+                logger.error(f"[MF-XlsxDB] Error reading {fund_code}: {e}")
         return all_holdings
 
     def get_all_sold(self) -> List[MFSoldPosition]:
@@ -896,7 +899,7 @@ class MFXlsxPortfolio:
                 _, sold, _ = self._get_fund_data(fund_code)
                 all_sold.extend(sold)
             except Exception as e:
-                print(f"[MF-XlsxDB] Error reading sold for {fund_code}: {e}")
+                logger.error(f"[MF-XlsxDB] Error reading sold for {fund_code}: {e}")
         return all_sold
 
     def get_fund_summary(self) -> List[dict]:
@@ -917,7 +920,7 @@ class MFXlsxPortfolio:
             try:
                 holdings, sold, idx_data = self._get_fund_data(fund_code)
             except Exception as e:
-                print(f"[MF-XlsxDB] Error for {fund_code}: {e}")
+                logger.error(f"[MF-XlsxDB] Error for {fund_code}: {e}")
                 continue
 
             name = self._name_map.get(fund_code, fund_code)
@@ -1092,7 +1095,7 @@ class MFXlsxPortfolio:
         # Register in maps
         self._file_map[fund_code] = filepath
         self._name_map[fund_code] = fund_name
-        print(f"[MF-XlsxDB] Created new MF file: {filepath.name}")
+        logger.info(f"[MF-XlsxDB] Created new MF file: {filepath.name}")
         return filepath
 
     def _find_header_row(self, ws):
@@ -1186,7 +1189,7 @@ class MFXlsxPortfolio:
             # Invalidate cache to force re-parse
             self._cache.pop(fund_code, None)
 
-            print(f"[MF-XlsxDB] Added Buy: {units:.4f} units of {fund_name} @ NAV {nav:.4f}")
+            logger.info(f"[MF-XlsxDB] Added Buy: {units:.4f} units of {fund_name} @ NAV {nav:.4f}")
 
             return {
                 "fund_code": fund_code,
@@ -1269,7 +1272,7 @@ class MFXlsxPortfolio:
                     realized_pl += sp.realized_pl
 
             fund_name = self._name_map.get(fund_code, fund_code)
-            print(f"[MF-XlsxDB] Redeemed {units:.4f} units of {fund_name} @ NAV {nav:.4f}, P&L={realized_pl:.2f}")
+            logger.info(f"[MF-XlsxDB] Redeemed {units:.4f} units of {fund_name} @ NAV {nav:.4f}, P&L={realized_pl:.2f}")
 
             return {
                 "message": f"Redeemed {units:.4f} units",

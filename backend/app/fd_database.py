@@ -36,6 +36,9 @@ from openpyxl.utils import get_column_letter
 
 from .models import FDItem
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # ═══════════════════════════════════════════════════════════
 #  FILE PATHS
@@ -252,7 +255,7 @@ def _parse_all_xlsx(xlsx_dir: Path = None) -> list:
             parsed = _parse_fd_xlsx(f)
             results.append(parsed)
         except Exception as e:
-            print(f"[FD] Error parsing {f.name}: {e}")
+            logger.error(f"[FD] Error parsing {f.name}: {e}")
     return results
 
 

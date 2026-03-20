@@ -35,6 +35,9 @@ from openpyxl.utils import get_column_letter
 
 from .models import RDItem
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # ═══════════════════════════════════════════════════════════
 #  FILE PATHS
@@ -262,7 +265,7 @@ def _parse_all_xlsx(xlsx_dir: Path = None) -> list:
             parsed = _parse_rd_xlsx(f)
             results.append(parsed)
         except Exception as e:
-            print(f"[RD] Error parsing {f.name}: {e}")
+            logger.error(f"[RD] Error parsing {f.name}: {e}")
     return results
 
 

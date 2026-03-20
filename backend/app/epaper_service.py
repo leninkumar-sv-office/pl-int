@@ -8,6 +8,7 @@ Scrapes articles from:
 Analyzes them using Claude API, and provides personalized insights
 based on the user's portfolio holdings.
 """
+import logging
 import os
 import re
 import json
@@ -20,6 +21,8 @@ from typing import List, Dict, Optional
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 _ENV_PATH = os.path.join(os.path.dirname(__file__), "..", ".env")
 load_dotenv(_ENV_PATH)
@@ -118,9 +121,9 @@ def _fetch_section_articles(section_path: str, section_name: str, max_pages: int
                 break  # No more articles on this page
 
             all_articles.extend(page_articles)
-            print(f"[EPaper] {section_name} page {page_num}: {len(page_articles)} articles")
+            logger.info(f"[EPaper] {section_name} page {page_num}: {len(page_articles)} articles")
         except Exception as e:
-            print(f"[EPaper] Error scraping {section_name} page {page_num}: {e}")
+            logger.error(f"[EPaper] Error scraping {section_name} page {page_num}: {e}")
             break
 
         time.sleep(0.3)
@@ -182,7 +185,7 @@ def _fetch_bl_rss_articles(section_path: str, section_name: str, lookback_days: 
 
         return articles
     except Exception as e:
-        print(f"[EPaper] Error fetching BL RSS {section_name}: {e}")
+        logger.error(f"[EPaper] Error fetching BL RSS {section_name}: {e}")
         return []
 
 
@@ -191,7 +194,7 @@ def _fetch_article_body(url: str) -> str:
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         if resp.status_code != 200:
-            print(f"[EPaper] Body fetch HTTP {resp.status_code}: {url[-50:]}")
+            logger.warning(f"[EPaper] Body fetch HTTP {resp.status_code}: {url[-50:]}")
             return ""
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -216,7 +219,7 @@ def _fetch_article_body(url: str) -> str:
 
         return "\n\n".join(body_parts)[:3000]  # Cap at 3000 chars per article
     except Exception as e:
-        print(f"[EPaper] Error fetching article body: {e}")
+        logger.error(f"[EPaper] Error fetching article body: {e}")
         return ""
 
 
@@ -230,7 +233,7 @@ def _fetch_th_rss_articles(section_path: str, section_name: str, lookback_days: 
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         if resp.status_code != 200:
-            print(f"[TheHindu] RSS {section_name} failed: {resp.status_code}")
+            logger.error(f"[TheHindu] RSS {section_name} failed: {resp.status_code}")
             return []
 
         root = ET.fromstring(resp.content)
@@ -279,7 +282,7 @@ def _fetch_th_rss_articles(section_path: str, section_name: str, lookback_days: 
 
         return articles
     except Exception as e:
-        print(f"[TheHindu] Error fetching RSS {section_name}: {e}")
+        logger.error(f"[TheHindu] Error fetching RSS {section_name}: {e}")
         return []
 
 
@@ -288,7 +291,7 @@ def _fetch_th_article_body(url: str) -> str:
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         if resp.status_code != 200:
-            print(f"[TheHindu] Body fetch HTTP {resp.status_code}: {url[-50:]}")
+            logger.warning(f"[TheHindu] Body fetch HTTP {resp.status_code}: {url[-50:]}")
             return ""
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -312,7 +315,7 @@ def _fetch_th_article_body(url: str) -> str:
 
         return "\n\n".join(body_parts)[:3000]
     except Exception as e:
-        print(f"[TheHindu] Error fetching article body: {e}")
+        logger.error(f"[TheHindu] Error fetching article body: {e}")
         return ""
 
 
@@ -326,7 +329,7 @@ def _fetch_gn_rss_articles(query: str, section_name: str, lookback_days: int = 7
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=15)
         if resp.status_code != 200:
-            print(f"[GoogleNews] RSS {section_name} failed: {resp.status_code}")
+            logger.error(f"[GoogleNews] RSS {section_name} failed: {resp.status_code}")
             return []
 
         root = ET.fromstring(resp.content)
@@ -390,7 +393,7 @@ def _fetch_gn_rss_articles(query: str, section_name: str, lookback_days: int = 7
 
         return articles
     except Exception as e:
-        print(f"[GoogleNews] Error fetching RSS {section_name}: {e}")
+        logger.error(f"[GoogleNews] Error fetching RSS {section_name}: {e}")
         return []
 
 
@@ -429,7 +432,7 @@ def _fetch_gn_article_body(url: str) -> str:
 
         return "\n\n".join(body_parts)[:3000]
     except Exception as e:
-        print(f"[GoogleNews] Error fetching article body: {e}")
+        logger.error(f"[GoogleNews] Error fetching article body: {e}")
         return ""
 
 
@@ -450,7 +453,7 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
     seen_urls = set()
 
     # --- Business Line (RSS feeds for historical + page scraping for latest) ---
-    print(f"[EPaper] Fetching Business Line articles (past {lookback_days} days)...")
+    logger.info(f"[EPaper] Fetching Business Line articles (past {lookback_days} days)...")
 
     # RSS feeds first (covers historical articles)
     for section_path, section_name in _BL_SECTIONS:
@@ -462,7 +465,7 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         time.sleep(0.3)
 
     rss_count = len(all_articles)
-    print(f"[EPaper] Business Line RSS: {rss_count} articles")
+    logger.info(f"[EPaper] Business Line RSS: {rss_count} articles")
 
     # Page scraping as supplement (catches articles RSS may miss)
     for section_path, section_name in _BL_SECTIONS:
@@ -476,10 +479,10 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         time.sleep(0.3)
 
     bl_count = len(all_articles)
-    print(f"[EPaper] Business Line total: {bl_count} articles (RSS: {rss_count}, pages: {bl_count - rss_count})")
+    logger.info(f"[EPaper] Business Line total: {bl_count} articles (RSS: {rss_count}, pages: {bl_count - rss_count})")
 
     # --- The Hindu (RSS feeds with lookback) ---
-    print(f"[EPaper] Fetching The Hindu Business articles (past {lookback_days} days)...")
+    logger.info(f"[EPaper] Fetching The Hindu Business articles (past {lookback_days} days)...")
     for section_path, section_name in _TH_SECTIONS:
         articles = _fetch_th_rss_articles(section_path, section_name, lookback_days)
         for art in articles:
@@ -489,11 +492,11 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         time.sleep(0.3)
 
     th_count = len(all_articles) - bl_count
-    print(f"[EPaper] The Hindu: {th_count} articles")
+    logger.info(f"[EPaper] The Hindu: {th_count} articles")
 
     # --- Google News (RSS search for Indian financial news) ---
     pre_gn = len(all_articles)
-    print(f"[EPaper] Fetching Google News articles (past {lookback_days} days)...")
+    logger.info(f"[EPaper] Fetching Google News articles (past {lookback_days} days)...")
     for query, section_name in _GN_SEARCHES:
         gn_articles = _fetch_gn_rss_articles(query, section_name, lookback_days)
         for art in gn_articles:
@@ -503,8 +506,8 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         time.sleep(0.5)
 
     gn_count = len(all_articles) - pre_gn
-    print(f"[EPaper] Google News: {gn_count} articles")
-    print(f"[EPaper] Total: {len(all_articles)} articles from all sources (past {lookback_days} days)")
+    logger.info(f"[EPaper] Google News: {gn_count} articles")
+    logger.info(f"[EPaper] Total: {len(all_articles)} articles from all sources (past {lookback_days} days)")
 
     # Fetch full body for all articles (throttled)
     bodies_found = 0
@@ -520,9 +523,9 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         if body:
             bodies_found += 1
         if (i + 1) % 20 == 0:
-            print(f"[EPaper] Fetched body for {i+1}/{len(all_articles)} articles ({bodies_found} with content)...")
+            logger.info(f"[EPaper] Fetched body for {i+1}/{len(all_articles)} articles ({bodies_found} with content)...")
         time.sleep(0.3)
-    print(f"[EPaper] Total articles with body: {bodies_found}/{len(all_articles)}")
+    logger.info(f"[EPaper] Total articles with body: {bodies_found}/{len(all_articles)}")
 
     with _cache_lock:
         _articles_cache[cache_key] = all_articles
@@ -558,10 +561,10 @@ def _call_claude(system_prompt: str, user_message: str, max_tokens: int = 4096) 
             data = resp.json()
             return data["content"][0]["text"]
         else:
-            print(f"[EPaper] Claude API error: {resp.status_code} {resp.text[:200]}")
+            logger.error(f"[EPaper] Claude API error: {resp.status_code} {resp.text[:200]}")
             return ""
     except Exception as e:
-        print(f"[EPaper] Claude API call failed: {e}")
+        logger.error(f"[EPaper] Claude API call failed: {e}")
         return ""
 
 
@@ -640,10 +643,10 @@ Return ONLY a JSON array. Prioritize the most actionable insights first. Include
 
         with _cache_lock:
             _insights_cache[today] = insights
-        print(f"[EPaper] Generated {len(insights)} AI insights")
+        logger.info(f"[EPaper] Generated {len(insights)} AI insights")
         return insights
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"[EPaper] Failed to parse Claude response: {e}")
+        logger.error(f"[EPaper] Failed to parse Claude response: {e}")
         return _keyword_insights(articles, portfolio_symbols)
 
 

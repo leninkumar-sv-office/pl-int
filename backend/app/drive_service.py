@@ -22,6 +22,9 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+import logging
+logger = logging.getLogger(__name__)
+
 # Default "dumps" folder ID (legacy — used as fallback for existing email)
 _DEFAULT_DUMPS_FOLDER_ID = os.getenv("GOOGLE_DRIVE_DUMPS_FOLDER_ID", "").strip()
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -115,7 +118,7 @@ def init_drive_for_email(email: str) -> str:
         return existing
     service = _get_service(email)
     if not service:
-        print(f"[Drive] No credentials for {email} — cannot init folders")
+        logger.warning(f"[Drive] No credentials for {email} — cannot init folders")
         return ""
     try:
         # Create My Drive/pl/
@@ -127,10 +130,10 @@ def init_drive_for_email(email: str) -> str:
         # Store the folder ID
         auth.set_drive_folder_id(email, dumps_id)
         _pl_folder_ids[email] = pl_id
-        print(f"[Drive] Initialized Drive folders for {email} (dumps={dumps_id})")
+        logger.info(f"[Drive] Initialized Drive folders for {email} (dumps={dumps_id})")
         return dumps_id
     except Exception as e:
-        print(f"[Drive] Failed to init Drive for {email}: {e}")
+        logger.error(f"[Drive] Failed to init Drive for {email}: {e}")
         return ""
 
 
@@ -146,12 +149,12 @@ def upload_file(local_path, subfolder: str = None, email: str = ""):
             if not service:
                 return
             if not _get_dumps_folder_id(email):
-                print(f"[Drive] No dumps folder ID for {email or 'default'}")
+                logger.warning(f"[Drive] No dumps folder ID for {email or 'default'}")
                 return
 
             pl_id = _get_pl_folder_id(service, email)
             if not pl_id:
-                print("[Drive] Could not find parent pl folder")
+                logger.warning("[Drive] Could not find parent pl folder")
                 return
 
             target_folder = pl_id
@@ -171,9 +174,9 @@ def upload_file(local_path, subfolder: str = None, email: str = ""):
                 service.files().create(
                     body=meta, media_body=media, fields="id"
                 ).execute()
-            print(f"[Drive] Uploaded {local_path.name}")
+            logger.info(f"[Drive] Uploaded {local_path.name}")
         except Exception as e:
-            print(f"[Drive] Upload failed for {local_path.name}: {e}")
+            logger.error(f"[Drive] Upload failed for {local_path.name}: {e}")
 
     threading.Thread(target=_do_upload, daemon=True).start()
 
@@ -200,11 +203,11 @@ def delete_file(filename: str, subfolder: str = None, email: str = ""):
             file_id = _find_file(service, filename, target_folder)
             if file_id:
                 service.files().delete(fileId=file_id).execute()
-                print(f"[Drive] Deleted {filename}")
+                logger.info(f"[Drive] Deleted {filename}")
             else:
-                print(f"[Drive] File not found for deletion: {filename}")
+                logger.warning(f"[Drive] File not found for deletion: {filename}")
         except Exception as e:
-            print(f"[Drive] Delete failed for {filename}: {e}")
+            logger.error(f"[Drive] Delete failed for {filename}: {e}")
 
     threading.Thread(target=_do_delete, daemon=True).start()
 
@@ -237,10 +240,10 @@ def download_file(filename: str, local_path, subfolder: str = None, email: str =
             done = False
             while not done:
                 _, done = downloader.next_chunk()
-        print(f"[Drive] Downloaded {filename}")
+        logger.info(f"[Drive] Downloaded {filename}")
         return True
     except Exception as e:
-        print(f"[Drive] Download failed for {filename}: {e}")
+        logger.error(f"[Drive] Download failed for {filename}: {e}")
         return False
 
 
@@ -302,11 +305,11 @@ def _sync_folder_down(service, folder_id: str, local_dir: Path, depth: int = 0):
                             _, done = downloader.next_chunk()
                     downloaded += 1
                 except Exception as e:
-                    print(f"[Drive] Failed to download {item['name']}: {e}")
+                    logger.error(f"[Drive] Failed to download {item['name']}: {e}")
 
     if downloaded > 0:
         indent = "  " * depth
-        print(f"[Drive] {indent}{local_dir.name}/: downloaded {downloaded} file(s)")
+        logger.info(f"[Drive] {indent}{local_dir.name}/: downloaded {downloaded} file(s)")
 
 
 def sync_from_drive(email: str = ""):
@@ -315,14 +318,14 @@ def sync_from_drive(email: str = ""):
     t0 = time.time()
     service = _get_service(email)
     if not service:
-        print(f"[Drive] No credentials{f' for {email}' if email else ''} — skipping sync")
+        logger.warning(f"[Drive] No credentials{f' for {email}' if email else ''} — skipping sync")
         return
     dumps_folder_id = _get_dumps_folder_id(email)
     if not dumps_folder_id:
-        print(f"[Drive] No dumps folder ID for {email or 'default'} — skipping sync")
+        logger.warning(f"[Drive] No dumps folder ID for {email or 'default'} — skipping sync")
         return
 
-    print(f"[Drive] Syncing from Google Drive{f' ({email})' if email else ''}...")
+    logger.info(f"[Drive] Syncing from Google Drive{f' ({email})' if email else ''}...")
 
     # Sync data/ from pl/data/
     pl_id = _get_pl_folder_id(service, email)
@@ -331,18 +334,18 @@ def sync_from_drive(email: str = ""):
             data_folder_id = _find_or_create_folder(service, "data", pl_id)
             _sync_folder_down(service, data_folder_id, DATA_DIR)
         except Exception as e:
-            print(f"[Drive] Data sync failed: {e}")
+            logger.error(f"[Drive] Data sync failed: {e}")
 
     # Sync dumps/ from the email's pl/dumps/ folder
     from .config import DUMPS_BASE
     try:
         _sync_folder_down(service, dumps_folder_id, DUMPS_BASE)
     except Exception as e:
-        print(f"[Drive] Dumps sync failed: {e}")
+        logger.error(f"[Drive] Dumps sync failed: {e}")
 
     elapsed = time.time() - t0
     _initial_sync_done = True
-    print(f"[Drive] Sync from Drive complete ({elapsed:.1f}s)")
+    logger.info(f"[Drive] Sync from Drive complete ({elapsed:.1f}s)")
 
 
 def sync_all_emails():
@@ -350,7 +353,7 @@ def sync_all_emails():
     from . import auth
     all_tokens = auth._load_all_tokens()
     if not all_tokens:
-        print("[Drive] No stored credentials — skipping sync")
+        logger.warning("[Drive] No stored credentials — skipping sync")
         return
     for email in all_tokens:
         if email:  # skip empty-key legacy entries

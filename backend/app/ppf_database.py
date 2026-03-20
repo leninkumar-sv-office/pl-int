@@ -45,6 +45,9 @@ import openpyxl
 
 from app.config import DUMPS_DIR
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # ===================================================================
 #  FILE PATHS
@@ -511,7 +514,7 @@ def _parse_all_xlsx(ppf_dir: Path = None) -> list:
             parsed = _parse_ppf_xlsx(f)
             results.append(parsed)
         except Exception as e:
-            print(f"[PPF] Error parsing {f.name}: {e}")
+            logger.error(f"[PPF] Error parsing {f.name}: {e}")
     return results
 
 
@@ -765,13 +768,13 @@ def _migrate_json_to_xlsx(ppf_dir: Path = None, json_file: Path = None):
                 sip_phases=sip_phases_val,
                 ppf_dir=ppf_dir,
             )
-            print(f"[PPF] Migrated '{name}' to xlsx")
+            logger.info(f"[PPF] Migrated '{name}' to xlsx")
 
         # Rename old file so migration doesn't run again
         json_file.rename(json_file.with_suffix(".json.bak"))
-        print("[PPF] Migration complete, renamed old JSON to .json.bak")
+        logger.info("[PPF] Migration complete, renamed old JSON to .json.bak")
     except Exception as e:
-        print(f"[PPF] Migration error: {e}")
+        logger.error(f"[PPF] Migration error: {e}")
 
 
 def _migrate_old_xlsx(ppf_dir: Path = None):
@@ -812,7 +815,7 @@ def _migrate_old_xlsx(ppf_dir: Path = None):
             sip_end_date = _to_str(row3[3] if len(row3) > 3 else None) or None
             remarks_val = _to_str(row3[5] if len(row3) > 5 else None)
 
-            print(f"[PPF] Migrating old-format xlsx: {f.name}")
+            logger.info(f"[PPF] Migrating old-format xlsx: {f.name}")
 
             # Remove old file and create new-format xlsx
             f.unlink()
@@ -831,10 +834,10 @@ def _migrate_old_xlsx(ppf_dir: Path = None):
                 overwrite=True,
                 ppf_dir=ppf_dir,
             )
-            print(f"[PPF] Migrated '{account_name}' to new xlsx format")
+            logger.info(f"[PPF] Migrated '{account_name}' to new xlsx format")
 
         except Exception as e:
-            print(f"[PPF] Error migrating {f.name}: {e}")
+            logger.error(f"[PPF] Error migrating {f.name}: {e}")
 
 
 def _migrate_h4_to_cols(ppf_dir: Path = None):
@@ -859,7 +862,7 @@ def _migrate_h4_to_cols(ppf_dir: Path = None):
             contribs = account.get("contributions", [])
             if not contribs:
                 continue
-            print(f"[PPF] Migrating H4 contributions to cols 8-9: {f.name}")
+            logger.info(f"[PPF] Migrating H4 contributions to cols 8-9: {f.name}")
             _create_ppf_xlsx(
                 name=account["name"],
                 bank=account["bank"],
@@ -877,7 +880,7 @@ def _migrate_h4_to_cols(ppf_dir: Path = None):
                 ppf_dir=ppf_dir,
             )
         except Exception as e:
-            print(f"[PPF] Error migrating H4 for {f.name}: {e}")
+            logger.error(f"[PPF] Error migrating H4 for {f.name}: {e}")
 
 
 # ===================================================================

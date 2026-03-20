@@ -8,11 +8,14 @@ of Buy/Sell rows in each file's "Trading History" sheet.
 
 import hashlib
 import json
+import logging
 import os
 import threading
 from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill
@@ -426,7 +429,7 @@ class XlsxPortfolio:
             # 3. Last resort: derive from filename heuristic
             if not symbol:
                 symbol = _sym_resolver.derive_symbol(clean)
-                print(f"[XlsxDB] WARNING: Could not resolve '{clean}', derived: {symbol}")
+                logger.warning(f"[XlsxDB] Could not resolve '{clean}', derived: {symbol}")
 
             # Populate the runtime SYMBOL_MAP so other modules can reference it
             if clean not in SYMBOL_MAP:
@@ -451,8 +454,8 @@ class XlsxPortfolio:
             # (e.g. ITC→ITCHOTELS, TATA→TATACAP). Duplicate detection during
             # import relies on get_existing_transaction_fingerprints() which
             # has a glob-based fallback via _find_file_for_symbol().
-        print(f"[XlsxDB] Indexed {len(self._file_map)} stock files "
-              f"({sum(len(v) for v in self._all_files.values())} total including archives)")
+        logger.info(f"[XlsxDB] Indexed {len(self._file_map)} stock files "
+                    f"({sum(len(v) for v in self._all_files.values())} total including archives)")
 
     def reindex(self):
         """Re-scan the dumps folder for new/removed/modified xlsx files.
@@ -483,7 +486,7 @@ class XlsxPortfolio:
                     parts.append(f"+{len(added)}")
                 if removed:
                     parts.append(f"-{len(removed)}")
-                print(f"[XlsxDB] Reindex: {len(new_symbols)} stocks ({', '.join(parts)} changed)")
+                logger.info(f"[XlsxDB] Reindex: {len(new_symbols)} stocks ({', '.join(parts)} changed)")
             return {"total": len(new_symbols), "added": list(added), "removed": list(removed)}
 
     def _find_file_for_symbol(self, symbol: str) -> Optional[Path]:
@@ -549,7 +552,7 @@ class XlsxPortfolio:
             try:
                 wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
             except Exception as e:
-                print(f"[XlsxDB] Failed to open {filepath.name}: {e}")
+                logger.error(f"[XlsxDB] Failed to open {filepath.name}: {e}")
                 continue
 
             idx = _extract_index_data(wb)
@@ -690,7 +693,7 @@ class XlsxPortfolio:
                         "units": sum(d.get("units", 0) for d in dividends),
                     }
             except Exception as e:
-                print(f"[XlsxDB] Error reading {symbol}: {e}")
+                logger.error(f"[XlsxDB] Error reading {symbol}: {e}")
 
         return all_holdings, all_sold, dividends_by_symbol
 
@@ -882,7 +885,7 @@ class XlsxPortfolio:
                             all_sells_existing.append({"date": dt or "", "qty": qty_val})
                     other_wb.close()
                 except Exception as e:
-                    print(f"[XlsxDB] Warning: could not read archive {other_fp.name}: {e}")
+                    logger.warning(f"[XlsxDB] Could not read archive {other_fp.name}: {e}")
 
             # FIFO-match existing sells against buys to find remaining qty per row
             buys_remaining = [{"row": b["row"], "qty": b["qty"], "date": b["date"], "primary": b["primary"]} for b in all_buys]
@@ -1018,7 +1021,7 @@ class XlsxPortfolio:
                     return True
             wb.close()
         except Exception as e:
-            print(f"[XlsxDB] Failed to remove holding: {e}")
+            logger.error(f"[XlsxDB] Failed to remove holding: {e}")
         return False
 
     # ── XLSX Write Helpers ────────────────────────────────
@@ -1159,7 +1162,7 @@ class XlsxPortfolio:
 
                 wb.close()
             except Exception as e:
-                print(f"[XlsxDB] Error reading fingerprints from {fp.name}: {e}")
+                logger.error(f"[XlsxDB] Error reading fingerprints from {fp.name}: {e}")
 
         return fingerprints, remarks_set
 
@@ -1219,7 +1222,7 @@ class XlsxPortfolio:
 
                 wb.close()
             except Exception as e:
-                print(f"[XlsxDB] Error reading dividend fingerprints from {fp.name}: {e}")
+                logger.error(f"[XlsxDB] Error reading dividend fingerprints from {fp.name}: {e}")
 
         return fingerprints
 
@@ -1349,7 +1352,7 @@ class XlsxPortfolio:
             self._all_files[symbol] = []
         self._all_files[symbol].append(filepath)
 
-        print(f"[XlsxDB] Created new stock file: {filename}")
+        logger.info(f"[XlsxDB] Created new stock file: {filename}")
         return filepath
 
     # ── Manual Prices ─────────────────────────────────────

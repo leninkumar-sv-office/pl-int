@@ -19,7 +19,10 @@ import hashlib
 import threading
 import requests
 from typing import Optional, Dict, List, Tuple
+import logging
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════
 #  CONFIG
@@ -41,9 +44,9 @@ _totp_secret: str = os.getenv("ZERODHA_TOTP_SECRET", "").strip()
 
 # Log what we loaded (masked)
 if _api_key:
-    print(f"[Zerodha] API key loaded: {_api_key[:4]}...{_api_key[-4:]} ({len(_api_key)} chars)")
+    logger.info(f"[Zerodha] API key loaded: {_api_key[:4]}...{_api_key[-4:]} ({len(_api_key)} chars)")
 if _access_token:
-    print(f"[Zerodha] Access token loaded: {_access_token[:4]}...{_access_token[-4:]} ({len(_access_token)} chars)")
+    logger.info(f"[Zerodha] Access token loaded: {_access_token[:4]}...{_access_token[-4:]} ({len(_access_token)} chars)")
 
 # Thread safety
 _lock = threading.Lock()
@@ -76,7 +79,7 @@ def _try_auto_login_and_retry(path: str, params: dict = None) -> Optional[dict]:
     """Attempt auto-login and retry the failed request."""
     if not can_auto_login() or _auto_login_in_progress:
         return None
-    print("[Zerodha] Attempting auto-login...")
+    logger.info("[Zerodha] Attempting auto-login...")
     if auto_login():
         try:
             retry_resp = requests.get(
@@ -123,7 +126,7 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
             elif resp.status_code == 403:
                 _auth_failed = True
                 _last_error = f"Auth failed (403): {resp.text[:200]}"
-                print(f"[Zerodha] {_last_error}")
+                logger.error(f"[Zerodha] {_last_error}")
                 with _lock:
                     global _session_valid
                     _session_valid = False
@@ -131,7 +134,7 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
                 result = _try_auto_login_and_retry(path, params)
                 if result is not None:
                     return result
-                print("[Zerodha] Token expired. Visit /api/zerodha/login to refresh.")
+                logger.warning("[Zerodha] Token expired. Visit /api/zerodha/login to refresh.")
                 return None
             elif resp.status_code == 429:
                 # Rate limited — wait and retry
@@ -139,11 +142,11 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
                     time.sleep(1)
                     continue
                 _last_error = f"Rate limited (429)"
-                print(f"[Zerodha] {_last_error}")
+                logger.warning(f"[Zerodha] {_last_error}")
                 return None
             else:
                 _last_error = f"API error {resp.status_code}: {resp.text[:100]}"
-                print(f"[Zerodha] {_last_error}")
+                logger.error(f"[Zerodha] {_last_error}")
                 return None
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
@@ -152,7 +155,7 @@ def _api_get(path: str, params: dict = None) -> Optional[dict]:
             _conn_failed = True
             _conn_fail_time = time.time()
             _last_error = f"Connection failed: {str(e)[:120]}"
-            print(f"[Zerodha] Request failed: {e}")
+            logger.error(f"[Zerodha] Request failed: {e}")
             return None
 
 
@@ -173,7 +176,7 @@ def is_session_valid() -> bool:
         return True
     # Try auto-login if credentials are available
     if can_auto_login() and not _auto_login_in_progress:
-        print("[Zerodha] Session invalid — attempting auto-login...")
+        logger.warning("[Zerodha] Session invalid — attempting auto-login...")
         if auto_login():
             return True
     return False
@@ -189,7 +192,7 @@ def generate_session(request_token: str) -> bool:
     Call this after user completes Kite login."""
     global _access_token, _session_valid, _auth_failed, _conn_failed
     if not _api_key or not _api_secret:
-        print("[Zerodha] API key or secret not configured")
+        logger.error("[Zerodha] API key or secret not configured")
         return False
 
     # Checksum: SHA-256 of (api_key + request_token + api_secret)
@@ -218,11 +221,11 @@ def generate_session(request_token: str) -> bool:
                     _session_valid = True
                 # Persist to .env
                 _update_env("ZERODHA_ACCESS_TOKEN", _access_token)
-                print(f"[Zerodha] Session created, token: {_access_token[:8]}...")
+                logger.info(f"[Zerodha] Session created, token: {_access_token[:8]}...")
                 return True
-        print(f"[Zerodha] Session failed: {resp.status_code} {resp.text[:200]}")
+        logger.error(f"[Zerodha] Session failed: {resp.status_code} {resp.text[:200]}")
     except Exception as e:
-        print(f"[Zerodha] Session error: {e}")
+        logger.error(f"[Zerodha] Session error: {e}")
     return False
 
 
@@ -236,7 +239,7 @@ def set_access_token(token: str):
         _session_valid = bool(_access_token)
     if _access_token:
         _update_env("ZERODHA_ACCESS_TOKEN", _access_token)
-        print(f"[Zerodha] Access token set: {_access_token[:8]}...")
+        logger.info(f"[Zerodha] Access token set: {_access_token[:8]}...")
 
 
 def _update_env(key: str, value: str):
@@ -257,7 +260,7 @@ def _update_env(key: str, value: str):
         with open(_ENV_PATH, "w") as f:
             f.writelines(lines)
     except Exception as e:
-        print(f"[Zerodha] Failed to update .env: {e}")
+        logger.error(f"[Zerodha] Failed to update .env: {e}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -288,7 +291,7 @@ def auto_login() -> bool:
     global _auto_login_in_progress, _access_token, _session_valid, _auth_failed, _conn_failed
 
     if not can_auto_login():
-        print("[Zerodha] Auto-login not possible — missing credentials")
+        logger.warning("[Zerodha] Auto-login not possible — missing credentials")
         return False
 
     with _auto_login_lock:
@@ -301,26 +304,26 @@ def auto_login() -> bool:
         session = requests.Session()
 
         # Step 1: Login with user_id + password
-        print("[Zerodha] Auto-login: posting credentials...")
+        logger.info("[Zerodha] Auto-login: posting credentials...")
         login_resp = session.post(
             "https://kite.zerodha.com/api/login",
             data={"user_id": _user_id, "password": _password},
             timeout=15,
         )
         if login_resp.status_code != 200:
-            print(f"[Zerodha] Auto-login: login failed ({login_resp.status_code}): {login_resp.text[:200]}")
+            logger.error(f"[Zerodha] Auto-login: login failed ({login_resp.status_code}): {login_resp.text[:200]}")
             return False
 
         login_data = login_resp.json()
         request_id = login_data.get("data", {}).get("request_id", "")
         if not request_id:
-            print(f"[Zerodha] Auto-login: no request_id in response: {login_data}")
+            logger.error(f"[Zerodha] Auto-login: no request_id in response: {login_data}")
             return False
 
         # Step 2: Generate TOTP and submit 2FA
         totp = pyotp.TOTP(_totp_secret)
         totp_code = totp.now()
-        print(f"[Zerodha] Auto-login: submitting TOTP...")
+        logger.info("[Zerodha] Auto-login: submitting TOTP...")
 
         # Use the 2FA type from login response (usually "app_code" for TOTP)
         twofa_type = login_data.get("data", {}).get("twofa_type", "app_code")
@@ -335,14 +338,14 @@ def auto_login() -> bool:
             timeout=15,
         )
         if twofa_resp.status_code != 200:
-            print(f"[Zerodha] Auto-login: 2FA failed ({twofa_resp.status_code}): {twofa_resp.text[:200]}")
+            logger.error(f"[Zerodha] Auto-login: 2FA failed ({twofa_resp.status_code}): {twofa_resp.text[:200]}")
             return False
 
         # Step 3: Hit the Kite Connect login URL with session cookies
         # Follow redirects manually — stop before hitting our local callback
         # (which may be unreachable inside Docker or on a different port)
         connect_url = f"https://kite.zerodha.com/connect/login?v={_API_VERSION}&api_key={_api_key}"
-        print("[Zerodha] Auto-login: fetching connect login for request_token...")
+        logger.info("[Zerodha] Auto-login: fetching connect login for request_token...")
 
         from urllib.parse import urlparse, parse_qs
         connect_resp = session.get(connect_url, allow_redirects=False, timeout=15)
@@ -364,20 +367,20 @@ def auto_login() -> bool:
             request_token = params.get("request_token", [None])[0]
 
         if not request_token:
-            print(f"[Zerodha] Auto-login: request_token not found in redirects: {connect_resp.url[:200]}")
+            logger.error(f"[Zerodha] Auto-login: request_token not found in redirects: {connect_resp.url[:200]}")
             return False
 
         # Step 4: Exchange request_token for access_token
-        print(f"[Zerodha] Auto-login: exchanging request_token for access_token...")
+        logger.info("[Zerodha] Auto-login: exchanging request_token for access_token...")
         success = generate_session(request_token)
         if success:
-            print("[Zerodha] Auto-login: SUCCESS — new access token obtained")
+            logger.info("[Zerodha] Auto-login: SUCCESS — new access token obtained")
         else:
-            print("[Zerodha] Auto-login: token exchange failed")
+            logger.error("[Zerodha] Auto-login: token exchange failed")
         return success
 
     except Exception as e:
-        print(f"[Zerodha] Auto-login error: {e}")
+        logger.error(f"[Zerodha] Auto-login error: {e}")
         return False
     finally:
         with _auto_login_lock:
@@ -486,7 +489,7 @@ def fetch_quotes(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         data = _api_get("/quote", params)
         if not data or "data" not in data:
             # Retry failed batch once
-            print(f"[Zerodha] Quote batch {i//batch_size + 1} failed, retrying...")
+            logger.warning(f"[Zerodha] Quote batch {i//batch_size + 1} failed, retrying...")
             time.sleep(0.5)
             data = _api_get("/quote", params)
         if data and "data" in data:
@@ -694,7 +697,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
     if not need_fetch:
         return results
 
-    print(f"[Zerodha] Fetching 52-week range for {len(need_fetch)} stocks via Historical API...")
+    logger.info(f"[Zerodha] Fetching 52-week range for {len(need_fetch)} stocks via Historical API...")
     fetched = 0
     failed = 0
 
@@ -715,7 +718,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
             result = _fetch_historical_52w(token)
             return (key, result)
         except Exception as e:
-            print(f"[Zerodha] 52w fetch error for {key}: {e}")
+            logger.error(f"[Zerodha] 52w fetch error for {key}: {e}")
             return (key, None)
 
     with ThreadPoolExecutor(max_workers=3) as executor:
@@ -742,7 +745,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
             else:
                 failed += 1
 
-    print(f"[Zerodha] 52-week range: {fetched} fetched, {failed} failed")
+    logger.info(f"[Zerodha] 52-week range: {fetched} fetched, {failed} failed")
     return results
 
 
@@ -861,7 +864,7 @@ def fetch_market_tickers() -> Dict[str, dict]:
     results: Dict[str, dict] = {}
     for key, (_, ticker_data) in ticker_results.items():
         results[key] = ticker_data
-        print(f"[Zerodha] Ticker {key} → {ticker_data['instrument']} "
+        logger.info(f"[Zerodha] Ticker {key} → {ticker_data['instrument']} "
               f"({ticker_data['price']})")
 
     return results
@@ -1012,7 +1015,7 @@ def _load_instruments():
                 timeout=(5, 30),
             )
             if resp.status_code != 200:
-                print(f"[Zerodha] Instruments {exchange} failed: {resp.status_code}")
+                logger.error(f"[Zerodha] Instruments {exchange} failed: {resp.status_code}")
                 continue
             reader = csv.DictReader(io.StringIO(resp.text))
             count = 0
@@ -1033,9 +1036,9 @@ def _load_instruments():
                         except ValueError:
                             pass
                     count += 1
-            print(f"[Zerodha] Loaded {count} {exchange} instrument names + tokens")
+            logger.info(f"[Zerodha] Loaded {count} {exchange} instrument names + tokens")
         except Exception as e:
-            print(f"[Zerodha] Instruments {exchange} error: {e}")
+            logger.error(f"[Zerodha] Instruments {exchange} error: {e}")
 
     with _instrument_names_lock:
         _instrument_names.update(names)
@@ -1043,7 +1046,7 @@ def _load_instruments():
     with _instrument_tokens_lock:
         _instrument_token_cache.update(tokens)
         _instrument_tokens_loaded = True
-    print(f"[Zerodha] Total cached: {len(_instrument_names)} names, {len(_instrument_token_cache)} tokens")
+    logger.info(f"[Zerodha] Total cached: {len(_instrument_names)} names, {len(_instrument_token_cache)} tokens")
 
 
 def load_instruments_async():
@@ -1116,7 +1119,7 @@ def _load_mf_instruments():
             timeout=(5, 30),
         )
         if resp.status_code != 200:
-            print(f"[Zerodha] MF instruments failed: {resp.status_code}")
+            logger.error(f"[Zerodha] MF instruments failed: {resp.status_code}")
             return
         reader = csv.DictReader(io.StringIO(resp.text))
         instruments = []
@@ -1135,9 +1138,9 @@ def _load_mf_instruments():
             _mf_instruments.clear()
             _mf_instruments.extend(instruments)
             _mf_instruments_loaded = True
-        print(f"[Zerodha] Loaded {len(instruments)} MF instruments")
+        logger.info(f"[Zerodha] Loaded {len(instruments)} MF instruments")
     except Exception as e:
-        print(f"[Zerodha] MF instruments error: {e}")
+        logger.error(f"[Zerodha] MF instruments error: {e}")
 
 
 def search_mf_instruments(query: str, plan: str = "direct", scheme_type: str = "") -> list:
@@ -1195,7 +1198,7 @@ def search_mf_instruments(query: str, plan: str = "direct", scheme_type: str = "
         for inst in _mf_instruments[:5000]:
             name_upper = inst["name"].upper()
             if all(w in name_upper for w in words):
-                print(f"[MF-Search] Filtered out: {inst['name']} | plan={inst.get('plan','')} "
+                logger.info(f"[MF-Search] Filtered out: {inst['name']} | plan={inst.get('plan','')} "
                       f"| scheme_type={inst.get('scheme_type','')} | dividend_type={inst.get('dividend_type','')} "
                       f"| filters: plan={plan_filter} type={type_filter}")
                 break
@@ -1366,7 +1369,7 @@ def validate_session() -> bool:
     if data and "data" in data:
         user = data["data"]
         name = user.get("user_name", "Unknown")
-        print(f"[Zerodha] Session valid — user: {name}")
+        logger.info(f"[Zerodha] Session valid — user: {name}")
         with _lock:
             global _session_valid
             _session_valid = True

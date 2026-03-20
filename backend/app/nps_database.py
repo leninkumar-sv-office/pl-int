@@ -25,6 +25,9 @@ import openpyxl
 
 from app.config import DUMPS_DIR
 
+import logging
+logger = logging.getLogger(__name__)
+
 # ═══════════════════════════════════════════════════════════
 #  FILE PATHS
 # ═══════════════════════════════════════════════════════════
@@ -627,7 +630,7 @@ def _import_from_pdfs(nps_dir: Path = None):
     if existing:
         return  # already imported
 
-    print(f"[NPS] Importing {len(pdfs)} PDF statements from {PDF_IMPORT_DIR}...")
+    logger.info(f"[NPS] Importing {len(pdfs)} PDF statements from {PDF_IMPORT_DIR}...")
 
     # Parse all PDFs
     all_parsed = []
@@ -637,9 +640,9 @@ def _import_from_pdfs(nps_dir: Path = None):
             all_parsed.append(parsed)
             contribs = len(parsed.get("contributions", []))
             txns = sum(len(v) for v in parsed.get("scheme_transactions", {}).values())
-            print(f"  [NPS] Parsed {pdf.name}: {contribs} contributions, {txns} transactions")
+            logger.info(f"[NPS] Parsed {pdf.name}: {contribs} contributions, {txns} transactions")
         except Exception as e:
-            print(f"  [NPS] ERROR parsing {pdf.name}: {e}")
+            logger.error(f"[NPS] ERROR parsing {pdf.name}: {e}")
 
     if not all_parsed:
         return
@@ -669,10 +672,10 @@ def _import_from_pdfs(nps_dir: Path = None):
     _write_xlsx(xlsx_path, account, merged["transactions"])
 
     total_contrib = sum(c["amount"] for c in merged["contributions"])
-    print(f"  [NPS] Created {xlsx_path.name}: {len(merged['transactions'])} transactions, "
-          f"{len(merged['contributions'])} contributions, "
-          f"total contributed: ₹{total_contrib:,.0f}, "
-          f"current value: ₹{merged['current_value']:,.0f}")
+    logger.info(f"[NPS] Created {xlsx_path.name}: {len(merged['transactions'])} transactions, "
+                f"{len(merged['contributions'])} contributions, "
+                f"total contributed: ₹{total_contrib:,.0f}, "
+                f"current value: ₹{merged['current_value']:,.0f}")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -721,7 +724,7 @@ def _load_all_xlsx(nps_dir: Path = None) -> list:
             account["_xlsx_path"] = str(xlsx_path)
             items.append(account)
         except Exception as e:
-            print(f"[NPS] Error reading {xlsx_path.name}: {e}")
+            logger.error(f"[NPS] Error reading {xlsx_path.name}: {e}")
     return items
 
 

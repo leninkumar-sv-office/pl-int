@@ -4,8 +4,11 @@ Output: backend/dumps/summary/YYYY-MM-DD_HHMMSS.pdf
 """
 import os
 import re
+import logging
 from datetime import datetime
 from fpdf import FPDF
+
+logger = logging.getLogger(__name__)
 
 _DUMPS_DIR = os.path.join(os.path.dirname(__file__), "..", "dumps", "summary")
 
@@ -962,7 +965,7 @@ def generate_briefing_pdf(markdown_text: str, output_path: str = None) -> str:
     _flush_sector_bars(pdf, sector_bullets, in_sector_impacts)
 
     pdf.output(filepath)
-    print(f"[Briefing] PDF saved: {filepath}")
+    logger.info(f"[Briefing] PDF saved: {filepath}")
     return filepath
 
 

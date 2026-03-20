@@ -41,6 +41,16 @@ from . import auth as auth_module
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+import logging
+from uvicorn.logging import DefaultFormatter
+
+# Configure app logging to match uvicorn's colored output format
+_log_handler = logging.StreamHandler()
+_log_handler.setFormatter(DefaultFormatter("%(levelprefix)s %(message)s", use_colors=True))
+logging.root.addHandler(_log_handler)
+logging.root.setLevel(logging.INFO)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
 
@@ -50,8 +60,8 @@ app = FastAPI(title="Stock Portfolio Dashboard", version="1.0.0")
 #  break sync endpoints and large responses)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"[ERROR] {request.method} {request.url.path} → {type(exc).__name__}: {exc}")
-    traceback.print_exc()
+    logger.error(f"[ERROR] {request.method} {request.url.path} → {type(exc).__name__}: {exc}")
+    logger.error(traceback.format_exc())
     return JSONResponse(
         status_code=500,
         content={"detail": f"Internal error: {str(exc)[:200]}"},
@@ -75,10 +85,10 @@ def on_startup():
         ))
         stock_service.get_cached_prices(symbols)  # populates price cache from JSON
         elapsed = time.time() - t0
-        print(f"[App] Pre-warmed caches: {len(holdings)} holdings, "
+        logger.info(f"[App] Pre-warmed caches: {len(holdings)} holdings, "
               f"{len(sold)} sold, {len(symbols)} symbols in {elapsed:.1f}s")
     except Exception as e:
-        print(f"[App] Pre-warm error (non-fatal): {e}")
+        logger.warning(f"[App] Pre-warm error (non-fatal): {e}")
 
     # Check Zerodha connection — auto-login if token expired/missing
     if zerodha_service.is_configured():
@@ -86,39 +96,39 @@ def on_startup():
             # Validate existing token
             valid = zerodha_service.validate_session()
             if valid:
-                print(f"[App] Zerodha configured — session valid, API key: {zerodha_service._api_key[:4]}...")
+                logger.info(f"[App] Zerodha configured — session valid, API key: {zerodha_service._api_key[:4]}...")
             elif zerodha_service.can_auto_login():
-                print("[App] Zerodha token expired — attempting auto-login...")
+                logger.warning("[App] Zerodha token expired — attempting auto-login...")
                 if zerodha_service.auto_login():
-                    print("[App] Zerodha auto-login successful!")
+                    logger.info("[App] Zerodha auto-login successful!")
                 else:
-                    print("[App] Zerodha auto-login failed — visit /api/zerodha/login")
+                    logger.error("[App] Zerodha auto-login failed — visit /api/zerodha/login")
             else:
-                print("[App] Zerodha token invalid — visit /api/zerodha/login-url or POST /api/zerodha/set-token")
+                logger.warning("[App] Zerodha token invalid — visit /api/zerodha/login-url or POST /api/zerodha/set-token")
         elif zerodha_service.can_auto_login():
-            print("[App] Zerodha no access token — attempting auto-login...")
+            logger.warning("[App] Zerodha no access token — attempting auto-login...")
             if zerodha_service.auto_login():
-                print("[App] Zerodha auto-login successful!")
+                logger.info("[App] Zerodha auto-login successful!")
             else:
-                print("[App] Zerodha auto-login failed — visit /api/zerodha/login")
+                logger.error("[App] Zerodha auto-login failed — visit /api/zerodha/login")
         else:
-            print("[App] Zerodha API key configured but no access token — "
+            logger.warning("[App] Zerodha API key configured but no access token — "
                   "visit /api/zerodha/login-url or POST /api/zerodha/set-token")
     else:
-        print("[App] Zerodha NOT configured — using Yahoo/Google fallback only")
+        logger.warning("[App] Zerodha NOT configured — using Yahoo/Google fallback only")
     # Show fallback status
     if stock_service.ENABLE_YAHOO_GOOGLE:
-        print("[App] Yahoo/Google fallback: ENABLED (set ENABLE_FALLBACK= to disable)")
+        logger.info("[App] Yahoo/Google fallback: ENABLED (set ENABLE_FALLBACK= to disable)")
     else:
-        print("[App] Yahoo/Google fallback: DISABLED (set ENABLE_FALLBACK=1 to enable)")
+        logger.info("[App] Yahoo/Google fallback: DISABLED (set ENABLE_FALLBACK=1 to enable)")
     stock_service.start_background_refresh()
-    print("[App] Background stock price refresh started")
+    logger.info("[App] Background stock price refresh started")
     # Load Zerodha instrument names in background for symbol→name lookup
     if zerodha_service.is_configured():
         zerodha_service.load_instruments_async()
-        print("[App] Loading Zerodha instrument names (background)...")
+        logger.info("[App] Loading Zerodha instrument names (background)...")
     _start_ticker_bg_refresh()
-    print("[App] Background market ticker refresh started (every 60s)")
+    logger.info("[App] Background market ticker refresh started (every 60s)")
 
     # Migrate: seed drive_folder_id for the primary email from env var
     try:
@@ -128,9 +138,9 @@ def on_startup():
             existing = auth_module.get_drive_folder_id(primary_email)
             if not existing:
                 auth_module.set_drive_folder_id(primary_email, default_folder_id)
-                print(f"[App] Seeded drive_folder_id for {primary_email}")
+                logger.info(f"[App] Seeded drive_folder_id for {primary_email}")
     except Exception as e:
-        print(f"[App] Token migration skipped: {e}")
+        logger.warning(f"[App] Token migration skipped: {e}")
 
     # Sync data from Google Drive — blocks startup until complete
     # so that database modules find files on first request
@@ -138,11 +148,11 @@ def on_startup():
         from app import drive_service
         drive_service.sync_all_emails()
     except Exception as e:
-        print(f"[App] Drive sync skipped: {e}")
+        logger.warning(f"[App] Drive sync skipped: {e}")
 
     # Re-index MF database after Drive sync (files may have arrived after module import)
     mf_db.reindex()
-    print(f"[App] MF database re-indexed: {len(mf_db._file_map)} funds")
+    logger.info(f"[App] MF database re-indexed: {len(mf_db._file_map)} funds")
 
 
 @app.on_event("shutdown")
@@ -150,7 +160,7 @@ def on_shutdown():
     """Stop background refreshes cleanly."""
     stock_service.stop_background_refresh()
     _stop_ticker_bg_refresh()
-    print("[App] Background refreshes stopped")
+    logger.info("[App] Background refreshes stopped")
 
 # CORS for React dev server
 app.add_middleware(
@@ -337,7 +347,7 @@ def _auto_provision_user(email: str, google_name: str):
     import threading
     threading.Thread(target=drive_service.init_drive_for_email, args=(email,), daemon=True).start()
 
-    print(f"[App] Auto-provisioned persona '{display_name}' ({user_id}) for {email}")
+    logger.info(f"[App] Auto-provisioned persona '{display_name}' ({user_id}) for {email}")
 
 
 @app.get("/api/users")
@@ -508,7 +518,7 @@ def google_login_with_code(body: dict):
     except ValueError as e:
         raise HTTPException(401, str(e))
     except Exception as e:
-        print(f"[Auth] Code exchange failed: {e}")
+        logger.error(f"[Auth] Code exchange failed: {e}")
         raise HTTPException(401, "Failed to exchange authorization code")
     # Auto-provision new user: persona + dumps dir + Drive folders
     _auto_provision_user(result["email"], result["name"])
@@ -613,7 +623,7 @@ def get_portfolio():
             ))
         except Exception as e:
             # Per-stock error: log and continue with remaining stocks
-            print(f"[Portfolio] Error processing {h.symbol}.{h.exchange}: {e}")
+            logger.error(f"[Portfolio] Error processing {h.symbol}.{h.exchange}: {e}")
             result.append(HoldingWithLive(
                 holding=h,
                 live=None,
@@ -776,8 +786,8 @@ def parse_dividend_statement_preview(req: DividendStatementUpload):
             existing_fingerprints_fn=lambda sym: udb().get_existing_dividend_fingerprints(sym),
         )
     except Exception as e:
-        print(f"[DividendImport] PDF parse error: {e}")
-        traceback.print_exc()
+        logger.error(f"[DividendImport] PDF parse error: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)[:200]}")
 
     return result
@@ -800,7 +810,7 @@ def import_dividends_confirmed(req: dict):
         try:
             dividend_parser.save_user_overrides(symbol_overrides)
         except Exception as e:
-            print(f"[DividendImport] Failed to save overrides: {e}")
+            logger.error(f"[DividendImport] Failed to save overrides: {e}")
 
     imported = 0
     skipped_dups = 0
@@ -889,8 +899,8 @@ def _decode_and_parse_pdf(req: ContractNoteUpload) -> dict:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"[Import] PDF parse error: {e}")
-        traceback.print_exc()
+        logger.error(f"[Import] PDF parse error: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {str(e)[:200]}")
 
 
@@ -953,7 +963,7 @@ def parse_contract_note_preview(req: ContractNoteUpload):
             fingerprints.add(fp_eff)
 
     if dup_count > 0:
-        print(f"[Import] Found {dup_count} duplicate transaction(s) in preview")
+        logger.info(f"[Import] Found {dup_count} duplicate transaction(s) in preview")
 
     return parsed
 
@@ -1099,14 +1109,14 @@ def import_contract_note(req: ContractNoteUpload):
         except Exception as e:
             error_msg = f"{tx['action']} {tx['symbol']}: {str(e)[:100]}"
             errors.append(error_msg)
-            print(f"[Import] Error: {error_msg}")
-            traceback.print_exc()
+            logger.error(f"[Import] Error: {error_msg}")
+            logger.error(traceback.format_exc())
 
     # Reindex to pick up any new files
     udb().reindex()
 
     if skipped_dups > 0:
-        print(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
+        logger.warning(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
 
     return {
         "message": (
@@ -1263,13 +1273,13 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
         except Exception as e:
             error_msg = f"{tx.get('action', '?')} {tx.get('symbol', '?')}: {str(e)[:100]}"
             errors.append(error_msg)
-            print(f"[Import] Error: {error_msg}")
-            traceback.print_exc()
+            logger.error(f"[Import] Error: {error_msg}")
+            logger.error(traceback.format_exc())
 
     udb().reindex()
 
     if skipped_dups > 0:
-        print(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
+        logger.warning(f"[Import] Skipped {skipped_dups} duplicate transaction(s) server-side")
 
     return {
         "message": (
@@ -1529,7 +1539,7 @@ def get_stock_summary():
             ))
         except Exception as e:
             # Per-stock error: log and continue with remaining stocks
-            print(f"[StockSummary] Error processing {sym}: {e}")
+            logger.error(f"[StockSummary] Error processing {sym}: {e}")
             exchange = held_by_symbol.get(sym, sold_by_symbol.get(sym, {})).get("exchange", "NSE")
             result.append(StockSummaryItem(
                 symbol=sym, exchange=exchange, name=sym,
@@ -1712,9 +1722,9 @@ def _do_price_refresh():
             return
         res = stock_service.fetch_multiple(symbols)
         live = sum(1 for v in res.values() if not v.is_manual)
-        print(f"[PriceRefresh] Done: {live} live, {len(res)-live} fallback / {len(symbols)} stocks")
+        logger.info(f"[PriceRefresh] Done: {live} live, {len(res)-live} fallback / {len(symbols)} stocks")
     except Exception as e:
-        print(f"[PriceRefresh] Error: {e}")
+        logger.error(f"[PriceRefresh] Error: {e}")
 
 
 @app.post("/api/prices/refresh")
@@ -1741,7 +1751,7 @@ def trigger_price_refresh():
         live = sum(1 for v in res.values() if not v.is_manual)
         fb = sum(1 for v in res.values() if v.is_manual)
         elapsed = round(time.time() - t0, 1)
-        print(f"[PriceRefresh] Done in {elapsed}s: {live} live, {fb} fallback / {len(symbols)} stocks")
+        logger.info(f"[PriceRefresh] Done in {elapsed}s: {live} live, {fb} fallback / {len(symbols)} stocks")
         return {
             "message": f"Refreshed {live} live + {fb} cached / {len(symbols)} stocks in {elapsed}s",
             "stocks": len(symbols),
@@ -1751,8 +1761,8 @@ def trigger_price_refresh():
             "reindex": reindex_result,
         }
     except Exception as e:
-        print(f"[PriceRefresh] Error: {e}")
-        traceback.print_exc()
+        logger.error(f"[PriceRefresh] Error: {e}")
+        logger.error(traceback.format_exc())
         return {
             "message": f"Refresh error: {str(e)[:200]}",
             "stocks": 0,
@@ -1771,9 +1781,9 @@ def _do_ticker_refresh():
     try:
         results = _refresh_tickers_once()
         ok = sum(1 for r in results if r.get("price", 0) > 0)
-        print(f"[MarketTicker] Refresh done: {ok}/{len(results)} tickers with prices")
+        logger.info(f"[MarketTicker] Refresh done: {ok}/{len(results)} tickers with prices")
     except Exception as e:
-        print(f"[MarketTicker] Refresh error: {e}")
+        logger.error(f"[MarketTicker] Refresh error: {e}")
 
 @app.post("/api/market-ticker/refresh")
 def trigger_ticker_refresh():
@@ -1832,7 +1842,7 @@ def toggle_fallback(body: dict):
     enabled = body.get("enabled", False)
     stock_service.ENABLE_YAHOO_GOOGLE = bool(enabled)
     status = "enabled" if enabled else "disabled"
-    print(f"[App] Yahoo/Google fallback {status}")
+    logger.info(f"[App] Yahoo/Google fallback {status}")
     return {"enabled": stock_service.ENABLE_YAHOO_GOOGLE,
             "message": f"Yahoo/Google fallback {status}"}
 
@@ -1953,7 +1963,7 @@ def get_dashboard_summary():
                 elif live.current_price < h.buy_price:
                     stocks_in_loss += 1
         except Exception as e:
-            print(f"[Dashboard] Error processing {h.symbol}.{h.exchange}: {e}")
+            logger.error(f"[Dashboard] Error processing {h.symbol}.{h.exchange}: {e}")
 
     unrealized_pl = current_value - total_invested
     unrealized_pl_pct = (unrealized_pl / total_invested * 100) if total_invested > 0 else 0
@@ -2140,7 +2150,7 @@ def _enrich_ticker_changes(tickers: List[dict]) -> List[dict]:
                     t["week_change_pct"] = ch["week_change_pct"]
                     t["month_change_pct"] = ch["month_change_pct"]
             except Exception as e:
-                print(f"[MarketTicker] Yahoo historical error for {t['key']}: {e}")
+                logger.error(f"[MarketTicker] Yahoo historical error for {t['key']}: {e}")
 
     return tickers
 
@@ -2164,11 +2174,11 @@ def _refresh_tickers_once():
             zerodha_tickers = zerodha_service.fetch_market_tickers()
             if zerodha_tickers:
                 ok = sum(1 for v in zerodha_tickers.values() if v.get("price", 0) > 0)
-                print(f"[MarketTicker] Zerodha returned {ok} tickers")
+                logger.info(f"[MarketTicker] Zerodha returned {ok} tickers")
             else:
-                print(f"[MarketTicker] Zerodha returned no data")
+                logger.warning(f"[MarketTicker] Zerodha returned no data")
         except Exception as e:
-            print(f"[MarketTicker] Zerodha error: {e}")
+            logger.error(f"[MarketTicker] Zerodha error: {e}")
     else:
         if zerodha_service._auth_failed:
             reason = "token expired — visit /api/zerodha/login"
@@ -2178,7 +2188,7 @@ def _refresh_tickers_once():
             reason = "connection failed, retrying in 60s"
         else:
             reason = "not configured"
-        print(f"[MarketTicker] Zerodha skipped ({reason})")
+        logger.warning(f"[MarketTicker] Zerodha skipped ({reason})")
 
     results = []
     for meta in MARKET_TICKER_SYMBOLS:
@@ -2241,7 +2251,7 @@ def _refresh_tickers_once():
         src = r.get("source", "none")
         by_source[src] = by_source.get(src, 0) + 1
     summary = ", ".join(f"{v} {k}" for k, v in by_source.items())
-    print(f"[MarketTicker] Refresh done: {summary}")
+    logger.info(f"[MarketTicker] Refresh done: {summary}")
 
     # Record history first, then enrich with 1D/7D/1M changes, then save
     _record_ticker_history(results)
@@ -2265,13 +2275,13 @@ def _ticker_bg_loop():
             _ticker_cache = saved
             _ticker_cache_time = time.time()
         ok = sum(1 for t in saved if t.get("price", 0) > 0)
-        print(f"[MarketTicker] Loaded {ok}/{len(saved)} from file on startup")
+        logger.info(f"[MarketTicker] Loaded {ok}/{len(saved)} from file on startup")
 
     while _ticker_bg_running:
         try:
             _refresh_tickers_once()
         except Exception as e:
-            print(f"[MarketTicker] Refresh error: {e}")
+            logger.error(f"[MarketTicker] Refresh error: {e}")
         # Sleep in 1s chunks so we can exit promptly
         for _ in range(_TICKER_REFRESH_INTERVAL):
             if not _ticker_bg_running:
@@ -2342,7 +2352,7 @@ def update_market_ticker(tickers: List[dict]):
                          "price": 0, "change": 0, "change_pct": 0})
                          for m in MARKET_TICKER_SYMBOLS]
         _ticker_cache_time = time.time()
-    print(f"[MarketTicker] Manual update: {len(pushed)} tickers")
+    logger.info(f"[MarketTicker] Manual update: {len(pushed)} tickers")
     return {"updated": len(pushed)}
 
 
@@ -2440,7 +2450,7 @@ def parse_cdsl_cas_endpoint(req: CDSLCASUpload):
         result = parse_cdsl_cas(pdf_bytes)
         return result
     except Exception as e:
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Failed to parse CDSL CAS statement: {e}")
 
 
@@ -2994,9 +3004,9 @@ async def generate_analysis_pdf(request: Request):
         subfolder = f"dumps/temp/analysis/{date_dir}"
         drive_service.upload_file(filepath, subfolder=subfolder, email=email)
         drive_synced = True
-        print(f"[Analysis] PDF synced to Drive: {subfolder}/{filename}")
+        logger.info(f"[Analysis] PDF synced to Drive: {subfolder}/{filename}")
     except Exception as e:
-        print(f"[Analysis] Drive sync failed: {e}")
+        logger.error(f"[Analysis] Drive sync failed: {e}")
 
     return {"path": filepath, "filename": filename, "drive_synced": drive_synced}
 

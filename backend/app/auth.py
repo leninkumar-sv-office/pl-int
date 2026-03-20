@@ -17,6 +17,9 @@ import jwt
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -77,7 +80,7 @@ def verify_google_token(id_token_str: str) -> Optional[dict]:
             return None
         # Check allowed emails (if configured)
         if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
-            print(f"[Auth] Rejected login from {email} — not in ALLOWED_EMAILS")
+            logger.warning(f"[Auth] Rejected login from {email} — not in ALLOWED_EMAILS")
             return None
         return {
             "email": email,
@@ -85,7 +88,7 @@ def verify_google_token(id_token_str: str) -> Optional[dict]:
             "picture": idinfo.get("picture", ""),
         }
     except Exception as e:
-        print(f"[Auth] Google token verification failed: {e}")
+        logger.error(f"[Auth] Google token verification failed: {e}")
         return None
 
 
