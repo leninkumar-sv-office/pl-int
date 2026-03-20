@@ -16,10 +16,14 @@ services:
       - ALLOWED_EMAILS=${ALLOWED_EMAILS}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_DRIVE_DUMPS_FOLDER_ID=${GOOGLE_DRIVE_DUMPS_FOLDER_ID}
+      - TERM=xterm-256color
+      - FORCE_COLOR=1
+      - PYTHONUNBUFFERED=1
     volumes:
       # Persist xlsx data and ticker data across deploys
       - ./backend/dumps:/app/backend/dumps
       - ./backend/data:/app/backend/data
+    tty: true
     restart: unless-stopped
     stop_grace_period: 30s
     healthcheck:

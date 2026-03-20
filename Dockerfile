@@ -50,4 +50,4 @@ WORKDIR /app/backend
 # Graceful shutdown — uvicorn handles SIGTERM
 STOPSIGNAL SIGTERM
 
-CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9999", "--timeout-graceful-shutdown", "25"]
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9999", "--use-colors", "--timeout-graceful-shutdown", "25"]
