@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -132,10 +132,7 @@ export default function App() {
   const [marketTicker, setMarketTicker] = useState([]);
   const [tickerLastUpdated, setTickerLastUpdated] = useState(null);
   const refreshInterval = 60; // Fixed: backend refreshes prices every 60s
-  const [pageRefreshInterval, setPageRefreshInterval] = useState(() => {
-    const saved = localStorage.getItem('pageRefreshInterval');
-    return saved ? Number(saved) : 600; // default 10 min
-  });
+  const [pageRefreshInterval, setPageRefreshInterval] = useState(600);
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
@@ -206,13 +203,16 @@ export default function App() {
   }, []);
 
   const loadGlobal = useCallback(async () => {
-    const [tickR, zsR] = await Promise.allSettled([getMarketTicker(), getZerodhaStatus()]);
+    const [tickR, zsR, settingsR] = await Promise.allSettled([getMarketTicker(), getZerodhaStatus(), getUserSettings()]);
     if (tickR.status === 'fulfilled') {
       const resp = tickR.value;
       setMarketTicker(resp.tickers || resp);
       if (resp.last_updated) setTickerLastUpdated(resp.last_updated);
     }
     if (zsR.status === 'fulfilled') setZerodhaStatus(zsR.value);
+    if (settingsR.status === 'fulfilled' && settingsR.value.page_refresh_interval !== undefined) {
+      setPageRefreshInterval(settingsR.value.page_refresh_interval);
+    }
   }, []);
 
   const loadMutualFunds = useCallback(async () => {
@@ -1010,10 +1010,14 @@ export default function App() {
     // No-op: price refresh is fixed at 60s (backend controls this)
   };
 
-  const handlePageRefreshChange = (e) => {
+  const handlePageRefreshChange = async (e) => {
     const val = Number(e.target.value);
     setPageRefreshInterval(val);
-    localStorage.setItem('pageRefreshInterval', String(val));
+    try {
+      await saveUserSettings({ page_refresh_interval: val });
+    } catch (err) {
+      console.error('Failed to save page refresh interval:', err);
+    }
   };
 
   const handleSetToken = async () => {

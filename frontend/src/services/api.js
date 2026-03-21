@@ -597,3 +597,15 @@ export async function getExpiryRuleTypes() {
   const { data } = await api.get('/expiry-rules/types');
   return data;
 }
+
+// ── User Settings (per-persona) ─────────────────────
+
+export async function getUserSettings() {
+  const { data } = await api.get('/user-settings');
+  return data;
+}
+
+export async function saveUserSettings(updates) {
+  const { data } = await api.post('/user-settings', updates);
+  return data;
+}

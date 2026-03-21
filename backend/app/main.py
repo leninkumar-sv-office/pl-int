@@ -40,6 +40,7 @@ from . import epaper_service
 from . import notification_service
 from . import alert_service
 from . import expiry_rules
+from . import user_settings
 from . import auth as auth_module
 from pydantic import BaseModel
 from starlette.requests import Request
@@ -3140,6 +3141,21 @@ def delete_expiry_rule(rule_id: str):
 @app.get("/api/expiry-rules/types")
 def get_expiry_rule_types():
     return expiry_rules.get_rule_types()
+
+
+# ── User Settings (per-persona, synced to Drive) ────────
+
+@app.get("/api/user-settings")
+def get_user_settings():
+    email = _resolve_email()
+    uid = _resolve_user_id()
+    return user_settings.get_settings(uid, email)
+
+@app.post("/api/user-settings")
+def save_user_settings(updates: dict):
+    email = _resolve_email()
+    uid = _resolve_user_id()
+    return user_settings.save_settings(uid, email, updates)
 
 
 # ══════════════════════════════════════════════════════════
