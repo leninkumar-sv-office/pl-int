@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ExpiryAlertRules from './ExpiryAlertRules';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -225,10 +226,11 @@ export default function StandingInstructionTable({ instructions, loading, siDash
 
   return (
     <div className="section">
-      <div className="section-header">
+      <div className="section-header" style={{ position: 'relative' }}>
         <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
           <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
           Standing Instructions
+          <ExpiryAlertRules category="si" />
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="section-badge">{activeCount} active</span>

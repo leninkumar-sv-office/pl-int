@@ -39,6 +39,7 @@ from . import dividend_parser
 from . import epaper_service
 from . import notification_service
 from . import alert_service
+from . import expiry_rules
 from . import auth as auth_module
 from pydantic import BaseModel
 from starlette.requests import Request
@@ -131,6 +132,7 @@ def on_startup():
         logger.info("[App] Loading Zerodha instrument names (background)...")
     _start_ticker_bg_refresh()
     logger.info("[App] Background market ticker refresh started (every 60s)")
+    alert_service.register_evaluator("expiry_check", lambda _: expiry_rules.evaluate_expiry_rules() or (False, ""))
     alert_service.start_alert_bg_thread()
     logger.info("[App] Background alert evaluation started (every 60s)")
 
@@ -3101,6 +3103,40 @@ def test_email_notification():
         recipients=recipients,
     )
     return {"success": success, "recipients": recipients}
+
+
+# ── Expiry Alert Rules (per-user, per-tab) ───────────────
+
+class ExpiryRuleRequest(BaseModel):
+    id: str = ""
+    category: str          # fd, rd, ppf, nps, si
+    rule_type: str         # days_before_maturity, on_maturity, etc.
+    days: int = 30
+    enabled: bool = True
+
+@app.get("/api/expiry-rules")
+def get_expiry_rules(category: str = None):
+    email = _resolve_email()
+    user_id = _resolve_user_id()
+    return expiry_rules.get_rules(email, user_id, category)
+
+@app.post("/api/expiry-rules")
+def save_expiry_rule(req: ExpiryRuleRequest):
+    email = _resolve_email()
+    user_id = _resolve_user_id()
+    return expiry_rules.save_rule(email, user_id, req.dict())
+
+@app.delete("/api/expiry-rules/{rule_id}")
+def delete_expiry_rule(rule_id: str):
+    email = _resolve_email()
+    user_id = _resolve_user_id()
+    if not expiry_rules.delete_rule(email, user_id, rule_id):
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"deleted": rule_id}
+
+@app.get("/api/expiry-rules/types")
+def get_expiry_rule_types():
+    return expiry_rules.get_rule_types()
 
 
 # ══════════════════════════════════════════════════════════

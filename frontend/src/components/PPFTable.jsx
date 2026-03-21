@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ExpiryAlertRules from './ExpiryAlertRules';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -704,10 +705,11 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
 
   return (
     <div className="section">
-      <div className="section-header">
+      <div className="section-header" style={{ position: 'relative' }}>
         <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
           <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
           Public Provident Fund (PPF)
+          <ExpiryAlertRules category="ppf" />
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="section-badge">{activeCount} active</span>

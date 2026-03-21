@@ -574,3 +574,26 @@ export async function testEmailNotification() {
   const { data } = await api.post('/notifications/test-email');
   return data;
 }
+
+// ── Expiry Alert Rules ──────────────────────────────
+
+export async function getExpiryRules(category) {
+  const params = category ? { category } : {};
+  const { data } = await api.get('/expiry-rules', { params });
+  return data;
+}
+
+export async function saveExpiryRule(rule) {
+  const { data } = await api.post('/expiry-rules', rule);
+  return data;
+}
+
+export async function deleteExpiryRule(ruleId) {
+  const { data } = await api.delete(`/expiry-rules/${ruleId}`);
+  return data;
+}
+
+export async function getExpiryRuleTypes() {
+  const { data } = await api.get('/expiry-rules/types');
+  return data;
+}
