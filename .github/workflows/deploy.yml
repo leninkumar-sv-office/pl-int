@@ -142,6 +142,8 @@ jobs:
             "ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}" \
             "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
+            "NOTIFICATION_EMAIL=${{ secrets.NOTIFICATION_EMAIL }}" \
+            "NOTIFICATION_EMAIL_APP_PASSWORD=${{ secrets.NOTIFICATION_EMAIL_APP_PASSWORD }}" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
 
@@ -302,6 +304,8 @@ jobs:
             "ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}" \
             "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
+            "NOTIFICATION_EMAIL=${{ secrets.NOTIFICATION_EMAIL }}" \
+            "NOTIFICATION_EMAIL_APP_PASSWORD=${{ secrets.NOTIFICATION_EMAIL_APP_PASSWORD }}" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
           echo "$PREV_TAG" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"
