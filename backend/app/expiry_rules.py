@@ -38,6 +38,10 @@ RULE_TYPES = {
         {"type": "days_before_expiry", "label": "Days before expiry", "needs_days": True},
         {"type": "on_expiry", "label": "On expiry day", "needs_days": False},
     ],
+    "insurance": [
+        {"type": "days_before_expiry", "label": "Days before expiry", "needs_days": True},
+        {"type": "on_expiry", "label": "On expiry day", "needs_days": False},
+    ],
 }
 
 
@@ -194,7 +198,7 @@ def evaluate_expiry_rules():
 
 def _load_user_instruments(email: str, user_id: str) -> Dict[str, list]:
     """Load FD/RD/PPF/NPS/SI data for a specific user."""
-    result = {"fd": [], "rd": [], "ppf": [], "nps": [], "si": []}
+    result = {"fd": [], "rd": [], "ppf": [], "nps": [], "si": [], "insurance": []}
     try:
         from app.config import get_user_dumps_dir
         dumps_dir = get_user_dumps_dir(user_id, email)
@@ -238,6 +242,13 @@ def _load_user_instruments(email: str, user_id: str) -> Dict[str, list]:
         except Exception:
             pass
 
+        # Insurance
+        try:
+            from app.insurance_database import get_all as get_insurance
+            result["insurance"] = get_insurance(dumps_dir)
+        except Exception:
+            pass
+
     except Exception as e:
         logger.error(f"[ExpiryRules] Failed to load instruments for {user_id}: {e}")
 
@@ -262,15 +273,16 @@ def _check_rule(item: dict, category: str, rule_type: str, days_threshold: int) 
         if rule_type == "days_before_maturity" and 0 < days_left <= days_threshold:
             return f"{category.upper()} '{name}' matures in {days_left} day(s) on {maturity_date}."
 
-    elif category == "si":
+    elif category in ("si", "insurance"):
         days_left = item.get("days_to_expiry", -1)
         expiry_date = item.get("expiry_date", "")
+        label = "Insurance" if category == "insurance" else "Standing Instruction"
 
         if rule_type == "on_expiry" and days_left == 0:
-            return f"Standing Instruction '{name}' expires today ({expiry_date})!"
+            return f"{label} '{name}' expires today ({expiry_date})!"
 
         if rule_type == "days_before_expiry" and 0 < days_left <= days_threshold:
-            return f"Standing Instruction '{name}' expires in {days_left} day(s) on {expiry_date}."
+            return f"{label} '{name}' expires in {days_left} day(s) on {expiry_date}."
 
     elif category == "nps":
         if rule_type == "contribution_reminder":

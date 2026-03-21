@@ -21,6 +21,10 @@ const RULE_OPTIONS = {
     { type: 'days_before_expiry', label: 'Alert days before expiry', needsDays: true },
     { type: 'on_expiry', label: 'Alert on expiry day', needsDays: false },
   ],
+  insurance: [
+    { type: 'days_before_expiry', label: 'Alert days before expiry', needsDays: true },
+    { type: 'on_expiry', label: 'Alert on expiry day', needsDays: false },
+  ],
 };
 
 export default function ExpiryAlertRules({ category }) {
