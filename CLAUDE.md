@@ -36,14 +36,20 @@ pl/
 ## Running the App
 
 ```bash
-# Backend
-cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 9999
+# Local dev (port 9998 — won't conflict with Docker on 9999)
+./scripts/run.sh
 
-# Frontend
-cd frontend && npm run dev
-
-# Both must be running for tests
+# Or manually:
+cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 9998
+cd frontend && npm run dev   # Vite proxies /api → localhost:9998
 ```
+
+## Deployment
+
+- **Always deploy after making changes** — use `/deploy` to commit, push, and watch CI/CD
+- CI/CD runs Docker deployment by default (port 9999, via Cloudflare tunnel)
+- Docker container: `pl-dashboard` at `https://pl.thirumagal.com/`
+- Local dev runs on port 9998, Docker prod runs on port 9999 (no conflict)
 
 ## Running Tests
 

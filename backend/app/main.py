@@ -37,6 +37,8 @@ from . import zerodha_service
 from . import contract_note_parser
 from . import dividend_parser
 from . import epaper_service
+from . import notification_service
+from . import alert_service
 from . import auth as auth_module
 from pydantic import BaseModel
 from starlette.requests import Request
@@ -129,6 +131,8 @@ def on_startup():
         logger.info("[App] Loading Zerodha instrument names (background)...")
     _start_ticker_bg_refresh()
     logger.info("[App] Background market ticker refresh started (every 60s)")
+    alert_service.start_alert_bg_thread()
+    logger.info("[App] Background alert evaluation started (every 60s)")
 
     # Migrate: seed drive_folder_id for the primary email from env var
     try:
@@ -160,6 +164,7 @@ def on_shutdown():
     """Stop background refreshes cleanly."""
     stock_service.stop_background_refresh()
     _stop_ticker_bg_refresh()
+    alert_service.stop_alert_bg_thread()
     logger.info("[App] Background refreshes stopped")
 
 # CORS for React dev server
@@ -3019,6 +3024,49 @@ async def generate_analysis_pdf(request: Request):
         logger.error(f"[Analysis] Drive sync failed: {e}")
 
     return {"path": filepath, "filename": filename, "drive_synced": drive_synced}
+
+
+# ══════════════════════════════════════════════════════════
+#  ALERTS & NOTIFICATIONS
+# ══════════════════════════════════════════════════════════
+
+class AlertRuleRequest(BaseModel):
+    id: str = ""
+    name: str
+    enabled: bool = True
+    channel: str = "telegram"
+    condition: dict = {}
+    cooldown_minutes: int = 60
+
+class TestNotificationRequest(BaseModel):
+    channel: str = "all"
+    message: str = ""
+
+@app.get("/api/alerts")
+def list_alerts():
+    return alert_service.get_alerts()
+
+@app.post("/api/alerts")
+def create_or_update_alert(req: AlertRuleRequest):
+    return alert_service.create_or_update_alert(req.dict())
+
+@app.delete("/api/alerts/{alert_id}")
+def delete_alert(alert_id: str):
+    if not alert_service.delete_alert(alert_id):
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"deleted": alert_id}
+
+@app.get("/api/alerts/history")
+def get_alert_history(limit: int = 50):
+    return alert_service.get_history(limit)
+
+@app.post("/api/alerts/test")
+def test_notification(req: TestNotificationRequest):
+    return alert_service.send_test_notification(req.channel, req.message or None)
+
+@app.get("/api/alerts/channels")
+def get_notification_channels():
+    return notification_service.get_channel_status()
 
 
 # ══════════════════════════════════════════════════════════
