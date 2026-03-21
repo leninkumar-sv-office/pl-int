@@ -47,6 +47,11 @@ export default function ExpiryAlertRules({ category }) {
     setLoading(false);
   }, [category]);
 
+  // Load rules on mount (for badge count) and when expanded
+  useEffect(() => {
+    loadRules();
+  }, [loadRules]);
+
   useEffect(() => {
     if (expanded) loadRules();
   }, [expanded, loadRules]);
