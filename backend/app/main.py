@@ -3079,20 +3079,23 @@ class NotificationPrefsRequest(BaseModel):
 @app.get("/api/notifications/preferences")
 def get_notification_prefs():
     email = _resolve_email()
-    prefs = notification_service.get_user_prefs(email)
+    user_id = _resolve_user_id()
+    prefs = notification_service.get_user_prefs(email, user_id)
     return {**prefs, "smtp_configured": notification_service.email_configured()}
 
 @app.post("/api/notifications/preferences")
 def save_notification_prefs(req: NotificationPrefsRequest):
     email = _resolve_email()
-    saved = notification_service.save_user_prefs(email, req.emails)
+    user_id = _resolve_user_id()
+    saved = notification_service.save_user_prefs(email, user_id, req.emails)
     return {**saved, "smtp_configured": notification_service.email_configured()}
 
 @app.post("/api/notifications/test-email")
 def test_email_notification():
     """Send a test email to the current user's configured notification emails."""
     email = _resolve_email()
-    recipients = notification_service.get_user_notification_emails(email)
+    user_id = _resolve_user_id()
+    recipients = notification_service.get_user_notification_emails(email, user_id)
     if not recipients:
         raise HTTPException(status_code=400, detail="No notification emails configured")
     if not notification_service.email_configured():
