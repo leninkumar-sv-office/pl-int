@@ -33,6 +33,7 @@ import MFImportPreviewModal from './components/MFImportPreviewModal';
 import DividendImportPreviewModal from './components/DividendImportPreviewModal';
 import TradePlanner, { openTradePlanner } from './components/BuyPlannerModal';
 import UserSelector from './components/UserSelector';
+import NotificationSettingsModal from './components/NotificationSettingsModal';
 import GoogleLogin from './components/GoogleLogin';
 import { getAuthStatus, verifySession } from './services/api';
 
@@ -139,6 +140,7 @@ export default function App() {
     return saved ? Number(saved) : 600; // default 10 min
   });
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [importPreview, setImportPreview] = useState(null); // parsed contract note preview
@@ -1041,6 +1043,9 @@ export default function App() {
   return (
     <AuthGate>
     <div className="app">
+      {showNotificationSettings && (
+        <NotificationSettingsModal onClose={() => setShowNotificationSettings(false)} />
+      )}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -1239,6 +1244,18 @@ export default function App() {
         <div className="header-actions">
           {/* User selector */}
           <UserSelector currentUserId={currentUserId} onUserChange={handleUserChange} />
+          {/* Notification settings */}
+          <button
+            onClick={() => setShowNotificationSettings(true)}
+            title="Notification Settings"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '16px', padding: '4px 8px', color: 'var(--text-muted)',
+              opacity: 0.7, lineHeight: 1,
+            }}
+          >
+            &#x1F514;
+          </button>
           {/* Zerodha status */}
           {zerodhaStatus && (
             <div className="zerodha-status" title={

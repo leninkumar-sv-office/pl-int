@@ -557,3 +557,20 @@ export async function getAdvisorStatus() {
   const { data } = await api.get('/advisor/status');
   return data;
 }
+
+// ── Notification Preferences ────────────────────────
+
+export async function getNotificationPrefs() {
+  const { data } = await api.get('/notifications/preferences');
+  return data;
+}
+
+export async function saveNotificationPrefs(emails) {
+  const { data } = await api.post('/notifications/preferences', { emails });
+  return data;
+}
+
+export async function testEmailNotification() {
+  const { data } = await api.post('/notifications/test-email');
+  return data;
+}
