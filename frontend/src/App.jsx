@@ -131,10 +131,7 @@ export default function App() {
   const [bulkSellDoneKey, setBulkSellDoneKey] = useState(0); // increments to signal selection clear
   const [marketTicker, setMarketTicker] = useState([]);
   const [tickerLastUpdated, setTickerLastUpdated] = useState(null);
-  const [refreshInterval, setRefreshInterval] = useState(() => {
-    const saved = localStorage.getItem('priceRefreshInterval');
-    return saved ? Number(saved) : 300;
-  });
+  const refreshInterval = 60; // Fixed: backend refreshes prices every 60s
   const [pageRefreshInterval, setPageRefreshInterval] = useState(() => {
     const saved = localStorage.getItem('pageRefreshInterval');
     return saved ? Number(saved) : 600; // default 10 min
@@ -1009,15 +1006,8 @@ export default function App() {
     toast.success('Prices refreshed from live sources');
   };
 
-  const handleIntervalChange = async (e) => {
-    const newInterval = Number(e.target.value);
-    setRefreshInterval(newInterval);
-    localStorage.setItem('priceRefreshInterval', String(newInterval));
-    try {
-      await apiSetRefreshInterval(newInterval);
-    } catch (err) {
-      console.error('Failed to set refresh interval:', err);
-    }
+  const handleIntervalChange = async () => {
+    // No-op: price refresh is fixed at 60s (backend controls this)
   };
 
   const handlePageRefreshChange = (e) => {
@@ -1280,20 +1270,6 @@ export default function App() {
               </a>
             </div>
           )}
-          <div className="refresh-control hide-mobile">
-            <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Prices Reload</span>
-            <select
-              className="refresh-select"
-              value={refreshInterval}
-              onChange={handleIntervalChange}
-              title="How often Zerodha prices are fetched and cached locally"
-            >
-              <option value={60}>1 min</option>
-              <option value={120}>2 min</option>
-              <option value={300}>5 min</option>
-              <option value={600}>10 min</option>
-            </select>
-          </div>
           <div className="refresh-control hide-mobile" title="How often the full page reloads all data from backend">
             <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500, marginRight: 4 }}>Files Reload</span>
             <select
