@@ -27,41 +27,71 @@ _TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 _TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 # Per-user notification preferences
+from .config import DUMPS_BASE
+
+# Legacy shared file (for migration)
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-_PREFS_FILE = _DATA_DIR / "notification_prefs.json"
+_LEGACY_PREFS_FILE = _DATA_DIR / "notification_prefs.json"
 
 
 # ── Per-user notification preferences ────────────────────
+# Stored at: dumps/{email}/settings/notification_prefs.json
 
-def _load_prefs() -> dict:
-    try:
-        with open(_PREFS_FILE) as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+def _prefs_file(user_email: str) -> Path:
+    d = DUMPS_BASE / user_email / "settings"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "notification_prefs.json"
 
 
-def _save_prefs(prefs: dict):
-    os.makedirs(_DATA_DIR, exist_ok=True)
-    with open(_PREFS_FILE, "w") as f:
-        json.dump(prefs, f, indent=2)
+def _sync_prefs_to_drive(user_email: str):
     try:
         from app import drive_service
-        drive_service.sync_data_file("notification_prefs.json")
+        rel_path = f"{user_email}/settings/notification_prefs.json"
+        drive_service.sync_dumps_file(rel_path, email=user_email)
     except Exception:
         pass
 
 
+def _migrate_legacy_prefs(user_email: str) -> dict:
+    """Migrate prefs from legacy shared file to per-user file."""
+    if not _LEGACY_PREFS_FILE.exists():
+        return {"emails": [], "updated_at": ""}
+    try:
+        with open(_LEGACY_PREFS_FILE) as f:
+            all_prefs = json.load(f)
+        user_prefs = all_prefs.get(user_email, {})
+        if user_prefs:
+            # Save to new location
+            fp = _prefs_file(user_email)
+            with open(fp, "w") as f:
+                json.dump(user_prefs, f, indent=2)
+            _sync_prefs_to_drive(user_email)
+            # Remove from legacy
+            del all_prefs[user_email]
+            if all_prefs:
+                with open(_LEGACY_PREFS_FILE, "w") as f:
+                    json.dump(all_prefs, f, indent=2)
+            else:
+                _LEGACY_PREFS_FILE.unlink(missing_ok=True)
+            logger.info(f"[Notify] Migrated notification prefs for {user_email} to per-user file")
+        return user_prefs or {"emails": [], "updated_at": ""}
+    except Exception as e:
+        logger.error(f"[Notify] Legacy prefs migration failed: {e}")
+        return {"emails": [], "updated_at": ""}
+
+
 def get_user_prefs(user_email: str) -> dict:
     """Get notification preferences for a user (by login email)."""
-    prefs = _load_prefs()
-    return prefs.get(user_email, {"emails": [], "updated_at": ""})
+    fp = _prefs_file(user_email)
+    try:
+        with open(fp) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _migrate_legacy_prefs(user_email)
 
 
 def save_user_prefs(user_email: str, emails: List[str]) -> dict:
     """Save notification email addresses for a user. Returns saved prefs."""
-    # Validate and deduplicate emails
     clean_emails = []
     seen = set()
     for e in emails:
@@ -70,14 +100,16 @@ def save_user_prefs(user_email: str, emails: List[str]) -> dict:
             clean_emails.append(e)
             seen.add(e)
 
-    prefs = _load_prefs()
-    prefs[user_email] = {
+    prefs = {
         "emails": clean_emails,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
-    _save_prefs(prefs)
+    fp = _prefs_file(user_email)
+    with open(fp, "w") as f:
+        json.dump(prefs, f, indent=2)
+    _sync_prefs_to_drive(user_email)
     logger.info(f"[Notify] Saved {len(clean_emails)} notification email(s) for {user_email}")
-    return prefs[user_email]
+    return prefs
 
 
 def get_user_notification_emails(user_email: str) -> List[str]:

@@ -1,7 +1,7 @@
 """
-Expiry/maturity alert rules for FD, RD, PPF, NPS, and Standing Instructions.
+Expiry/maturity alert rules for FD, RD, PPF, NPS, SI, and Insurance.
 
-Per-user rules stored in backend/data/expiry_rules.json.
+Per-user rules stored in dumps/{email}/settings/expiry_rules_{userId}.json.
 Background evaluation checks instruments against rules and sends notifications.
 """
 import os
@@ -14,8 +14,7 @@ from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-_RULES_FILE = _DATA_DIR / "expiry_rules.json"
+from .config import DUMPS_BASE
 
 # Valid categories and their rule types
 RULE_TYPES = {
@@ -44,40 +43,84 @@ RULE_TYPES = {
     ],
 }
 
-
-# ── Persistence ──────────────────────────────────────────
-
-def _load_all() -> dict:
-    try:
-        with open(_RULES_FILE) as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+# Legacy file (for migration)
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+_LEGACY_RULES_FILE = _DATA_DIR / "expiry_rules.json"
 
 
-def _save_all(data: dict):
-    os.makedirs(_DATA_DIR, exist_ok=True)
-    with open(_RULES_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+# ── Per-user file paths ─────────────────────────────────
+
+def _settings_dir(email: str) -> Path:
+    """Get the settings directory for a user: dumps/{email}/settings/"""
+    d = DUMPS_BASE / email / "settings"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _rules_file(email: str, user_id: str) -> Path:
+    return _settings_dir(email) / f"expiry_rules_{user_id}.json"
+
+
+def _sync_to_drive(email: str, user_id: str):
+    """Upload user's rules file to Drive under dumps/{email}/settings/."""
     try:
         from app import drive_service
-        drive_service.sync_data_file("expiry_rules.json")
+        rel_path = f"{email}/settings/expiry_rules_{user_id}.json"
+        drive_service.sync_dumps_file(rel_path, email=email)
     except Exception:
         pass
 
 
-def _user_key(email: str, user_id: str) -> str:
-    return f"{email}:{user_id}"
+# ── Persistence ──────────────────────────────────────────
+
+def _load_rules(email: str, user_id: str) -> list:
+    fp = _rules_file(email, user_id)
+    try:
+        with open(fp) as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        # Try legacy migration
+        return _migrate_legacy(email, user_id)
+
+
+def _save_rules(email: str, user_id: str, rules: list):
+    fp = _rules_file(email, user_id)
+    with open(fp, "w") as f:
+        json.dump(rules, f, indent=2)
+    _sync_to_drive(email, user_id)
+
+
+def _migrate_legacy(email: str, user_id: str) -> list:
+    """Migrate rules from legacy shared file to per-user file."""
+    if not _LEGACY_RULES_FILE.exists():
+        return []
+    try:
+        with open(_LEGACY_RULES_FILE) as f:
+            all_data = json.load(f)
+        key = f"{email}:{user_id}"
+        rules = all_data.get(key, [])
+        if rules:
+            _save_rules(email, user_id, rules)
+            # Remove from legacy file
+            del all_data[key]
+            if all_data:
+                with open(_LEGACY_RULES_FILE, "w") as f:
+                    json.dump(all_data, f, indent=2)
+            else:
+                _LEGACY_RULES_FILE.unlink(missing_ok=True)
+            logger.info(f"[ExpiryRules] Migrated {len(rules)} rules for {user_id} to per-user file")
+        return rules
+    except Exception as e:
+        logger.error(f"[ExpiryRules] Legacy migration failed: {e}")
+        return []
 
 
 # ── Public API ───────────────────────────────────────────
 
 def get_rules(email: str, user_id: str, category: str = None) -> List[dict]:
     """Get expiry alert rules for a user, optionally filtered by category."""
-    all_data = _load_all()
-    key = _user_key(email, user_id)
-    rules = all_data.get(key, [])
+    rules = _load_rules(email, user_id)
     if category:
         rules = [r for r in rules if r.get("category") == category]
     return rules
@@ -85,22 +128,17 @@ def get_rules(email: str, user_id: str, category: str = None) -> List[dict]:
 
 def save_rule(email: str, user_id: str, rule_data: dict) -> dict:
     """Create or update an expiry alert rule. Returns the saved rule."""
-    all_data = _load_all()
-    key = _user_key(email, user_id)
-    rules = all_data.get(key, [])
+    rules = _load_rules(email, user_id)
     now = datetime.now().isoformat(timespec="seconds")
 
     rule_id = rule_data.get("id", "").strip()
     if rule_id:
-        # Update existing
         for i, r in enumerate(rules):
             if r["id"] == rule_id:
                 rules[i] = {**r, **rule_data, "updated_at": now}
-                all_data[key] = rules
-                _save_all(all_data)
+                _save_rules(email, user_id, rules)
                 return rules[i]
 
-    # Create new
     rule = {
         "id": str(uuid.uuid4())[:8],
         "category": rule_data.get("category", ""),
@@ -111,22 +149,18 @@ def save_rule(email: str, user_id: str, rule_data: dict) -> dict:
         "updated_at": now,
     }
     rules.append(rule)
-    all_data[key] = rules
-    _save_all(all_data)
+    _save_rules(email, user_id, rules)
     logger.info(f"[ExpiryRules] Created rule: {rule['category']}/{rule['rule_type']} for {user_id}")
     return rule
 
 
 def delete_rule(email: str, user_id: str, rule_id: str) -> bool:
     """Delete an expiry alert rule. Returns True if found and deleted."""
-    all_data = _load_all()
-    key = _user_key(email, user_id)
-    rules = all_data.get(key, [])
+    rules = _load_rules(email, user_id)
     original_len = len(rules)
     rules = [r for r in rules if r["id"] != rule_id]
     if len(rules) < original_len:
-        all_data[key] = rules
-        _save_all(all_data)
+        _save_rules(email, user_id, rules)
         logger.info(f"[ExpiryRules] Deleted rule: {rule_id}")
         return True
     return False
@@ -140,31 +174,25 @@ def get_rule_types() -> dict:
 # ── Evaluator (called by alert_service background thread) ──
 
 def evaluate_expiry_rules():
-    """Check all users' expiry rules against their instrument data.
-    Returns list of (user_email, message) tuples for triggered alerts."""
+    """Check all users' expiry rules against their instrument data."""
     from app.config import get_users
     from app import notification_service
 
-    all_data = _load_all()
-    if not all_data:
+    users = get_users()
+    if not users:
         return
 
-    triggered = []
-
-    for user_key, rules in all_data.items():
-        if not rules:
+    for user in users:
+        email = user.get("email", "")
+        user_id = user.get("id", "")
+        if not email or not user_id:
             continue
 
-        parts = user_key.split(":", 1)
-        if len(parts) != 2:
-            continue
-        email, user_id = parts
-
+        rules = _load_rules(email, user_id)
         enabled_rules = [r for r in rules if r.get("enabled", True)]
         if not enabled_rules:
             continue
 
-        # Load instrument data for this user
         instruments = _load_user_instruments(email, user_id)
 
         for rule in enabled_rules:
@@ -176,28 +204,22 @@ def evaluate_expiry_rules():
             for item in items:
                 msg = _check_rule(item, category, rule_type, days_threshold)
                 if msg:
-                    triggered.append((email, user_id, rule, msg))
-
-    # Send notifications for triggered rules
-    for email, user_id, rule, message in triggered:
-        # Check cooldown (use rule ID + item info as dedup key)
-        from app import alert_service
-        cooldown_key = f"expiry_{rule['id']}"
-        if not alert_service._check_cooldown(cooldown_key, 1440):  # 24h cooldown
-            continue
-
-        success = notification_service.notify(
-            "email", f"Portfolio Alert: {rule['category'].upper()}", message,
-            user_email=email,
-        )
-        alert_service._record_history(
-            cooldown_key, f"Expiry: {rule['category']}/{rule['rule_type']}",
-            "email", message, success,
-        )
+                    from app import alert_service
+                    cooldown_key = f"expiry_{rule['id']}"
+                    if not alert_service._check_cooldown(cooldown_key, 1440):
+                        continue
+                    success = notification_service.notify(
+                        "email", f"Portfolio Alert: {rule['category'].upper()}", msg,
+                        user_email=email,
+                    )
+                    alert_service._record_history(
+                        cooldown_key, f"Expiry: {rule['category']}/{rule['rule_type']}",
+                        "email", msg, success,
+                    )
 
 
 def _load_user_instruments(email: str, user_id: str) -> Dict[str, list]:
-    """Load FD/RD/PPF/NPS/SI data for a specific user."""
+    """Load FD/RD/PPF/NPS/SI/Insurance data for a specific user."""
     result = {"fd": [], "rd": [], "ppf": [], "nps": [], "si": [], "insurance": []}
     try:
         from app.config import get_user_dumps_dir
@@ -205,44 +227,33 @@ def _load_user_instruments(email: str, user_id: str) -> Dict[str, list]:
         if not dumps_dir:
             return result
 
-        # FD
         try:
             from app.fd_database import get_all as get_fds
             result["fd"] = get_fds(dumps_dir)
         except Exception:
             pass
-
-        # RD
         try:
             from app.rd_database import get_all as get_rds
             result["rd"] = get_rds(dumps_dir)
         except Exception:
             pass
-
-        # PPF
         try:
             from app.ppf_database import PPFDatabase
             ppf_db = PPFDatabase(dumps_dir)
             result["ppf"] = ppf_db.get_all()
         except Exception:
             pass
-
-        # NPS
         try:
             from app.nps_database import NPSDatabase
             nps_db = NPSDatabase(dumps_dir)
             result["nps"] = nps_db.get_all()
         except Exception:
             pass
-
-        # SI
         try:
             from app.si_database import get_all as get_sis
             result["si"] = get_sis(dumps_dir)
         except Exception:
             pass
-
-        # Insurance
         try:
             from app.insurance_database import get_all as get_insurance
             result["insurance"] = get_insurance(dumps_dir)
@@ -266,10 +277,8 @@ def _check_rule(item: dict, category: str, rule_type: str, days_threshold: int) 
     if category in ("fd", "rd", "ppf"):
         days_left = item.get("days_to_maturity", -1)
         maturity_date = item.get("maturity_date", "")
-
         if rule_type == "on_maturity" and days_left == 0:
             return f"{category.upper()} '{name}' matures today ({maturity_date})!"
-
         if rule_type == "days_before_maturity" and 0 < days_left <= days_threshold:
             return f"{category.upper()} '{name}' matures in {days_left} day(s) on {maturity_date}."
 
@@ -277,16 +286,13 @@ def _check_rule(item: dict, category: str, rule_type: str, days_threshold: int) 
         days_left = item.get("days_to_expiry", -1)
         expiry_date = item.get("expiry_date", "")
         label = "Insurance" if category == "insurance" else "Standing Instruction"
-
         if rule_type == "on_expiry" and days_left == 0:
             return f"{label} '{name}' expires today ({expiry_date})!"
-
         if rule_type == "days_before_expiry" and 0 < days_left <= days_threshold:
             return f"{label} '{name}' expires in {days_left} day(s) on {expiry_date}."
 
     elif category == "nps":
         if rule_type == "contribution_reminder":
-            # Check if no contribution this month
             contributions = item.get("contributions", [])
             today = datetime.now()
             current_month = today.strftime("%Y-%m")
