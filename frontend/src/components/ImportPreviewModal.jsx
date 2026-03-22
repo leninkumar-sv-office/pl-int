@@ -9,6 +9,7 @@ const formatINR = (num) => {
 export default function ImportPreviewModal({ data, existingSymbols = new Set(), stockSummary = [], onConfirm, onCancel }) {
   useEscapeKey(onCancel);
   const [confirming, setConfirming] = useState(false);
+  const [hideDuplicates, setHideDuplicates] = useState(false);
   // Editable symbol overrides: { index: newSymbol }
   const [symbolEdits, setSymbolEdits] = useState({});
 
@@ -23,8 +24,10 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
     symbolEdits[i] !== undefined ? { ...t, symbol: symbolEdits[i] } : t
   );
 
-  const buys = editedTransactions.filter(t => t.action === 'Buy');
-  const sells = editedTransactions.filter(t => t.action === 'Sell');
+  const allBuys = editedTransactions.filter(t => t.action === 'Buy');
+  const allSells = editedTransactions.filter(t => t.action === 'Sell');
+  const buys = hideDuplicates ? allBuys.filter(t => !t.isDuplicate) : allBuys;
+  const sells = hideDuplicates ? allSells.filter(t => !t.isDuplicate) : allSells;
 
   // Non-duplicate transactions (the ones that will actually be imported)
   const importableBuys = buys.filter(t => !t.isDuplicate);
@@ -165,10 +168,10 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
     );
   };
 
-  const newBuyCount = buys.filter(t => isNewSymbol(t.symbol) && !t.isDuplicate).length;
-  const newSellCount = sells.filter(t => isNewSymbol(t.symbol) && !t.isDuplicate).length;
-  const dupBuyCount = buys.filter(t => t.isDuplicate).length;
-  const dupSellCount = sells.filter(t => t.isDuplicate).length;
+  const newBuyCount = allBuys.filter(t => isNewSymbol(t.symbol) && !t.isDuplicate).length;
+  const newSellCount = allSells.filter(t => isNewSymbol(t.symbol) && !t.isDuplicate).length;
+  const dupBuyCount = allBuys.filter(t => t.isDuplicate).length;
+  const dupSellCount = allSells.filter(t => t.isDuplicate).length;
   const totalDupCount = dupBuyCount + dupSellCount;
 
   return (
@@ -228,6 +231,20 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
               }}>
                 {totalDupCount} Duplicate{totalDupCount > 1 ? 's' : ''}
               </span>
+            )}
+            {totalDupCount > 0 && (
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer',
+                fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={hideDuplicates}
+                  onChange={(e) => setHideDuplicates(e.target.checked)}
+                  style={{ cursor: 'pointer', accentColor: '#d97706' }}
+                />
+                Hide duplicates
+              </label>
             )}
           </div>
         </div>
