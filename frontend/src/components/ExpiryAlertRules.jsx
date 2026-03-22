@@ -270,8 +270,9 @@ export default function ExpiryAlertRules({ category }) {
                         type="number"
                         value={newPct}
                         onChange={(e) => setNewPct(Number(e.target.value) || 25)}
-                        min={1}
+                        min={0.01}
                         max={500}
+                        step="0.01"
                         style={{ ...inputStyle, width: '60px' }}
                       />
                     </div>
