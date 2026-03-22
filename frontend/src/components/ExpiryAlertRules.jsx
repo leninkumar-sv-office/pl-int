@@ -266,15 +266,14 @@ export default function ExpiryAlertRules({ category }) {
                   {/* Threshold % input for profit rules */}
                   {selectedOpt?.needsPct && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Profit %:</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Threshold %:</span>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={newPct}
                         onChange={(e) => setNewPct(e.target.value)}
-                        min={0.0001}
-                        max={500}
-                        step="any"
-                        style={{ ...inputStyle, width: '60px' }}
+                        placeholder="e.g. 0.01"
+                        style={{ ...inputStyle, width: '70px' }}
                       />
                     </div>
                   )}
