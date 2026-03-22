@@ -32,8 +32,15 @@ from .models import MFHolding, MFSoldPosition
 
 
 def _sync_to_drive(filepath):
-    """No-op — Google Drive desktop sync handles file upload automatically."""
-    pass
+    """Clean up Google Drive conflict copies after file save.
+    Drive desktop sync handles the actual upload automatically."""
+    stem = Path(filepath).stem
+    for dup in Path(filepath).parent.glob(f"{stem} (*).xlsx"):
+        try:
+            dup.unlink()
+            logger.info(f"[MF-XlsxDB] Removed Drive conflict copy: {dup.name}")
+        except Exception:
+            pass
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1404,24 +1411,17 @@ class MFXlsxPortfolio:
                         if val and str(val).strip() == old_code:
                             idx_ws.cell(r, c, value=new_code)
             wb.save(old_filepath)
+            wb.close()
 
             old_filepath.rename(new_filepath)
+
+            # Clean up conflict copies
+            _sync_to_drive(new_filepath)
 
             self._cache.pop(old_code, None)
             del self._file_map[old_code]
             self._file_map[new_code] = new_filepath
             self._name_map[new_code] = display_name
-
-            _sync_to_drive(new_filepath)
-            try:
-                from . import drive_service
-                from .config import DUMPS_BASE
-                old_rel = old_filepath.resolve().relative_to(DUMPS_BASE.resolve())
-                parts = old_rel.parts
-                subfolder = "dumps/" + str(Path(*parts[:-1]))
-                drive_service.delete_file(parts[-1], subfolder=subfolder)
-            except Exception:
-                pass
 
             logger.info(f"[MF-XlsxDB] Renamed fund {old_code} -> {new_code}")
             return True

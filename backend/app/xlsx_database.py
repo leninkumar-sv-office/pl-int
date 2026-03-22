@@ -24,8 +24,15 @@ from .models import Holding, SoldPosition, Transaction
 
 
 def _sync_to_drive(filepath: Path):
-    """No-op — Google Drive desktop sync handles file upload automatically."""
-    pass
+    """Clean up Google Drive conflict copies after file save.
+    Drive desktop sync handles the actual upload automatically."""
+    stem = Path(filepath).stem
+    for dup in Path(filepath).parent.glob(f"{stem} (*).xlsx"):
+        try:
+            dup.unlink()
+            logger.info(f"[XlsxDB] Removed Drive conflict copy: {dup.name}")
+        except Exception:
+            pass
 
 # ═══════════════════════════════════════════════════════════
 #  SYMBOL RESOLUTION  (dynamic from Zerodha + NSE, no hardcoding)
@@ -1152,29 +1159,19 @@ class XlsxPortfolio:
                     if val_b and str(val_b).strip().upper() == old_symbol.upper():
                         idx_ws.cell(r, 2, value=new_symbol)
             wb.save(old_filepath)
+            wb.close()
 
             # Rename the file
             old_filepath.rename(new_filepath)
+
+            # Clean up conflict copies + old filename copies
+            _sync_to_drive(new_filepath)
 
             # Update internal caches
             self._invalidate_symbol(old_symbol)
             del self._file_map[old_symbol]
             self._file_map[new_symbol] = new_filepath
             self._name_map[new_symbol] = display_name
-
-            # Sync: upload new file, delete old from Drive
-            _sync_to_drive(new_filepath)
-            try:
-                from . import drive_service
-                from .config import DUMPS_BASE
-                old_rel = old_filepath.resolve().relative_to(DUMPS_BASE.resolve())
-                # old_rel is like "email/Name/Stocks/OldName.xlsx"
-                # Drive subfolder = "dumps/email/Name/Stocks", filename = "OldName.xlsx"
-                parts = old_rel.parts
-                subfolder = "dumps/" + str(Path(*parts[:-1]))
-                drive_service.delete_file(parts[-1], subfolder=subfolder)
-            except Exception:
-                pass  # Best effort
 
             logger.info(f"[XlsxDB] Renamed stock {old_symbol} -> {new_symbol} ({new_filepath.name})")
             return True
