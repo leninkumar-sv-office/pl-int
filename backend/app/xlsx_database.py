@@ -1032,12 +1032,17 @@ class XlsxPortfolio:
         """Update a held lot's Buy row in the xlsx.
         Supports updating: buy_date, quantity, buy_price.
         Returns the updated Holding or None if not found."""
+        # Ensure indexes are populated
+        if not self._holding_index:
+            self.get_all_data()
         holding = self.get_holding_by_id(holding_id)
         if not holding:
+            logger.error(f"[XlsxDB] update_holding: {holding_id} not in index ({len(self._holding_index)} holdings)")
             return None
 
         filepath = self._holding_file.get(holding_id)
         if not filepath:
+            logger.error(f"[XlsxDB] update_holding: no file for {holding_id} ({holding.symbol})")
             return None
 
         try:
@@ -1084,7 +1089,8 @@ class XlsxPortfolio:
                         if fp == filepath:
                             self._invalidate_symbol(sym)
                             break
-                    return self.get_holding_by_id(holding_id)
+                    logger.info(f"[XlsxDB] Updated holding {holding_id} in {filepath.name}")
+                    return holding  # Return original holding as confirmation
 
             wb.close()
         except Exception as e:
