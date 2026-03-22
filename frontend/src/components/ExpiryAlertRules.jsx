@@ -56,7 +56,7 @@ export default function ExpiryAlertRules({ category }) {
   const [adding, setAdding] = useState(false);
   const [newType, setNewType] = useState('');
   const [newDays, setNewDays] = useState(30);
-  const [newPct, setNewPct] = useState(25);
+  const [newPct, setNewPct] = useState('25');
   const [newTime, setNewTime] = useState('16:30');
   const [saving, setSaving] = useState(false);
 
@@ -95,7 +95,7 @@ export default function ExpiryAlertRules({ category }) {
         payload.days = newDays;
       }
       if (selectedOpt?.needsPct) {
-        payload.threshold_pct = newPct;
+        payload.threshold_pct = parseFloat(newPct) || 25;
       }
       if (selectedOpt?.needsTime) {
         payload.alert_time = newTime;
@@ -105,7 +105,7 @@ export default function ExpiryAlertRules({ category }) {
       setAdding(false);
       setNewType('');
       setNewDays(30);
-      setNewPct(25);
+      setNewPct('25');
       setNewTime('16:30');
     } catch { /* ignore */ }
     setSaving(false);
@@ -269,7 +269,7 @@ export default function ExpiryAlertRules({ category }) {
                       <input
                         type="number"
                         value={newPct}
-                        onChange={(e) => setNewPct(Number(e.target.value) || 25)}
+                        onChange={(e) => setNewPct(e.target.value)}
                         min={0.0001}
                         max={500}
                         step="any"
