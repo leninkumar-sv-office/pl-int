@@ -960,7 +960,7 @@ function RenameStockModal({ stock, onSave, onClose }) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const results = await searchStock(q);
+        const results = await searchStock(q, '');
         setSuggestions((results || []).slice(0, 10));
         setShowSuggestions(true);
       } catch { setSuggestions([]); }
