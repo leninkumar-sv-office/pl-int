@@ -1129,8 +1129,9 @@ class XlsxPortfolio:
             return False
 
     def rename_stock(self, old_symbol: str, new_symbol: str, new_name: str = "") -> bool:
-        """Rename a stock symbol by updating the Index sheet in-place.
-        Does NOT rename the file — avoids Google Drive creating duplicate copies."""
+        """Rename a stock symbol by updating the Code in the Index sheet.
+        Does NOT rename the file — avoids Google Drive creating duplicate copies.
+        The Code cell (C1) contains values like 'NSE:SYMBOL' or 'BOM:SYMBOL'."""
         filepath = self._file_map.get(old_symbol)
         if not filepath or not filepath.exists():
             return False
@@ -1141,12 +1142,22 @@ class XlsxPortfolio:
             wb = openpyxl.load_workbook(filepath)
             if "Index" in wb.sheetnames:
                 idx_ws = wb["Index"]
-                # Update symbol references in Index sheet
-                for r in range(1, 6):
-                    for c in range(1, 6):
-                        val = idx_ws.cell(r, c).value
-                        if val and str(val).strip().upper() == old_symbol.upper():
-                            idx_ws.cell(r, c, value=new_symbol)
+                # Find the Code cell and update it
+                for row in idx_ws.iter_rows(min_row=1, max_row=15, values_only=False):
+                    vals = [c.value for c in row]
+                    if len(vals) >= 3 and vals[1] == "Code" and vals[2]:
+                        old_code = str(vals[2])
+                        if ":" in old_code:
+                            exchange_prefix = old_code.split(":")[0]
+                            # Map exchange prefix for new symbol
+                            new_exchange = "NSE"
+                            if exchange_prefix in ("BOM", "BSE"):
+                                new_exchange = "NSE"  # Default to NSE for renamed
+                            row[2].value = f"NSE:{new_symbol}"
+                        else:
+                            row[2].value = new_symbol
+                        logger.info(f"[XlsxDB] Updated Code: {old_code} -> NSE:{new_symbol}")
+                        break
             wb.save(filepath)
             wb.close()
 
