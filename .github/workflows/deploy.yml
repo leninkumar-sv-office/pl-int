@@ -186,6 +186,30 @@ jobs:
           echo "App server started (PID: $(lsof -ti:9999 -sTCP:LISTEN))"
 
       # ── Docker mode: docker compose ────────────────────────
+      - name: Prepare Docker mount directories
+        if: env.DEPLOY_MODE == 'docker'
+        run: |
+          cd "$DEPLOY_DIR"
+          echo "Cleaning stale cache files from data mount (preserving persistent files)..."
+
+          # Files to preserve in backend/data/ (tokens, alerts, settings)
+          PRESERVE="google_tokens.json alerts.json alert_history.json .jwt_secret users.json deploy_tag.txt"
+
+          # Remove stale cache files (market data, symbol cache, etc.)
+          if [ -d backend/data ]; then
+            for f in backend/data/*.json; do
+              fname=$(basename "$f")
+              if echo "$PRESERVE" | grep -qw "$fname"; then
+                echo "  Keeping: $fname"
+              else
+                rm -f "$f"
+                echo "  Removed stale: $fname"
+              fi
+            done
+          fi
+
+          echo "Mount directories ready"
+
       - name: Docker build and start
         if: env.DEPLOY_MODE == 'docker'
         run: |
