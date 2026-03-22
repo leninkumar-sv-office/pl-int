@@ -950,6 +950,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideZeroHeld, setHideZeroHeld] = useState(true);
+  const [renamingStock, setRenamingStock] = useState(null); // { symbol, name }
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
   const dividendFileInputRef = useRef(null);
@@ -1921,6 +1922,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         {stock.symbol}
                         <span className="stock-exchange">{stock.exchange}</span>
                         {live?.is_manual && <span className="manual-badge">Manual</span>}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setRenamingStock({ symbol: stock.symbol, name: stock.name }); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px', fontSize: '11px', color: 'var(--text-muted)', opacity: 0.5, verticalAlign: 'middle' }}
+                          title="Rename stock symbol"
+                        >✎</button>
                       </div>
                       <div className="stock-name">{stock.name}</div>
                       {stock.last_tx_date && (
@@ -2342,6 +2348,23 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             Sell {selectedCount} Lot{selectedCount > 1 ? 's' : ''} ({selectedQty} share{selectedQty !== 1 ? 's' : ''}{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)} (${selectedPLPct >= 0 ? '+' : ''}${selectedPLPct.toFixed(2)}%${selectedPLPa !== null ? `, ${selectedPLPa >= 0 ? '+' : ''}${selectedPLPa.toFixed(1)}% p.a.` : ''})` : ''})
           </button>
         </div>
+      )}
+
+      {/* Rename Stock Modal */}
+      {renamingStock && (
+        <EditLotModal
+          title={`Rename Stock — ${renamingStock.symbol}`}
+          fields={[
+            { key: 'new_symbol', label: 'New Symbol', type: 'text', value: renamingStock.symbol },
+            { key: 'new_name', label: 'Display Name', type: 'text', value: renamingStock.name },
+          ]}
+          onSave={async (values) => {
+            await renameStock(renamingStock.symbol, values.new_symbol, values.new_name);
+            setRenamingStock(null);
+            window.location.reload();
+          }}
+          onClose={() => setRenamingStock(null)}
+        />
       )}
     </div>
   );

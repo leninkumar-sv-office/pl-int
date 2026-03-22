@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { getMFHistory, updateMFHolding, updateMFSoldRow } from '../services/api';
+import { getMFHistory, updateMFHolding, updateMFSoldRow, renameMFund } from '../services/api';
 import ExpiryAlertRules from './ExpiryAlertRules';
 import EditLotModal from './EditLotModal';
 
@@ -797,6 +797,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const [expandedFund, setExpandedFund] = useState(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
+  const [renamingFund, setRenamingFund] = useState(null); // { fund_code, name }
   const casFileInputRef = useRef(null);
   const [casImporting, setCasImporting] = useState(false);
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
@@ -1335,6 +1336,11 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                             SIP
                           </span>
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setRenamingFund({ fund_code: f.fund_code, name: f.name }); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px', fontSize: '11px', color: 'var(--text-muted)', opacity: 0.5, verticalAlign: 'middle' }}
+                          title="Rename fund"
+                        >✎</button>
                       </div>
                       <div style={{ fontSize: '10px', color: 'var(--text-muted)', opacity: 0.5, marginTop: '1px' }}>
                         Direct Growth
@@ -1588,6 +1594,23 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
             Redeem {selectedItems.length} Lot{selectedItems.length > 1 ? 's' : ''} ({formatUnits(selectedUnits)} units{selectedPL !== 0 ? `, ${selectedPL >= 0 ? '+' : ''}${formatINR(selectedPL)} (${selectedPLPct >= 0 ? '+' : ''}${selectedPLPct.toFixed(2)}%)` : ''})
           </button>
         </div>
+      )}
+
+      {/* Rename Fund Modal */}
+      {renamingFund && (
+        <EditLotModal
+          title={`Rename Fund — ${renamingFund.fund_code}`}
+          fields={[
+            { key: 'new_code', label: 'Fund Code', type: 'text', value: renamingFund.fund_code },
+            { key: 'new_name', label: 'Display Name', type: 'text', value: renamingFund.name },
+          ]}
+          onSave={async (values) => {
+            await renameMFund(renamingFund.fund_code, values.new_code, values.new_name);
+            setRenamingFund(null);
+            window.location.reload();
+          }}
+          onClose={() => setRenamingFund(null)}
+        />
       )}
     </div>
   );
