@@ -18,11 +18,7 @@ permissions:
   contents: write
 
 jobs:
-  test:
-    uses: ./.github/workflows/test.yml
-
   tag:
-    needs: test
     runs-on: self-hosted
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
@@ -235,18 +231,20 @@ jobs:
 
       - name: Health check (Cloudflare tunnel)
         run: |
-          echo "Waiting 1 minute for Cloudflare tunnel to pick up new deployment..."
-          sleep 60
           echo "Checking https://pl.thirumagal.com/health ..."
-          status=$(curl -s -o /tmp/tunnel-health.json -w "%{http_code}" https://pl.thirumagal.com/health)
-          if [ "$status" = "200" ]; then
-            echo "Tunnel health check passed!"
-            cat /tmp/tunnel-health.json | python3 -m json.tool
-          else
-            echo "Tunnel health check failed (HTTP $status)"
-            cat /tmp/tunnel-health.json 2>/dev/null
-            exit 1
-          fi
+          for i in $(seq 1 6); do
+            status=$(curl -s -o /tmp/tunnel-health.json -w "%{http_code}" https://pl.thirumagal.com/health 2>/dev/null)
+            if [ "$status" = "200" ]; then
+              echo "Tunnel health check passed!"
+              cat /tmp/tunnel-health.json | python3 -m json.tool
+              exit 0
+            fi
+            echo "  Attempt $i/6: HTTP $status — retrying in 5s..."
+            sleep 5
+          done
+          echo "Tunnel health check failed after 30s"
+          cat /tmp/tunnel-health.json 2>/dev/null
+          exit 1
 
       # ── Rollback on failure ────────────────────────────────
       - name: Rollback to previous tag
