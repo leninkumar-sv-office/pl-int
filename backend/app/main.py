@@ -2040,6 +2040,8 @@ MARKET_TICKER_SYMBOLS = [
     {"key": "SILVER",    "yahoo": "SI%3DF",       "label": "Silver",     "type": "commodity", "unit": "₹/g",    "kite": True, "divisor": 1000},
     {"key": "SGX",       "yahoo": "%5ESTI",         "label": "SGX STI",    "type": "index",                        "kite": False},
     {"key": "NIKKEI",    "yahoo": "%5EN225",      "label": "Nikkei",     "type": "index",                        "kite": False},
+    {"key": "DOWJONES", "yahoo": "%5EDJI",        "label": "Dow Jones",  "type": "index",                        "kite": False},
+    {"key": "SP500",     "yahoo": "%5EGSPC",      "label": "S&P 500",   "type": "index",                        "kite": False},
     {"key": "SGDINR",    "yahoo": "SGDINR%3DX",   "label": "SGD/INR",   "type": "forex",                        "kite": False},
     {"key": "USDINR",    "yahoo": "USDINR%3DX",   "label": "USD/INR",   "type": "forex",     "kite": True},
     {"key": "CRUDEOIL",  "yahoo": "CL%3DF",       "label": "Crude Oil", "type": "commodity", "unit": "₹/bbl",   "kite": True},
