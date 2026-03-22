@@ -25,6 +25,18 @@ const RULE_OPTIONS = {
     { type: 'days_before_expiry', label: 'Alert days before expiry', needsDays: true },
     { type: 'on_expiry', label: 'Alert on expiry day', needsDays: false },
   ],
+  stocks: [
+    { type: 'profit_threshold', label: 'Lot profit exceeds %', needsPct: true, needsTime: true },
+  ],
+  mf: [
+    { type: 'profit_threshold', label: 'Unit profit exceeds %', needsPct: true, needsTime: true },
+  ],
+};
+
+const inputStyle = {
+  padding: '4px 8px', fontSize: '12px',
+  background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)',
+  borderRadius: '4px', outline: 'none',
 };
 
 export default function ExpiryAlertRules({ category }) {
@@ -34,6 +46,8 @@ export default function ExpiryAlertRules({ category }) {
   const [adding, setAdding] = useState(false);
   const [newType, setNewType] = useState('');
   const [newDays, setNewDays] = useState(30);
+  const [newPct, setNewPct] = useState(25);
+  const [newTime, setNewTime] = useState('16:30');
   const [saving, setSaving] = useState(false);
 
   const options = RULE_OPTIONS[category] || [];
@@ -56,20 +70,33 @@ export default function ExpiryAlertRules({ category }) {
     if (expanded) loadRules();
   }, [expanded, loadRules]);
 
+  const selectedOpt = newType ? options.find(o => o.type === newType) : null;
+
   const handleAdd = async () => {
     if (!newType) return;
     setSaving(true);
     try {
-      const rule = await saveExpiryRule({
+      const payload = {
         category,
         rule_type: newType,
-        days: newDays,
         enabled: true,
-      });
+      };
+      if (selectedOpt?.needsDays) {
+        payload.days = newDays;
+      }
+      if (selectedOpt?.needsPct) {
+        payload.threshold_pct = newPct;
+      }
+      if (selectedOpt?.needsTime) {
+        payload.alert_time = newTime;
+      }
+      const rule = await saveExpiryRule(payload);
       setRules(prev => [...prev, rule]);
       setAdding(false);
       setNewType('');
       setNewDays(30);
+      setNewPct(25);
+      setNewTime('16:30');
     } catch { /* ignore */ }
     setSaving(false);
   };
@@ -92,6 +119,10 @@ export default function ExpiryAlertRules({ category }) {
     const opt = options.find(o => o.type === rule.rule_type);
     const label = opt?.label || rule.rule_type;
     if (opt?.needsDays) return `${label}: ${rule.days}d`;
+    if (opt?.needsPct) {
+      const time = rule.alert_time || '16:30';
+      return `${label}: ${rule.threshold_pct || 25}% @ ${time}`;
+    }
     return label;
   };
 
@@ -207,7 +238,8 @@ export default function ExpiryAlertRules({ category }) {
                       <option key={opt.type} value={opt.type}>{opt.label}</option>
                     ))}
                   </select>
-                  {newType && options.find(o => o.type === newType)?.needsDays && (
+                  {/* Days input for expiry rules */}
+                  {selectedOpt?.needsDays && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Days:</span>
                       <input
@@ -216,11 +248,33 @@ export default function ExpiryAlertRules({ category }) {
                         onChange={(e) => setNewDays(Number(e.target.value) || 30)}
                         min={1}
                         max={365}
-                        style={{
-                          width: '60px', padding: '4px 8px', fontSize: '12px',
-                          background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)',
-                          borderRadius: '4px', outline: 'none',
-                        }}
+                        style={{ ...inputStyle, width: '60px' }}
+                      />
+                    </div>
+                  )}
+                  {/* Threshold % input for profit rules */}
+                  {selectedOpt?.needsPct && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Profit %:</span>
+                      <input
+                        type="number"
+                        value={newPct}
+                        onChange={(e) => setNewPct(Number(e.target.value) || 25)}
+                        min={1}
+                        max={500}
+                        style={{ ...inputStyle, width: '60px' }}
+                      />
+                    </div>
+                  )}
+                  {/* Alert time input for profit rules */}
+                  {selectedOpt?.needsTime && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Alert at:</span>
+                      <input
+                        type="time"
+                        value={newTime}
+                        onChange={(e) => setNewTime(e.target.value)}
+                        style={{ ...inputStyle, width: '100px' }}
                       />
                     </div>
                   )}

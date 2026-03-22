@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { getStockHistory } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import ExpiryAlertRules from './ExpiryAlertRules';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -1209,6 +1210,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
           <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
           Stock Summary
+          <ExpiryAlertRules category="stocks" />
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className="section-badge">
