@@ -64,48 +64,22 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _LEGACY_RULES_FILE = _DATA_DIR / "expiry_rules.json"
 
 
-# ── Per-user file paths ─────────────────────────────────
+# ── Persistence (direct Google Drive) ─────────────────────
 
-def _settings_dir(user_id: str, email: str) -> Path:
-    """Get settings dir: dumps/{email}/{Name}/settings/"""
-    dumps_dir = get_user_dumps_dir(user_id, email)
-    d = dumps_dir / "settings"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+_RULES_FILE = "expiry_rules.json"
 
-
-def _rules_file(user_id: str, email: str) -> Path:
-    return _settings_dir(user_id, email) / "expiry_rules.json"
-
-
-def _sync_to_drive(user_id: str, email: str):
-    """Upload user's rules file to Drive."""
-    try:
-        from app import drive_service
-        dumps_dir = get_user_dumps_dir(user_id, email)
-        rel_path = dumps_dir.relative_to(DUMPS_BASE) / "settings" / "expiry_rules.json"
-        drive_service.sync_dumps_file(str(rel_path), email=email)
-    except Exception as e:
-        logger.error(f"[ExpiryRules] Drive sync failed: {e}")
-
-
-# ── Persistence ──────────────────────────────────────────
 
 def _load_rules(email: str, user_id: str) -> list:
-    fp = _rules_file(user_id, email)
-    try:
-        with open(fp) as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except (FileNotFoundError, json.JSONDecodeError):
-        return _migrate_legacy(email, user_id)
+    from . import drive_settings
+    data = drive_settings.read_json(email, user_id, _RULES_FILE, default=[])
+    if not data:
+        data = _migrate_legacy(email, user_id)
+    return data if isinstance(data, list) else []
 
 
 def _save_rules(email: str, user_id: str, rules: list):
-    fp = _rules_file(user_id, email)
-    with open(fp, "w") as f:
-        json.dump(rules, f, indent=2)
-    _sync_to_drive(user_id, email)
+    from . import drive_settings
+    drive_settings.write_json(email, user_id, _RULES_FILE, rules)
 
 
 def _migrate_legacy(email: str, user_id: str) -> list:

@@ -34,82 +34,19 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _LEGACY_PREFS_FILE = _DATA_DIR / "notification_prefs.json"
 
 
-# ── Per-user notification preferences ────────────────────
-# Stored at: dumps/{email}/{Name}/settings/notification_prefs.json
+# ── Per-user notification preferences (direct Google Drive) ────
 
-def _prefs_file(user_email: str, user_id: str) -> Path:
-    dumps_dir = get_user_dumps_dir(user_id, user_email)
-    d = dumps_dir / "settings"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "notification_prefs.json"
-
-
-def _sync_prefs_to_drive(user_email: str, user_id: str):
-    try:
-        from app import drive_service
-        dumps_dir = get_user_dumps_dir(user_id, user_email)
-        rel_path = dumps_dir.relative_to(DUMPS_BASE) / "settings" / "notification_prefs.json"
-        drive_service.sync_dumps_file(str(rel_path), email=user_email)
-    except Exception as e:
-        logger.error(f"[Notify] Drive sync failed: {e}")
-
-
-def _migrate_legacy_prefs(user_email: str, user_id: str) -> dict:
-    """Migrate from legacy locations to per-user file."""
-    # Try legacy v2 (dumps/{email}/settings/notification_prefs.json)
-    legacy_v2 = DUMPS_BASE / user_email / "settings" / "notification_prefs.json"
-    if legacy_v2.exists():
-        try:
-            with open(legacy_v2) as f:
-                prefs = json.load(f)
-            if prefs.get("emails"):
-                fp = _prefs_file(user_email, user_id)
-                with open(fp, "w") as f:
-                    json.dump(prefs, f, indent=2)
-                _sync_prefs_to_drive(user_email, user_id)
-                legacy_v2.unlink(missing_ok=True)
-                logger.info(f"[Notify] Migrated prefs from v2 for {user_id}")
-                return prefs
-        except Exception:
-            pass
-
-    # Try legacy v1 (data/notification_prefs.json keyed by email)
-    if _LEGACY_PREFS_FILE.exists():
-        try:
-            with open(_LEGACY_PREFS_FILE) as f:
-                all_prefs = json.load(f)
-            user_prefs = all_prefs.get(user_email, {})
-            if user_prefs.get("emails"):
-                fp = _prefs_file(user_email, user_id)
-                with open(fp, "w") as f:
-                    json.dump(user_prefs, f, indent=2)
-                _sync_prefs_to_drive(user_email, user_id)
-                del all_prefs[user_email]
-                if all_prefs:
-                    with open(_LEGACY_PREFS_FILE, "w") as f:
-                        json.dump(all_prefs, f, indent=2)
-                else:
-                    _LEGACY_PREFS_FILE.unlink(missing_ok=True)
-                logger.info(f"[Notify] Migrated prefs from v1 for {user_id}")
-                return user_prefs
-        except Exception as e:
-            logger.error(f"[Notify] Legacy migration failed: {e}")
-
-    return {"emails": [], "updated_at": ""}
+_PREFS_FILE = "notification_prefs.json"
 
 
 def get_user_prefs(user_email: str, user_id: str) -> dict:
-    """Get notification preferences for a user persona."""
-    fp = _prefs_file(user_email, user_id)
-    try:
-        with open(fp) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return _migrate_legacy_prefs(user_email, user_id)
+    """Get notification preferences from Google Drive."""
+    from . import drive_settings
+    return drive_settings.read_json(user_email, user_id, _PREFS_FILE, default={"emails": [], "updated_at": ""})
 
 
 def save_user_prefs(user_email: str, user_id: str, emails: List[str]) -> dict:
-    """Save notification email addresses for a user persona."""
+    """Save notification email addresses directly to Google Drive."""
     clean_emails = []
     seen = set()
     for e in emails:
@@ -122,10 +59,8 @@ def save_user_prefs(user_email: str, user_id: str, emails: List[str]) -> dict:
         "emails": clean_emails,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
-    fp = _prefs_file(user_email, user_id)
-    with open(fp, "w") as f:
-        json.dump(prefs, f, indent=2)
-    _sync_prefs_to_drive(user_email, user_id)
+    from . import drive_settings
+    drive_settings.write_json(user_email, user_id, _PREFS_FILE, prefs)
     logger.info(f"[Notify] Saved {len(clean_emails)} notification email(s) for {user_id}")
     return prefs
 
