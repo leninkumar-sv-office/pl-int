@@ -270,12 +270,19 @@ def _sync_folder_down(service, folder_id: str, local_dir: Path, depth: int = 0):
         if not page_token:
             break
 
+    # Build set of names on Drive for cleanup later
+    drive_names = set()
+    drive_folders = set()
+
     downloaded = 0
     for item in all_items:
         local_path = local_dir / item["name"]
         if item["mimeType"] == "application/vnd.google-apps.folder":
+            drive_folders.add(item["name"])
+            drive_names.add(item["name"])
             _sync_folder_down(service, item["id"], local_path, depth + 1)
         else:
+            drive_names.add(item["name"])
             need_download = False
             if not local_path.exists():
                 need_download = True
@@ -310,6 +317,30 @@ def _sync_folder_down(service, folder_id: str, local_dir: Path, depth: int = 0):
     if downloaded > 0:
         indent = "  " * depth
         logger.info(f"[Drive] {indent}{local_dir.name}/: downloaded {downloaded} file(s)")
+
+    # Remove local files/folders that no longer exist on Drive
+    removed = 0
+    try:
+        for entry in local_dir.iterdir():
+            if entry.name.startswith(".") or entry.name == "__pycache__":
+                continue  # Skip hidden files and cache dirs
+            if entry.name not in drive_names:
+                try:
+                    if entry.is_dir():
+                        import shutil
+                        shutil.rmtree(entry)
+                    else:
+                        entry.unlink()
+                    removed += 1
+                    logger.info(f"[Drive] Removed stale local {'dir' if entry.is_dir() else 'file'}: {entry}")
+                except Exception as e:
+                    logger.error(f"[Drive] Failed to remove {entry}: {e}")
+    except Exception as e:
+        logger.error(f"[Drive] Cleanup scan failed for {local_dir}: {e}")
+
+    if removed > 0:
+        indent = "  " * depth
+        logger.info(f"[Drive] {indent}{local_dir.name}/: removed {removed} stale item(s)")
 
 
 def sync_from_drive(email: str = ""):
