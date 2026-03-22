@@ -1011,8 +1011,9 @@ class XlsxPortfolio:
                 tx_date = _parse_date(ws.cell(row_idx, 1).value)
                 action = ws.cell(row_idx, 3).value
                 price = _safe_float(ws.cell(row_idx, 5).value)
+                qty = _safe_int(ws.cell(row_idx, 4).value)
                 if (action == "Buy" and tx_date == holding.buy_date and
-                        abs(price - holding.buy_price) < 0.01):
+                        qty == holding.quantity):
                     ws.delete_rows(row_idx)
                     wb.save(filepath)
                     _sync_to_drive(filepath)
@@ -1052,8 +1053,7 @@ class XlsxPortfolio:
                 price = _safe_float(ws.cell(row_idx, 5).value)
 
                 if (action == "Buy" and tx_date == holding.buy_date and
-                        qty == holding.quantity and
-                        abs(price - (holding.price or holding.buy_price)) < 0.02):
+                        qty == holding.quantity):
                     # Found it — apply updates
                     if "buy_date" in updates:
                         try:
