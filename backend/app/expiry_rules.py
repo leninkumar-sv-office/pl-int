@@ -43,9 +43,11 @@ RULE_TYPES = {
     ],
     "stocks": [
         {"type": "profit_threshold", "label": "Lot profit exceeds %", "needs_pct": True, "needs_time": True},
+        {"type": "day_drop_threshold", "label": "1D price drop exceeds %", "needs_pct": True, "needs_time": True},
     ],
     "mf": [
         {"type": "profit_threshold", "label": "Unit profit exceeds %", "needs_pct": True, "needs_time": True},
+        {"type": "day_drop_threshold", "label": "1D NAV drop exceeds %", "needs_pct": True, "needs_time": True},
     ],
 }
 
@@ -167,8 +169,8 @@ def save_rule(email: str, user_id: str, rule_data: dict) -> dict:
         "created_at": now,
         "updated_at": now,
     }
-    # Profit threshold rules: persist extra fields
-    if rule_data.get("rule_type") == "profit_threshold":
+    # Profit/drop threshold rules: persist extra fields
+    if rule_data.get("rule_type") in ("profit_threshold", "day_drop_threshold"):
         rule["threshold_pct"] = rule_data.get("threshold_pct", 25)
         rule["alert_time"] = rule_data.get("alert_time", "16:30")
     rules.append(rule)
@@ -214,9 +216,10 @@ def evaluate_expiry_rules():
 
         instruments = _load_user_instruments(email, user_id)
 
-        # Separate profit rules from expiry rules
-        profit_rules = [r for r in enabled_rules if r.get("rule_type") == "profit_threshold"]
-        expiry_rules_list = [r for r in enabled_rules if r.get("rule_type") != "profit_threshold"]
+        # Separate profit/drop rules from expiry rules
+        _special_types = ("profit_threshold", "day_drop_threshold")
+        profit_rules = [r for r in enabled_rules if r.get("rule_type") in _special_types]
+        expiry_rules_list = [r for r in enabled_rules if r.get("rule_type") not in _special_types]
 
         # Evaluate expiry rules (existing logic, unchanged)
         for rule in expiry_rules_list:
@@ -339,14 +342,15 @@ def _is_within_alert_window(alert_time: str) -> bool:
 
 
 def _evaluate_profit_rule(rule: dict, email: str, user_id: str, notification_service):
-    """Evaluate a profit_threshold rule for stocks or MF."""
+    """Evaluate a profit_threshold or day_drop_threshold rule for stocks or MF."""
     from app import alert_service
 
     alert_time = rule.get("alert_time", "16:30")
     if not _is_within_alert_window(alert_time):
         return
 
-    cooldown_key = f"profit_{rule['id']}"
+    rule_type = rule.get("rule_type", "")
+    cooldown_key = f"{'profit' if rule_type == 'profit_threshold' else 'drop'}_{rule['id']}"
     if not alert_service._check_cooldown(cooldown_key, 1440):
         return
 
@@ -354,25 +358,40 @@ def _evaluate_profit_rule(rule: dict, email: str, user_id: str, notification_ser
     threshold = rule.get("threshold_pct", 25)
 
     qualifying_lots = []
-    if category == "stocks":
-        qualifying_lots = _get_stock_lots_above_threshold(email, user_id, threshold)
-    elif category == "mf":
-        qualifying_lots = _get_mf_lots_above_threshold(email, user_id, threshold)
+    if rule_type == "profit_threshold":
+        if category == "stocks":
+            qualifying_lots = _get_stock_lots_above_threshold(email, user_id, threshold)
+        elif category == "mf":
+            qualifying_lots = _get_mf_lots_above_threshold(email, user_id, threshold)
+    elif rule_type == "day_drop_threshold":
+        if category == "stocks":
+            qualifying_lots = _get_stock_day_drops(email, user_id, threshold)
+        elif category == "mf":
+            qualifying_lots = _get_mf_day_drops(email, user_id, threshold)
 
     if not qualifying_lots:
         return
 
-    subject = f"Portfolio Alert: {len(qualifying_lots)} {'stock lots' if category == 'stocks' else 'MF units'} exceed {threshold}% profit"
-    html_body = _build_profit_alert_html(qualifying_lots, category, threshold)
-    plain_body = _build_profit_alert_plain(qualifying_lots, category, threshold)
+    if rule_type == "profit_threshold":
+        subject = f"Portfolio Alert: {len(qualifying_lots)} {'stock lots' if category == 'stocks' else 'MF units'} exceed {threshold}% profit"
+        html_body = _build_profit_alert_html(qualifying_lots, category, threshold)
+        plain_body = _build_profit_alert_plain(qualifying_lots, category, threshold)
+        history_label = f"Profit: {category}/{threshold}%"
+        history_msg = f"{len(qualifying_lots)} lots exceed {threshold}%"
+    else:
+        label = "stocks" if category == "stocks" else "MF funds"
+        subject = f"Portfolio Alert: {len(qualifying_lots)} {label} dropped >{threshold}% today"
+        html_body = _build_drop_alert_html(qualifying_lots, category, threshold)
+        plain_body = _build_drop_alert_plain(qualifying_lots, category, threshold)
+        history_label = f"Drop: {category}/{threshold}%"
+        history_msg = f"{len(qualifying_lots)} items dropped >{threshold}%"
 
     success = notification_service.notify(
         "email", subject, plain_body, html_body=html_body,
         user_email=email,
     )
     alert_service._record_history(
-        cooldown_key, f"Profit: {category}/{threshold}%",
-        "email", f"{len(qualifying_lots)} lots exceed {threshold}%", success,
+        cooldown_key, history_label, "email", history_msg, success,
     )
 
 
@@ -572,4 +591,194 @@ def _build_profit_alert_plain(lots: list, category: str, threshold: float) -> st
         )
     total_pl = sum(l["pl_inr"] for l in lots)
     lines.append(f"\nTotal unrealized profit: {_fmt_inr(total_pl)}")
+    return "\n".join(lines)
+
+
+# ── Day Drop Evaluation ─────────────────────────────────
+
+def _get_stock_day_drops(email: str, user_id: str, threshold_pct: float) -> list:
+    """Get stocks where 1D price change is negative and exceeds threshold."""
+    try:
+        from app.xlsx_database import XlsxPortfolio
+        from app import stock_service
+
+        dumps_dir = get_user_dumps_dir(user_id, email)
+        if not dumps_dir:
+            return []
+
+        db = XlsxPortfolio(dumps_dir / "Stocks", read_only=True)
+        holdings, _, _ = db.get_all_data()
+        if not holdings:
+            return []
+
+        # Group by symbol to avoid duplicates
+        symbols_seen = set()
+        symbol_data = {}
+        for h in holdings:
+            if h.symbol not in symbols_seen:
+                symbols_seen.add(h.symbol)
+                symbol_data[h.symbol] = {"exchange": h.exchange, "qty": 0, "invested": 0}
+            symbol_data[h.symbol]["qty"] += h.quantity
+            symbol_data[h.symbol]["invested"] += h.buy_price * h.quantity
+
+        symbols = [(sym, d["exchange"]) for sym, d in symbol_data.items()]
+        live_data = stock_service.get_cached_prices(symbols)
+
+        result = []
+        for sym, info in symbol_data.items():
+            price_info = live_data.get(sym)
+            if not price_info:
+                alt = "NSE" if info["exchange"] == "BSE" else "BSE"
+                price_info = live_data.get(f"{sym}:{alt}")
+                if not price_info:
+                    continue
+
+            day_change_pct = price_info.get("day_change_pct", 0)
+            # We want negative drops that exceed threshold (e.g., -3% when threshold is 2%)
+            if day_change_pct >= 0 or abs(day_change_pct) < threshold_pct:
+                continue
+
+            current_price = price_info.get("current_price", 0)
+            prev_close = price_info.get("previous_close", 0) or (current_price - price_info.get("day_change", 0))
+            day_change = price_info.get("day_change", 0)
+            total_value = current_price * info["qty"]
+            day_loss_inr = day_change * info["qty"]
+
+            result.append({
+                "name": sym,
+                "exchange": info["exchange"],
+                "qty": info["qty"],
+                "prev_close": round(prev_close, 2),
+                "current_price": round(current_price, 2),
+                "day_change": round(day_change, 2),
+                "day_change_pct": round(day_change_pct, 2),
+                "day_loss_inr": round(day_loss_inr, 2),
+                "total_value": round(total_value, 2),
+            })
+
+        result.sort(key=lambda x: x["day_change_pct"])  # Most negative first
+        return result
+    except Exception as e:
+        logger.error(f"[ExpiryRules] Stock day-drop eval error for {user_id}: {e}")
+        return []
+
+
+def _get_mf_day_drops(email: str, user_id: str, threshold_pct: float) -> list:
+    """Get MF funds where 1D NAV change is negative and exceeds threshold."""
+    try:
+        from app.mf_xlsx_database import MFXlsxPortfolio, fetch_live_navs, compute_nav_changes
+
+        dumps_dir = get_user_dumps_dir(user_id, email)
+        if not dumps_dir:
+            return []
+
+        mf_dir = dumps_dir / "Mutual Funds"
+        if not mf_dir.exists():
+            return []
+
+        db = MFXlsxPortfolio(mf_dir)
+        all_codes = list(db._file_map.keys())
+        if not all_codes:
+            return []
+
+        live_navs = fetch_live_navs(all_codes)
+
+        result = []
+        for fund_code in all_codes:
+            try:
+                holdings, _, idx_data = db._get_fund_data(fund_code)
+            except Exception:
+                continue
+
+            name = db._name_map.get(fund_code, fund_code)
+            current_nav = live_navs.get(fund_code, 0.0) or idx_data.get("current_nav", 0.0)
+            if current_nav <= 0:
+                continue
+
+            total_units = sum(h.units for h in holdings)
+            if total_units <= 0:
+                continue
+
+            nav_changes = compute_nav_changes(fund_code, name, current_nav)
+            day_change_pct = nav_changes.get("day_change_pct", 0)
+            day_change = nav_changes.get("day_change", 0)
+
+            if day_change_pct >= 0 or abs(day_change_pct) < threshold_pct:
+                continue
+
+            total_value = current_nav * total_units
+            day_loss_inr = day_change * total_units
+
+            result.append({
+                "name": name,
+                "fund_code": fund_code,
+                "qty": round(total_units, 4),
+                "prev_close": round(current_nav - day_change, 4),
+                "current_price": round(current_nav, 4),
+                "day_change": round(day_change, 4),
+                "day_change_pct": round(day_change_pct, 2),
+                "day_loss_inr": round(day_loss_inr, 2),
+                "total_value": round(total_value, 2),
+            })
+
+        result.sort(key=lambda x: x["day_change_pct"])  # Most negative first
+        return result
+    except Exception as e:
+        logger.error(f"[ExpiryRules] MF day-drop eval error for {user_id}: {e}")
+        return []
+
+
+def _build_drop_alert_html(items: list, category: str, threshold: float) -> str:
+    """Build HTML email body for day drop alert."""
+    label = "Stock" if category == "stocks" else "Mutual Fund"
+    name_col = "Stock" if category == "stocks" else "Fund"
+    qty_col = "Qty" if category == "stocks" else "Units"
+
+    rows = ""
+    for item in items:
+        rows += f"""<tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;color:#fff">{item['name']}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;text-align:right;color:#fff">{item['qty']}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;text-align:right;color:#fff">{_fmt_inr(item['prev_close'])}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;text-align:right;color:#ff4d4d">{_fmt_inr(item['current_price'])}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;text-align:right;color:#ff4d4d">{item['day_change_pct']:.2f}%</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;text-align:right;color:#ff4d4d">{_fmt_inr(item['day_loss_inr'])}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #333;text-align:right;color:#fff">{_fmt_inr(item['total_value'])}</td>
+        </tr>"""
+
+    total_loss = sum(i["day_loss_inr"] for i in items)
+
+    return f"""<div style="background:#1a1a2e;padding:24px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+        <h2 style="color:#ff4d4d;margin:0 0 4px">{len(items)} {label}{'s' if len(items)!=1 else ''} Dropped &gt;{threshold:.0f}% Today</h2>
+        <p style="color:#888;margin:0 0 16px;font-size:13px">Total day loss: <span style="color:#ff4d4d;font-weight:600">{_fmt_inr(total_loss)}</span></p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+                <tr style="border-bottom:2px solid #444">
+                    <th style="padding:8px 12px;text-align:left;color:#888;text-transform:uppercase;font-size:11px">{name_col}</th>
+                    <th style="padding:8px 12px;text-align:right;color:#888;text-transform:uppercase;font-size:11px">{qty_col}</th>
+                    <th style="padding:8px 12px;text-align:right;color:#888;text-transform:uppercase;font-size:11px">Prev Close</th>
+                    <th style="padding:8px 12px;text-align:right;color:#888;text-transform:uppercase;font-size:11px">Current</th>
+                    <th style="padding:8px 12px;text-align:right;color:#888;text-transform:uppercase;font-size:11px">1D %</th>
+                    <th style="padding:8px 12px;text-align:right;color:#888;text-transform:uppercase;font-size:11px">Day Loss</th>
+                    <th style="padding:8px 12px;text-align:right;color:#888;text-transform:uppercase;font-size:11px">Value</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
+        <p style="color:#555;font-size:11px;margin:16px 0 0">Portfolio Dashboard \u2014 Day Drop Alert</p>
+    </div>"""
+
+
+def _build_drop_alert_plain(items: list, category: str, threshold: float) -> str:
+    """Build plain text email body for day drop alert."""
+    label = "Stock" if category == "stocks" else "MF"
+    lines = [f"{len(items)} {label} dropped >{threshold:.0f}% today:\n"]
+    for item in items:
+        lines.append(
+            f"  {item['name']} | {item['qty']} units | "
+            f"{_fmt_inr(item['prev_close'])} \u2192 {_fmt_inr(item['current_price'])} "
+            f"({item['day_change_pct']:.2f}%) | Loss: {_fmt_inr(item['day_loss_inr'])} | Value: {_fmt_inr(item['total_value'])}"
+        )
+    total_loss = sum(i["day_loss_inr"] for i in items)
+    lines.append(f"\nTotal day loss: {_fmt_inr(total_loss)}")
     return "\n".join(lines)

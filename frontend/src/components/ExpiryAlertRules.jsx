@@ -27,9 +27,11 @@ const RULE_OPTIONS = {
   ],
   stocks: [
     { type: 'profit_threshold', label: 'Lot profit exceeds %', needsPct: true, needsTime: true },
+    { type: 'day_drop_threshold', label: '1D price drop exceeds %', needsPct: true, needsTime: true },
   ],
   mf: [
     { type: 'profit_threshold', label: 'Unit profit exceeds %', needsPct: true, needsTime: true },
+    { type: 'day_drop_threshold', label: '1D NAV drop exceeds %', needsPct: true, needsTime: true },
   ],
 };
 
