@@ -1050,18 +1050,19 @@ class XlsxPortfolio:
             ws = wb["Trading History"]
             header_row = self._find_header_row(ws)
 
-            # Find the matching Buy row
-            logger.info(f"[XlsxDB] update_holding: searching for date={holding.buy_date} qty={holding.quantity} in {filepath.name} rows {header_row+1}-{ws.max_row}")
+            # Find the matching Buy row by regenerating the ID for each row
+            exchange = holding.exchange
             for row_idx in range(header_row + 1, ws.max_row + 1):
-                tx_date = _parse_date(ws.cell(row_idx, 1).value)
                 action = str(ws.cell(row_idx, 3).value or "").strip()
+                if action != "Buy":
+                    continue
+                tx_date = _parse_date(ws.cell(row_idx, 1).value)
+                price = _safe_float(ws.cell(row_idx, 5).value)
+                cost = _safe_float(ws.cell(row_idx, 6).value)
                 qty = _safe_int(ws.cell(row_idx, 4).value)
-
-                if action == "Buy":
-                    logger.debug(f"[XlsxDB]   row {row_idx}: date={tx_date} qty={qty}")
-
-                if (action == "Buy" and tx_date == holding.buy_date and
-                        qty == holding.quantity):
+                buy_price = (cost / qty) if cost > 0 and qty > 0 else price
+                row_id = _gen_id(holding.symbol, exchange, tx_date, buy_price, row_idx)
+                if row_id == holding_id:
                     # Found it — apply updates
                     if "buy_date" in updates:
                         try:
