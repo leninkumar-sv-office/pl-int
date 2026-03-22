@@ -1924,7 +1924,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         {live?.is_manual && <span className="manual-badge">Manual</span>}
                         <button
                           onClick={(e) => { e.stopPropagation(); setRenamingStock({ symbol: stock.symbol, name: stock.name }); }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px', fontSize: '11px', color: 'var(--text-muted)', opacity: 0.5, verticalAlign: 'middle' }}
+                          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px', cursor: 'pointer', padding: '1px 4px', fontSize: '10px', color: 'var(--text-muted)', verticalAlign: 'middle', marginLeft: '4px' }}
                           title="Rename stock symbol"
                         >✎</button>
                       </div>
