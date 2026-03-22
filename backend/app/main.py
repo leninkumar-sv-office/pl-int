@@ -3170,10 +3170,12 @@ def test_email_notification():
 
 class ExpiryRuleRequest(BaseModel):
     id: str = ""
-    category: str          # fd, rd, ppf, nps, si
-    rule_type: str         # days_before_maturity, on_maturity, etc.
+    category: str          # fd, rd, ppf, nps, si, stocks, mf
+    rule_type: str         # days_before_maturity, on_maturity, profit_threshold, etc.
     days: int = 30
     enabled: bool = True
+    threshold_pct: float = None  # for profit/drop threshold rules
+    alert_time: str = None       # HH:MM for daily alert time
 
 @app.get("/api/expiry-rules")
 def get_expiry_rules(category: str = None):
@@ -3185,7 +3187,7 @@ def get_expiry_rules(category: str = None):
 def save_expiry_rule(req: ExpiryRuleRequest):
     email = _resolve_email()
     user_id = _resolve_user_id()
-    return expiry_rules.save_rule(email, user_id, req.dict())
+    return expiry_rules.save_rule(email, user_id, req.dict(exclude_none=True))
 
 @app.delete("/api/expiry-rules/{rule_id}")
 def delete_expiry_rule(rule_id: str):
