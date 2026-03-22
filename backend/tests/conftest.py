@@ -134,12 +134,29 @@ def app_client(tmp_data_dir, tmp_dumps_dir):
         # dividend_parser data dir
         patch("app.dividend_parser.DATA_DIR", tmp_data_dir),
 
+        # notification_service paths
+        patch("app.notification_service.DUMPS_BASE", tmp_dumps_dir),
+        patch("app.notification_service._LEGACY_PREFS_FILE", tmp_data_dir / "notification_prefs.json"),
+
+        # alert_service paths
+        patch("app.alert_service._DATA_DIR", tmp_data_dir),
+        patch("app.alert_service._ALERTS_FILE", tmp_data_dir / "alerts.json"),
+        patch("app.alert_service._HISTORY_FILE", tmp_data_dir / "alert_history.json"),
+
+        # expiry_rules paths
+        patch("app.expiry_rules.DUMPS_BASE", tmp_dumps_dir),
+        patch("app.expiry_rules._LEGACY_RULES_FILE", tmp_data_dir / "expiry_rules.json"),
+
+        # user_settings paths
+        patch("app.user_settings.DUMPS_BASE", tmp_dumps_dir),
+
         # Mock external service calls so tests never hit the network
         patch("app.zerodha_service.is_configured", return_value=False),
         patch("app.zerodha_service.is_session_valid", return_value=False),
         patch("app.zerodha_service.fetch_quotes", return_value={}),
         patch("app.drive_service.sync_data_file", return_value=None),
         patch("app.drive_service.sync_dumps_file", return_value=None),
+        patch("app.drive_service.upload_file", return_value=None),
         patch("app.stock_service.fetch_live_data", return_value=None),
     ]
 

@@ -1,0 +1,49 @@
+{
+  "leninkumar.sv.ai@gmail.com:lenin": [
+    {
+      "id": "7d634679",
+      "category": "fd",
+      "rule_type": "days_before_maturity",
+      "days": 30,
+      "enabled": true,
+      "created_at": "2026-03-21T22:18:30",
+      "updated_at": "2026-03-21T22:18:30"
+    },
+    {
+      "id": "31e676f3",
+      "category": "rd",
+      "rule_type": "days_before_maturity",
+      "days": 30,
+      "enabled": true,
+      "created_at": "2026-03-21T22:18:41",
+      "updated_at": "2026-03-21T22:18:41"
+    },
+    {
+      "id": "58a46de2",
+      "category": "ppf",
+      "rule_type": "days_before_maturity",
+      "days": 30,
+      "enabled": true,
+      "created_at": "2026-03-21T22:18:49",
+      "updated_at": "2026-03-21T22:18:49"
+    },
+    {
+      "id": "d6194e54",
+      "category": "nps",
+      "rule_type": "contribution_reminder",
+      "days": 30,
+      "enabled": true,
+      "created_at": "2026-03-21T22:19:01",
+      "updated_at": "2026-03-21T22:19:01"
+    },
+    {
+      "id": "9cec3080",
+      "category": "si",
+      "rule_type": "days_before_expiry",
+      "days": 30,
+      "enabled": true,
+      "created_at": "2026-03-21T22:19:18",
+      "updated_at": "2026-03-21T22:19:18"
+    }
+  ]
+}
