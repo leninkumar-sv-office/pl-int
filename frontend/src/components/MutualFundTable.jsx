@@ -929,7 +929,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
 
   return (
     <div className="section">
-      <div className="section-header">
+      <div className="section-header" style={{ position: 'relative' }}>
         <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
           <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
           Mutual Fund Summary
