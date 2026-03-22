@@ -194,10 +194,10 @@ def verify_session_token(token: str) -> Optional[dict]:
 
 
 def _token_file_for_email(email: str) -> Path:
-    """Get token file path in dumps/{email}/google_tokens.json (email-scoped, not per-user)."""
+    """Get token file path in dumps/{email}/settings/google_tokens.json (email-scoped)."""
     from .config import DUMPS_BASE
     if email:
-        d = DUMPS_BASE / email
+        d = DUMPS_BASE / email / "settings"
         d.mkdir(parents=True, exist_ok=True)
         return d / "google_tokens.json"
     return _LEGACY_TOKEN_FILE
@@ -206,12 +206,12 @@ def _token_file_for_email(email: str) -> Path:
 def _load_all_tokens() -> dict:
     """Load tokens from per-email dumps paths + legacy file."""
     result = {}
-    # Load from per-email dumps paths: dumps/{email}/google_tokens.json
+    # Load from per-email dumps paths: dumps/{email}/settings/google_tokens.json
     from .config import DUMPS_BASE
     if DUMPS_BASE.exists():
         for email_dir in DUMPS_BASE.iterdir():
             if email_dir.is_dir() and "@" in email_dir.name:
-                tf = email_dir / "google_tokens.json"
+                tf = email_dir / "settings" / "google_tokens.json"
                 if tf.exists():
                     try:
                         data = json.loads(tf.read_text())
