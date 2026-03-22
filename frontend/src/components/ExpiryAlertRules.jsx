@@ -95,7 +95,8 @@ export default function ExpiryAlertRules({ category }) {
         payload.days = newDays;
       }
       if (selectedOpt?.needsPct) {
-        payload.threshold_pct = parseFloat(newPct) || 25;
+        const parsed = parseFloat(newPct);
+        payload.threshold_pct = (parsed > 0) ? parsed : 25;
       }
       if (selectedOpt?.needsTime) {
         payload.alert_time = newTime;
