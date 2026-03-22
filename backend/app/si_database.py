@@ -36,13 +36,8 @@ SI_FILE = SI_DIR / "Standing Instructions.xlsx"
 
 
 def _sync_to_drive(filepath: Path):
-    try:
-        from .config import DUMPS_BASE
-        from . import drive_service
-        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
-        drive_service.sync_dumps_file(str(rel))
-    except Exception:
-        pass
+    """No-op — Google Drive desktop sync handles file upload automatically."""
+    pass
 
 
 def _delete_from_drive(filepath: Path):

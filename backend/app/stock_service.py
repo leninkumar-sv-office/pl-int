@@ -78,11 +78,6 @@ def _save_prices_file(prices: Dict[str, dict]):
         existing.update(prices)
         with open(_PRICES_FILE, "w") as f:
             json.dump(existing, f, indent=2)
-        try:
-            from . import drive_service
-            drive_service.sync_data_file("stock_prices.json")
-        except Exception:
-            pass
     except Exception as e:
         logger.error(f"[StockService] Failed to save prices file: {e}")
 

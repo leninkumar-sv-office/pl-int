@@ -34,11 +34,6 @@ def _write_db(data: dict):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=2, default=str)
-    try:
-        from . import drive_service
-        drive_service.sync_data_file("portfolio.json")
-    except Exception:
-        pass
 
 
 # ── Holdings ──────────────────────────────────────────────

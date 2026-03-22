@@ -30,11 +30,6 @@ def save_users(users: list):
     """Persist user list to users.json."""
     _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _USERS_FILE.write_text(json.dumps(users, indent=2))
-    try:
-        from . import drive_service
-        drive_service.sync_data_file("users.json")
-    except Exception:
-        pass
 
 
 def get_user_by_id(user_id: str) -> dict | None:

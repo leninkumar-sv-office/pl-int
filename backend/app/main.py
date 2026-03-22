@@ -29,7 +29,7 @@ from .models import (
     CDSLCASUpload, MFImportPayload,
     DividendStatementUpload,
 )
-from .xlsx_database import xlsx_db as db, XlsxPortfolio, _sync_to_drive
+from .xlsx_database import xlsx_db as db, XlsxPortfolio
 from .mf_xlsx_database import mf_db, clear_nav_cache as clear_mf_nav_cache, MFXlsxPortfolio
 from .config import get_users, save_users, get_user_dumps_dir, get_user_email, get_users_for_email
 from . import stock_service
@@ -559,14 +559,8 @@ def drive_status():
 
 @app.post("/api/drive/sync")
 def drive_sync_now():
-    """Trigger a full sync from Drive."""
-    from app import drive_service
-    email = _resolve_email()
-    if email:
-        drive_service.sync_from_drive(email)
-    else:
-        drive_service.sync_all_emails()
-    return {"status": "ok", "message": "Sync complete"}
+    """No-op — Google Drive desktop sync handles everything."""
+    return {"status": "ok", "message": "Google Drive desktop sync active"}
 
 
 # ══════════════════════════════════════════════════════════
@@ -650,7 +644,6 @@ def track_stocks(symbols: List[Dict]):
         if db._find_file_for_symbol(symbol):
             continue
         filepath = db._create_stock_file(symbol, exchange, name)
-        _sync_to_drive(filepath)
         added.append({"symbol": symbol, "exchange": exchange, "name": name})
     # Rebuild file map so new files are indexed
     db._build_file_map()
@@ -2096,11 +2089,6 @@ def _save_ticker_file(tickers: List[dict]):
             })
     with open(_TICKER_FILE, "w") as f:
         json.dump(result, f, indent=2)
-    try:
-        from app import drive_service
-        drive_service.sync_data_file("market_ticker.json")
-    except Exception:
-        pass
 
 
 def _record_ticker_history(tickers: List[dict]):
@@ -2132,11 +2120,6 @@ def _record_ticker_history(tickers: List[dict]):
         os.makedirs(os.path.dirname(_TICKER_HISTORY_FILE), exist_ok=True)
         with open(_TICKER_HISTORY_FILE, "w") as f:
             json.dump(history, f, indent=2)
-        try:
-            from app import drive_service
-            drive_service.sync_data_file("market_ticker_history.json")
-        except Exception:
-            pass
 
     return history
 
@@ -3058,25 +3041,8 @@ async def generate_analysis_pdf(request: Request):
     filepath = gen_pdf(md, output_path=output_path)
     filename = os.path.basename(filepath)
 
-    # Sync to Google Drive
-    drive_synced = False
-    try:
-        from . import drive_service
-        email = ""
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Bearer "):
-            from .auth import verify_session_token
-            user = verify_session_token(auth_header[7:])
-            if user:
-                email = user.get("email", "")
-        subfolder = f"dumps/temp/analysis/{date_dir}"
-        drive_service.upload_file(filepath, subfolder=subfolder, email=email)
-        drive_synced = True
-        logger.info(f"[Analysis] PDF synced to Drive: {subfolder}/{filename}")
-    except Exception as e:
-        logger.error(f"[Analysis] Drive sync failed: {e}")
-
-    return {"path": filepath, "filename": filename, "drive_synced": drive_synced}
+    # Google Drive desktop sync handles upload automatically
+    return {"path": filepath, "filename": filename, "drive_synced": True}
 
 
 # ══════════════════════════════════════════════════════════

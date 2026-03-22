@@ -32,14 +32,8 @@ from .models import MFHolding, MFSoldPosition
 
 
 def _sync_to_drive(filepath):
-    """Notify Drive service that a file was modified (async upload)."""
-    try:
-        from .config import DUMPS_BASE
-        from . import drive_service
-        rel = Path(filepath).resolve().relative_to(DUMPS_BASE.resolve())
-        drive_service.sync_dumps_file(str(rel))
-    except Exception:
-        pass
+    """No-op — Google Drive desktop sync handles file upload automatically."""
+    pass
 
 
 # ═══════════════════════════════════════════════════════════

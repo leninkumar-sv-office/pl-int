@@ -52,13 +52,8 @@ _lock = threading.Lock()
 
 
 def _sync_to_drive(filepath: Path):
-    try:
-        from .config import DUMPS_BASE
-        from . import drive_service
-        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
-        drive_service.sync_dumps_file(str(rel))
-    except Exception:
-        pass
+    """No-op — Google Drive desktop sync handles file upload automatically."""
+    pass
 
 
 def _delete_from_drive(filepath: Path):
@@ -612,15 +607,6 @@ def _update_xlsx_fd(filepath: Path, data: dict, dumps_dir: Path) -> dict:
 
     wb.save(str(filepath))
     wb.close()
-
-    # Sync to drive
-    try:
-        from .config import DUMPS_BASE
-        from . import drive_service
-        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
-        drive_service.sync_dumps_file(str(rel))
-    except Exception:
-        pass
 
     # Re-parse and return updated data
     return _parse_fd_xlsx(filepath)

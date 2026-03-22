@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getStockHistory, updateHolding, updateSoldRow, renameStock } from '../services/api';
+import { getStockHistory, updateHolding, updateSoldRow, renameStock, lookupStockName } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import ExpiryAlertRules from './ExpiryAlertRules';
 import EditLotModal from './EditLotModal';
@@ -942,6 +942,75 @@ const FILTER_SELECT_STYLE = {
   cursor: 'pointer',
   maxWidth: '110px',
 };
+
+/* ── Rename Stock Modal with auto-fetch ────────────────── */
+function RenameStockModal({ stock, onSave, onClose }) {
+  const [newSymbol, setNewSymbol] = useState(stock.symbol);
+  const [newName, setNewName] = useState(stock.name);
+  const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false);
+
+  const handleSymbolBlur = async () => {
+    const sym = newSymbol.trim().toUpperCase();
+    if (!sym || sym === stock.symbol) return;
+    setFetching(true);
+    try {
+      const data = await lookupStockName(sym);
+      if (data?.name) setNewName(data.name);
+    } catch { /* ignore */ }
+    setFetching(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newSymbol.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(newSymbol.trim().toUpperCase(), newName.trim());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+        <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Rename Stock — {stock.symbol}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' }}>New Symbol</label>
+            <input
+              type="text"
+              value={newSymbol}
+              onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+              onBlur={handleSymbolBlur}
+              required
+              style={{ width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', outline: 'none' }}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' }}>
+              Display Name {fetching && <span style={{ color: 'var(--blue)', fontSize: '10px' }}>(fetching...)</span>}
+            </label>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              required
+              style={{ width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', outline: 'none' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" disabled={saving} style={{ background: 'var(--blue)', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: 'var(--radius-sm)', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
@@ -2352,14 +2421,10 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
       {/* Rename Stock Modal */}
       {renamingStock && (
-        <EditLotModal
-          title={`Rename Stock — ${renamingStock.symbol}`}
-          fields={[
-            { key: 'new_symbol', label: 'New Symbol', type: 'text', value: renamingStock.symbol },
-            { key: 'new_name', label: 'Display Name', type: 'text', value: renamingStock.name },
-          ]}
-          onSave={async (values) => {
-            await renameStock(renamingStock.symbol, values.new_symbol, values.new_name);
+        <RenameStockModal
+          stock={renamingStock}
+          onSave={async (newSymbol, newName) => {
+            await renameStock(renamingStock.symbol, newSymbol, newName);
             setRenamingStock(null);
             window.location.reload();
           }}

@@ -56,11 +56,6 @@ def _save_alerts(alerts: list):
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_ALERTS_FILE, "w") as f:
         json.dump(alerts, f, indent=2)
-    try:
-        from app import drive_service
-        drive_service.sync_data_file("alerts.json")
-    except Exception:
-        pass
 
 
 def _load_history() -> list:
@@ -79,11 +74,6 @@ def _save_history(history: list):
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_HISTORY_FILE, "w") as f:
         json.dump(history, f, indent=2)
-    try:
-        from app import drive_service
-        drive_service.sync_data_file("alert_history.json")
-    except Exception:
-        pass
 
 
 # ── Public API ───────────────────────────────────────────
