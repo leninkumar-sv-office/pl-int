@@ -133,19 +133,14 @@ function FDDetail({ fd, onEdit, onDelete }) {
       {/* Actions */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
         <span style={{ fontSize: '13px', color: 'var(--text-dim)', marginRight: '4px' }}>Actions:</span>
-        {onEdit && fd.source === 'manual' && (
+        {onEdit && (
           <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(fd); }}>Edit</button>
         )}
-        {onDelete && fd.source === 'manual' && (
+        {onDelete && (
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
             onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete FD "${fd.name}"?`)) onDelete(fd.id); }}>
             Delete
           </button>
-        )}
-        {fd.source === 'xlsx' && (
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Imported from Excel — edit the source file to modify
-          </span>
         )}
       </div>
 

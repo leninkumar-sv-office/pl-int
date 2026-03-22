@@ -97,6 +97,21 @@ export async function deleteHolding(holdingId) {
   return data;
 }
 
+export async function updateHolding(holdingId, updates) {
+  const { data } = await api.put(`/portfolio/holdings/${holdingId}`, updates);
+  return data;
+}
+
+export async function updateSoldRow(symbol, rowIdx, updates) {
+  const { data } = await api.put(`/portfolio/sold/${symbol}/${rowIdx}`, updates);
+  return data;
+}
+
+export async function renameStock(symbol, newSymbol, newName) {
+  const { data } = await api.put(`/portfolio/stocks/${symbol}/rename`, { new_symbol: newSymbol, new_name: newName });
+  return data;
+}
+
 export async function getStockSummary() {
   const { data } = await api.get('/portfolio/stock-summary');
   return data;
@@ -282,6 +297,21 @@ export async function addMFHolding(payload) {
 
 export async function redeemMFUnits(payload) {
   const { data } = await api.post('/mutual-funds/redeem', payload);
+  return data;
+}
+
+export async function updateMFHolding(fundCode, holdingId, updates) {
+  const { data } = await api.put(`/mutual-funds/holdings/${encodeURIComponent(fundCode)}/${holdingId}`, updates);
+  return data;
+}
+
+export async function updateMFSoldRow(fundCode, rowIdx, updates) {
+  const { data } = await api.put(`/mutual-funds/sold/${encodeURIComponent(fundCode)}/${rowIdx}`, updates);
+  return data;
+}
+
+export async function renameMFund(fundCode, newCode, newName) {
+  const { data } = await api.put(`/mutual-funds/${encodeURIComponent(fundCode)}/rename`, { new_code: newCode, new_name: newName });
   return data;
 }
 

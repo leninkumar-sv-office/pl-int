@@ -72,6 +72,7 @@ class SoldPosition(BaseModel):
     sell_price: float
     sell_date: str
     realized_pl: float
+    row_idx: int = 0  # 1-based row in Trading History sheet (for editing)
 
 
 class StockLiveData(BaseModel):
@@ -195,6 +196,7 @@ class MFSoldPosition(BaseModel):
     sell_nav: float        # NAV at redemption
     sell_date: str
     realized_pl: float
+    row_idx: int = 0  # 1-based row in Trading History sheet (for editing)
 
 
 class MFSummaryItem(BaseModel):

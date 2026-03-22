@@ -129,6 +129,7 @@ def fifo_match(buys: list, sells: list):
                 "quantity": matched,
                 "realized_pl": round(realized_pl, 2),
                 "row_idx": lot.get("row_idx", 0),
+                "sell_row_idx": sell.get("row_idx", 0),
             })
             lot["remaining"] -= matched
             sell_qty -= matched
@@ -617,7 +618,7 @@ class XlsxPortfolio:
                     "quantity": fs["quantity"],
                     "realized_pl": fs["realized_pl"],
                     "exchange": fs.get("buy_exchange", exchange),
-                    "row_idx": fs.get("row_idx", 0),
+                    "row_idx": fs.get("sell_row_idx", fs.get("row_idx", 0)),
                 })
 
         # Build Holding objects directly
@@ -658,6 +659,7 @@ class XlsxPortfolio:
                 sell_price=round(s["sell_price"], 2),
                 sell_date=s["sell_date"],
                 realized_pl=s["realized_pl"],
+                row_idx=s.get("row_idx", 0),
             ))
 
         return holdings, sold, all_dividends
@@ -1023,6 +1025,168 @@ class XlsxPortfolio:
         except Exception as e:
             logger.error(f"[XlsxDB] Failed to remove holding: {e}")
         return False
+
+    def update_holding(self, holding_id: str, updates: dict) -> Optional[Holding]:
+        """Update a held lot's Buy row in the xlsx.
+        Supports updating: buy_date, quantity, buy_price.
+        Returns the updated Holding or None if not found."""
+        holding = self.get_holding_by_id(holding_id)
+        if not holding:
+            return None
+
+        filepath = self._holding_file.get(holding_id)
+        if not filepath:
+            return None
+
+        try:
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+            header_row = self._find_header_row(ws)
+
+            # Find the matching Buy row
+            for row_idx in range(header_row + 1, ws.max_row + 1):
+                tx_date = _parse_date(ws.cell(row_idx, 1).value)
+                action = str(ws.cell(row_idx, 3).value or "").strip()
+                qty = _safe_int(ws.cell(row_idx, 4).value)
+                price = _safe_float(ws.cell(row_idx, 5).value)
+
+                if (action == "Buy" and tx_date == holding.buy_date and
+                        qty == holding.quantity and
+                        abs(price - (holding.price or holding.buy_price)) < 0.02):
+                    # Found it — apply updates
+                    if "buy_date" in updates:
+                        try:
+                            dt = datetime.strptime(updates["buy_date"], "%Y-%m-%d")
+                            ws.cell(row_idx, 1, value=dt)
+                        except ValueError:
+                            pass
+                    if "quantity" in updates:
+                        new_qty = int(updates["quantity"])
+                        ws.cell(row_idx, 4, value=new_qty)
+                        # Recalculate cost (column F) if price unchanged
+                        new_price = float(updates.get("buy_price", price))
+                        ws.cell(row_idx, 6, value=round(new_price * new_qty, 2))
+                    if "buy_price" in updates:
+                        new_price = float(updates["buy_price"])
+                        ws.cell(row_idx, 5, value=new_price)
+                        new_qty = int(updates.get("quantity", qty))
+                        ws.cell(row_idx, 6, value=round(new_price * new_qty, 2))
+
+                    wb.save(filepath)
+                    _sync_to_drive(filepath)
+
+                    # Invalidate cache
+                    for sym, fp in self._file_map.items():
+                        if fp == filepath:
+                            self._invalidate_symbol(sym)
+                            break
+                    return self.get_holding_by_id(holding_id)
+
+            wb.close()
+        except Exception as e:
+            logger.error(f"[XlsxDB] Failed to update holding {holding_id}: {e}")
+        return None
+
+    def update_sold_row(self, symbol: str, row_idx: int, updates: dict) -> bool:
+        """Update a Sell row in a stock's xlsx.
+        Supports updating: sell_date, sell_price, quantity.
+        row_idx is the 1-based row number in the Trading History sheet."""
+        filepath = self._file_map.get(symbol)
+        if not filepath:
+            return False
+
+        try:
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+
+            # Verify the row is actually a Sell row
+            action = str(ws.cell(row_idx, 3).value or "").strip()
+            if action != "Sell":
+                wb.close()
+                return False
+
+            if "sell_date" in updates:
+                try:
+                    dt = datetime.strptime(updates["sell_date"], "%Y-%m-%d")
+                    ws.cell(row_idx, 1, value=dt)
+                except ValueError:
+                    pass
+            if "quantity" in updates:
+                ws.cell(row_idx, 4, value=int(updates["quantity"]))
+            if "sell_price" in updates:
+                new_price = float(updates["sell_price"])
+                ws.cell(row_idx, 5, value=new_price)
+                new_qty = int(updates.get("quantity", _safe_int(ws.cell(row_idx, 4).value)))
+                ws.cell(row_idx, 6, value=round(new_price * new_qty, 2))
+
+            wb.save(filepath)
+            _sync_to_drive(filepath)
+            self._invalidate_symbol(symbol)
+            return True
+        except Exception as e:
+            logger.error(f"[XlsxDB] Failed to update sold row {symbol}:{row_idx}: {e}")
+            return False
+
+    def rename_stock(self, old_symbol: str, new_symbol: str, new_name: str = "") -> bool:
+        """Rename a stock by renaming its xlsx file.
+        Updates internal caches and syncs to Drive."""
+        old_filepath = self._file_map.get(old_symbol)
+        if not old_filepath or not old_filepath.exists():
+            return False
+
+        # Determine new filename
+        display_name = new_name or new_symbol
+        new_filename = f"{display_name}.xlsx"
+        new_filepath = old_filepath.parent / new_filename
+
+        if new_filepath.exists() and new_filepath != old_filepath:
+            logger.error(f"[XlsxDB] Cannot rename: {new_filename} already exists")
+            return False
+
+        try:
+            # Also update the Index sheet symbol/name if present
+            wb = openpyxl.load_workbook(old_filepath)
+            if "Index" in wb.sheetnames:
+                idx_ws = wb["Index"]
+                # B1 = symbol, B2 = exchange typically
+                # A1 usually has the company name or symbol
+                for r in range(1, 6):
+                    val = idx_ws.cell(r, 1).value
+                    if val and str(val).strip().upper() == old_symbol.upper():
+                        idx_ws.cell(r, 1, value=new_symbol)
+                    val_b = idx_ws.cell(r, 2).value
+                    if val_b and str(val_b).strip().upper() == old_symbol.upper():
+                        idx_ws.cell(r, 2, value=new_symbol)
+            wb.save(old_filepath)
+
+            # Rename the file
+            old_filepath.rename(new_filepath)
+
+            # Update internal caches
+            self._invalidate_symbol(old_symbol)
+            del self._file_map[old_symbol]
+            self._file_map[new_symbol] = new_filepath
+            self._name_map[new_symbol] = display_name
+
+            # Sync: upload new file, delete old from Drive
+            _sync_to_drive(new_filepath)
+            try:
+                from . import drive_service
+                from .config import DUMPS_BASE
+                old_rel = old_filepath.resolve().relative_to(DUMPS_BASE.resolve())
+                # old_rel is like "email/Name/Stocks/OldName.xlsx"
+                # Drive subfolder = "dumps/email/Name/Stocks", filename = "OldName.xlsx"
+                parts = old_rel.parts
+                subfolder = "dumps/" + str(Path(*parts[:-1]))
+                drive_service.delete_file(parts[-1], subfolder=subfolder)
+            except Exception:
+                pass  # Best effort
+
+            logger.info(f"[XlsxDB] Renamed stock {old_symbol} -> {new_symbol} ({new_filepath.name})")
+            return True
+        except Exception as e:
+            logger.error(f"[XlsxDB] Failed to rename {old_symbol} -> {new_symbol}: {e}")
+            return False
 
     # ── XLSX Write Helpers ────────────────────────────────
 

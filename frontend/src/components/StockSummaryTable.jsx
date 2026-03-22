@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getStockHistory } from '../services/api';
+import { getStockHistory, updateHolding, updateSoldRow, renameStock } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import ExpiryAlertRules from './ExpiryAlertRules';
+import EditLotModal from './EditLotModal';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -168,7 +169,9 @@ function StockChart({ symbol, exchange }) {
 }
 
 /* ── Expanded detail panel inside a stock row ───────────── */
-function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend, selectedLots, onToggleLot, onToggleAllLots }) {
+function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDividend, selectedLots, onToggleLot, onToggleAllLots, onRefresh }) {
+  const [editingHeld, setEditingHeld] = useState(null);
+  const [editingSold, setEditingSold] = useState(null);
   const heldLots = (portfolio || []).filter(
     (item) => item.holding.symbol === stock.symbol && item.holding.quantity > 0
   ).sort((a, b) => b.holding.buy_date.localeCompare(a.holding.buy_date));
@@ -518,7 +521,15 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                         </td>
                         );
                       })()}
-                      <td style={heldTd}>
+                      <td style={{ ...heldTd, display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={(e) => { e.stopPropagation(); setEditingHeld(h); }}
+                          style={{ padding: '4px 6px', fontSize: '12px', minWidth: 'auto' }}
+                          title="Edit lot"
+                        >
+                          &#9998;
+                        </button>
                         <button
                           className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
                           onClick={(e) => { e.stopPropagation(); onSell(item); }}
@@ -568,6 +579,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                   <th style={heldTh}>Buy Price</th>
                   <th style={heldTh}>Sell Price</th>
                   <th style={heldTh}>Realized P&L</th>
+                  <th style={heldTh}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -602,6 +614,16 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
                     </td>
                       );
                     })()}
+                    <td style={heldTd}>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={(e) => { e.stopPropagation(); setEditingSold(t); }}
+                        style={{ padding: '4px 6px', fontSize: '12px', minWidth: 'auto' }}
+                        title="Edit sold transaction"
+                      >
+                        &#9998;
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -614,6 +636,42 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
         <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
           No lot or transaction details available.
         </div>
+      )}
+
+      {/* Edit Held Lot Modal */}
+      {editingHeld && (
+        <EditLotModal
+          title={`Edit Held Lot — ${stock.symbol}`}
+          fields={[
+            { key: 'buy_date', label: 'Buy Date', type: 'date', value: editingHeld.buy_date },
+            { key: 'quantity', label: 'Quantity', type: 'number', value: editingHeld.quantity, min: 1, step: 1 },
+            { key: 'buy_price', label: 'Buy Price (₹)', type: 'number', value: editingHeld.buy_price, min: 0.01, step: 0.01 },
+          ]}
+          onSave={async (updates) => {
+            await updateHolding(editingHeld.id, updates);
+            setEditingHeld(null);
+            window.location.reload();
+          }}
+          onClose={() => setEditingHeld(null)}
+        />
+      )}
+
+      {/* Edit Sold Lot Modal */}
+      {editingSold && (
+        <EditLotModal
+          title={`Edit Sold Transaction — ${stock.symbol}`}
+          fields={[
+            { key: 'sell_date', label: 'Sell Date', type: 'date', value: editingSold.sell_date },
+            { key: 'quantity', label: 'Quantity', type: 'number', value: editingSold.quantity, min: 1, step: 1 },
+            { key: 'sell_price', label: 'Sell Price (₹)', type: 'number', value: editingSold.sell_price, min: 0.01, step: 0.01 },
+          ]}
+          onSave={async (updates) => {
+            await updateSoldRow(stock.symbol, editingSold.row_idx, updates);
+            setEditingSold(null);
+            window.location.reload();
+          }}
+          onClose={() => setEditingSold(null)}
+        />
       )}
       </div>
       {/* Right side: chart */}

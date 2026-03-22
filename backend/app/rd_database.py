@@ -555,9 +555,20 @@ def add(data: dict, base_dir=None) -> dict:
 
 
 def update(rd_id: str, data: dict, base_dir=None) -> dict:
-    """Update an existing manual RD."""
+    """Update an existing RD — supports both manual (JSON) and xlsx-imported."""
+    xlsx_dir = (Path(base_dir) / "RD") if base_dir else RD_XLSX_DIR
     json_file = (Path(base_dir) / "recurring_deposits.json") if base_dir else RD_JSON_FILE
     dumps_dir = Path(base_dir) if base_dir else DUMPS_DIR
+
+    # Try xlsx first
+    if xlsx_dir.exists():
+        for f in xlsx_dir.glob("*.xlsx"):
+            if f.name.startswith("~$"):
+                continue
+            if _gen_rd_id(f.stem) == rd_id:
+                return _update_xlsx_rd(f, data, dumps_dir)
+
+    # Fall back to JSON (manual)
     with _lock:
         items = _load_json(json_file=json_file)
         idx = next((i for i, x in enumerate(items) if x["id"] == rd_id), None)
@@ -586,6 +597,49 @@ def update(rd_id: str, data: dict, base_dir=None) -> dict:
         items[idx] = item
         _save_json(items, json_file=json_file, dumps_dir=dumps_dir)
         return item
+
+
+def _update_xlsx_rd(filepath: Path, data: dict, dumps_dir: Path) -> dict:
+    """Update an xlsx-imported RD by editing cells in the Index sheet.
+    Supports: bank, monthly_amount, interest_rate, start_date, tenure_months, compounding_frequency."""
+    import openpyxl as xl
+
+    wb = xl.load_workbook(str(filepath))
+    ws = wb["Index"]
+
+    if "start_date" in data:
+        try:
+            dt = datetime.strptime(data["start_date"], "%Y-%m-%d")
+            ws.cell(1, 2, value=dt)  # B1
+        except ValueError:
+            pass
+    if "tenure_months" in data:
+        ws.cell(1, 8, value=int(data["tenure_months"]))  # H1 (months for RD)
+    if "bank" in data:
+        ws.cell(1, 11, value=data["bank"])  # K1
+    if "interest_payout" in data:
+        ws.cell(2, 8, value=data["interest_payout"])  # H2
+    if "compounding_frequency" in data:
+        ws.cell(2, 11, value=int(data["compounding_frequency"]))  # K2
+    if "interest_rate" in data:
+        rate = float(data["interest_rate"])
+        ws.cell(3, 2, value=rate / 100 if rate > 1 else rate)  # B3
+    if "monthly_amount" in data:
+        ws.cell(3, 8, value=float(data["monthly_amount"]))  # H3
+
+    wb.save(str(filepath))
+    wb.close()
+
+    # Sync to drive
+    try:
+        from .config import DUMPS_BASE
+        from . import drive_service
+        rel = filepath.resolve().relative_to(DUMPS_BASE.resolve())
+        drive_service.sync_dumps_file(str(rel))
+    except Exception:
+        pass
+
+    return _parse_rd_xlsx(filepath)
 
 
 def delete(rd_id: str, base_dir=None) -> dict:

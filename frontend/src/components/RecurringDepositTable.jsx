@@ -140,22 +140,17 @@ function RDDetail({ rd, onEdit, onDelete, onAddInstallment }) {
       {/* Actions */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center' }}>
         <span style={{ fontSize: '13px', color: 'var(--text-dim)', marginRight: '4px' }}>Actions:</span>
-        {onAddInstallment && rd.status === 'Active' && rd.source === 'manual' && (
+        {onAddInstallment && rd.status === 'Active' && (
           <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); onAddInstallment(rd); }}>+ Add Installment</button>
         )}
-        {onEdit && rd.source === 'manual' && (
+        {onEdit && (
           <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(rd); }}>Edit</button>
         )}
-        {onDelete && rd.source === 'manual' && (
+        {onDelete && (
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
             onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete RD "${rd.name || rd.bank}"?`)) onDelete(rd.id); }}>
             Delete
           </button>
-        )}
-        {rd.source === 'xlsx' && (
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Imported from Excel — edit the source file to modify
-          </span>
         )}
       </div>
 

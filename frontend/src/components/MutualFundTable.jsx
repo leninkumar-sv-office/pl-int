@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { getMFHistory } from '../services/api';
+import { getMFHistory, updateMFHolding, updateMFSoldRow } from '../services/api';
 import ExpiryAlertRules from './ExpiryAlertRules';
+import EditLotModal from './EditLotModal';
 
 const formatINR = (num) => {
   if (num === null || num === undefined) return '₹0';
@@ -272,7 +273,9 @@ function MFChart({ fundCode, fundName }) {
 }
 
 /* ── Expanded Fund Detail (matches StockDetail) ─────── */
-function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, selectedLots, onToggleLot, onToggleAllLots }) {
+function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, selectedLots, onToggleLot, onToggleAllLots, onRefresh }) {
+  const [editingHeld, setEditingHeld] = useState(null);
+  const [editingSold, setEditingSold] = useState(null);
   const f = fund;
   const heldLots = (f.held_lots || []).slice().sort((a, b) => (b.buy_date || '').localeCompare(a.buy_date || ''));
   const soldLots = (f.sold_lots || []).slice().sort((a, b) => (b.sell_date || '').localeCompare(a.sell_date || ''));
@@ -588,7 +591,15 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                         </td>
                         );
                       })()}
-                      <td style={heldTd}>
+                      <td style={{ ...heldTd, display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={(e) => { e.stopPropagation(); setEditingHeld(lot); }}
+                          style={{ padding: '4px 6px', fontSize: '12px', minWidth: 'auto' }}
+                          title="Edit lot"
+                        >
+                          &#9998;
+                        </button>
                         <button
                           className={`btn btn-sm ${inProfit ? 'btn-success' : 'btn-danger'}`}
                           onClick={(e) => { e.stopPropagation(); onRedeemMF({ ...f, preSelectedUnits: lot.units }); }}
@@ -640,6 +651,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                   <th style={heldTh}>Cost</th>
                   <th style={heldTh}>Sale Value</th>
                   <th style={heldTh}>Realized P&L</th>
+                  <th style={heldTh}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -679,12 +691,58 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
                     </td>
                       );
                     })()}
+                    <td style={heldTd}>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={(e) => { e.stopPropagation(); setEditingSold(s); }}
+                        style={{ padding: '4px 6px', fontSize: '12px', minWidth: 'auto' }}
+                        title="Edit redemption"
+                      >
+                        &#9998;
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {/* Edit Held Lot Modal */}
+      {editingHeld && (
+        <EditLotModal
+          title={`Edit Held Unit — ${f.name || f.fund_code}`}
+          fields={[
+            { key: 'buy_date', label: 'Buy Date', type: 'date', value: editingHeld.buy_date },
+            { key: 'units', label: 'Units', type: 'number', value: editingHeld.units, min: 0.0001, step: 0.0001 },
+            { key: 'buy_price', label: 'Buy NAV (₹)', type: 'number', value: editingHeld.buy_price || editingHeld.nav, min: 0.01, step: 0.0001 },
+          ]}
+          onSave={async (updates) => {
+            await updateMFHolding(f.fund_code, editingHeld.id, updates);
+            setEditingHeld(null);
+            window.location.reload();
+          }}
+          onClose={() => setEditingHeld(null)}
+        />
+      )}
+
+      {/* Edit Sold Lot Modal */}
+      {editingSold && (
+        <EditLotModal
+          title={`Edit Redemption — ${f.name || f.fund_code}`}
+          fields={[
+            { key: 'sell_date', label: 'Sell Date', type: 'date', value: editingSold.sell_date },
+            { key: 'units', label: 'Units', type: 'number', value: editingSold.units, min: 0.0001, step: 0.0001 },
+            { key: 'sell_price', label: 'Sell NAV (₹)', type: 'number', value: editingSold.sell_nav, min: 0.01, step: 0.0001 },
+          ]}
+          onSave={async (updates) => {
+            await updateMFSoldRow(f.fund_code, editingSold.row_idx, updates);
+            setEditingSold(null);
+            window.location.reload();
+          }}
+          onClose={() => setEditingSold(null)}
+        />
       )}
 
       {/* LTCG/STCG summary */}

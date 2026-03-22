@@ -559,6 +559,7 @@ def fifo_match_mf(buys: list, sells: list):
                 "units": round(matched, 6),
                 "realized_pl": round(realized_pl, 2),
                 "row_idx": lot.get("row_idx", 0),
+                "sell_row_idx": sell.get("row_idx", 0),
             })
             lot["remaining"] = round(lot["remaining"] - matched, 6)
             sell_units = round(sell_units - matched, 6)
@@ -857,6 +858,7 @@ class MFXlsxPortfolio:
                     sell_nav=fs["sell_nav"],
                     sell_date=fs["sell_date"],
                     realized_pl=fs["realized_pl"],
+                    row_idx=fs.get("sell_row_idx", fs.get("row_idx", 0)),
                 ))
         else:
             # No sells — all buys are held
@@ -1289,6 +1291,149 @@ class MFXlsxPortfolio:
                 "realized_pl": round(realized_pl, 2),
                 "remaining_units": round(remaining_units, 6),
             }
+
+    def update_mf_holding(self, fund_code: str, holding_id: str, updates: dict) -> bool:
+        """Update a MF held lot's Buy row in the xlsx.
+        Supports: buy_date, units, buy_price (NAV)."""
+        holdings, _, _ = self._get_fund_data(fund_code)
+        holding = next((h for h in holdings if h.id == holding_id), None)
+        if not holding:
+            return False
+
+        filepath = self._file_map.get(fund_code)
+        if not filepath:
+            return False
+
+        try:
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+            header_row = self._find_header_row(ws)
+
+            for row_idx in range(header_row + 1, ws.max_row + 1):
+                action = str(ws.cell(row_idx, 3).value or "").strip()
+                if action != "Buy":
+                    continue
+                tx_date = _parse_date(ws.cell(row_idx, 1).value)
+                row_units = _safe_float(ws.cell(row_idx, 4).value)
+                row_nav = _safe_float(ws.cell(row_idx, 5).value)
+
+                if (tx_date == holding.buy_date and
+                        abs(row_units - holding.units) < 1e-4 and
+                        abs(row_nav - holding.nav) < 0.02):
+                    if "buy_date" in updates:
+                        try:
+                            dt = datetime.strptime(updates["buy_date"], "%Y-%m-%d")
+                            ws.cell(row_idx, 1, value=dt)
+                        except ValueError:
+                            pass
+                    if "units" in updates:
+                        new_units = float(updates["units"])
+                        ws.cell(row_idx, 4, value=round(new_units, 6))
+                        new_nav = float(updates.get("buy_price", row_nav))
+                        ws.cell(row_idx, 6, value=round(new_units * new_nav, 2))
+                    if "buy_price" in updates:
+                        new_nav = float(updates["buy_price"])
+                        ws.cell(row_idx, 5, value=round(new_nav, 4))
+                        new_units = float(updates.get("units", row_units))
+                        ws.cell(row_idx, 6, value=round(new_units * new_nav, 2))
+
+                    wb.save(filepath)
+                    _sync_to_drive(filepath)
+                    self._cache.pop(fund_code, None)
+                    return True
+
+            wb.close()
+        except Exception as e:
+            logger.error(f"[MF-XlsxDB] Failed to update holding {holding_id}: {e}")
+        return False
+
+    def update_mf_sold_row(self, fund_code: str, row_idx: int, updates: dict) -> bool:
+        """Update a Sell row in a fund's xlsx.
+        Supports: sell_date, sell_price (NAV), units (quantity)."""
+        filepath = self._file_map.get(fund_code)
+        if not filepath:
+            return False
+
+        try:
+            wb = openpyxl.load_workbook(filepath)
+            ws = wb["Trading History"]
+
+            action = str(ws.cell(row_idx, 3).value or "").strip()
+            if action != "Sell":
+                wb.close()
+                return False
+
+            if "sell_date" in updates:
+                try:
+                    dt = datetime.strptime(updates["sell_date"], "%Y-%m-%d")
+                    ws.cell(row_idx, 1, value=dt)
+                except ValueError:
+                    pass
+            if "units" in updates:
+                ws.cell(row_idx, 4, value=round(float(updates["units"]), 6))
+            if "sell_price" in updates:
+                new_nav = float(updates["sell_price"])
+                ws.cell(row_idx, 5, value=round(new_nav, 4))
+                new_units = float(updates.get("units", _safe_float(ws.cell(row_idx, 4).value)))
+                ws.cell(row_idx, 6, value=round(new_nav * new_units, 2))
+
+            wb.save(filepath)
+            _sync_to_drive(filepath)
+            self._cache.pop(fund_code, None)
+            return True
+        except Exception as e:
+            logger.error(f"[MF-XlsxDB] Failed to update sold row {fund_code}:{row_idx}: {e}")
+            return False
+
+    def rename_fund(self, old_code: str, new_code: str, new_name: str = "") -> bool:
+        """Rename a fund by renaming its xlsx file and updating caches."""
+        old_filepath = self._file_map.get(old_code)
+        if not old_filepath or not old_filepath.exists():
+            return False
+
+        display_name = new_name or new_code
+        new_filename = f"{display_name}.xlsx"
+        new_filepath = old_filepath.parent / new_filename
+
+        if new_filepath.exists() and new_filepath != old_filepath:
+            logger.error(f"[MF-XlsxDB] Cannot rename: {new_filename} already exists")
+            return False
+
+        try:
+            # Update Index sheet if present
+            wb = openpyxl.load_workbook(old_filepath)
+            if "Index" in wb.sheetnames:
+                idx_ws = wb["Index"]
+                for r in range(1, 6):
+                    for c in range(1, 4):
+                        val = idx_ws.cell(r, c).value
+                        if val and str(val).strip() == old_code:
+                            idx_ws.cell(r, c, value=new_code)
+            wb.save(old_filepath)
+
+            old_filepath.rename(new_filepath)
+
+            self._cache.pop(old_code, None)
+            del self._file_map[old_code]
+            self._file_map[new_code] = new_filepath
+            self._name_map[new_code] = display_name
+
+            _sync_to_drive(new_filepath)
+            try:
+                from . import drive_service
+                from .config import DUMPS_BASE
+                old_rel = old_filepath.resolve().relative_to(DUMPS_BASE.resolve())
+                parts = old_rel.parts
+                subfolder = "dumps/" + str(Path(*parts[:-1]))
+                drive_service.delete_file(parts[-1], subfolder=subfolder)
+            except Exception:
+                pass
+
+            logger.info(f"[MF-XlsxDB] Renamed fund {old_code} -> {new_code}")
+            return True
+        except Exception as e:
+            logger.error(f"[MF-XlsxDB] Failed to rename {old_code} -> {new_code}: {e}")
+            return False
 
     def get_fund_nav(self, fund_code: str) -> float:
         """Get the current NAV for a fund — live first, then xlsx fallback."""

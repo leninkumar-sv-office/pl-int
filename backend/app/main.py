@@ -747,6 +747,35 @@ def delete_holding(holding_id: str):
     raise HTTPException(status_code=404, detail="Holding not found")
 
 
+@app.put("/api/portfolio/holdings/{holding_id}")
+def update_holding_endpoint(holding_id: str, updates: dict):
+    """Edit a held lot's Buy row (date, qty, price)."""
+    result = udb().update_holding(holding_id, updates)
+    if result:
+        return {"message": "Holding updated", "holding": result.dict()}
+    raise HTTPException(status_code=404, detail="Holding not found or update failed")
+
+
+@app.put("/api/portfolio/sold/{symbol}/{row_idx}")
+def update_sold_row_endpoint(symbol: str, row_idx: int, updates: dict):
+    """Edit a Sell row (date, qty, price)."""
+    if udb().update_sold_row(symbol.upper(), row_idx, updates):
+        return {"message": "Sold transaction updated"}
+    raise HTTPException(status_code=404, detail="Sell row not found or update failed")
+
+
+@app.put("/api/portfolio/stocks/{symbol}/rename")
+def rename_stock_endpoint(symbol: str, body: dict):
+    """Rename a stock's xlsx file."""
+    new_symbol = body.get("new_symbol", "").strip().upper()
+    new_name = body.get("new_name", "").strip()
+    if not new_symbol:
+        raise HTTPException(status_code=400, detail="new_symbol required")
+    if udb().rename_stock(symbol.upper(), new_symbol, new_name):
+        return {"message": f"Renamed {symbol} to {new_symbol}"}
+    raise HTTPException(status_code=400, detail="Rename failed")
+
+
 # ══════════════════════════════════════════════════════════
 #  DIVIDEND
 # ══════════════════════════════════════════════════════════
@@ -2447,6 +2476,34 @@ def redeem_mf_units_endpoint(req: RedeemMFRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/mutual-funds/holdings/{fund_code}/{holding_id}")
+def update_mf_holding_endpoint(fund_code: str, holding_id: str, updates: dict):
+    """Edit a MF held lot's Buy row (date, units, NAV)."""
+    if umf().update_mf_holding(fund_code, holding_id, updates):
+        return {"message": "MF holding updated"}
+    raise HTTPException(status_code=404, detail="MF holding not found or update failed")
+
+
+@app.put("/api/mutual-funds/sold/{fund_code}/{row_idx}")
+def update_mf_sold_row_endpoint(fund_code: str, row_idx: int, updates: dict):
+    """Edit a MF Sell row (date, units, NAV)."""
+    if umf().update_mf_sold_row(fund_code, row_idx, updates):
+        return {"message": "MF sold transaction updated"}
+    raise HTTPException(status_code=404, detail="MF sell row not found or update failed")
+
+
+@app.put("/api/mutual-funds/{fund_code}/rename")
+def rename_mf_endpoint(fund_code: str, body: dict):
+    """Rename a mutual fund's xlsx file."""
+    new_code = body.get("new_code", "").strip()
+    new_name = body.get("new_name", "").strip()
+    if not new_code:
+        raise HTTPException(status_code=400, detail="new_code required")
+    if umf().rename_fund(fund_code, new_code, new_name):
+        return {"message": f"Renamed fund {fund_code} to {new_code}"}
+    raise HTTPException(status_code=400, detail="Rename failed")
 
 
 # ══════════════════════════════════════════════════════════
