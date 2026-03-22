@@ -28,10 +28,18 @@ const RULE_OPTIONS = {
   stocks: [
     { type: 'profit_threshold', label: 'Lot profit exceeds %', needsPct: true, needsTime: true },
     { type: 'day_drop_threshold', label: '1D price drop exceeds %', needsPct: true, needsTime: true },
+    { type: 'week_drop_threshold', label: '1W price drop exceeds %', needsPct: true, needsTime: true },
+    { type: 'month_drop_threshold', label: '1M price drop exceeds %', needsPct: true, needsTime: true },
+    { type: 'near_52w_high', label: 'At or crossed 52-week high', needsTime: true },
+    { type: 'near_52w_low', label: 'At or hit 52-week low', needsTime: true },
   ],
   mf: [
     { type: 'profit_threshold', label: 'Unit profit exceeds %', needsPct: true, needsTime: true },
     { type: 'day_drop_threshold', label: '1D NAV drop exceeds %', needsPct: true, needsTime: true },
+    { type: 'week_drop_threshold', label: '1W NAV drop exceeds %', needsPct: true, needsTime: true },
+    { type: 'month_drop_threshold', label: '1M NAV drop exceeds %', needsPct: true, needsTime: true },
+    { type: 'near_52w_high', label: 'At or crossed 52-week high', needsTime: true },
+    { type: 'near_52w_low', label: 'At or hit 52-week low', needsTime: true },
   ],
 };
 
