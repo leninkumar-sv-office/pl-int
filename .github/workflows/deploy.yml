@@ -140,6 +140,7 @@ jobs:
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
             "NOTIFICATION_EMAIL=${{ secrets.NOTIFICATION_EMAIL }}" \
             "NOTIFICATION_EMAIL_APP_PASSWORD=${{ secrets.NOTIFICATION_EMAIL_APP_PASSWORD }}" \
+            "USER_EMAIL=$USER_EMAIL" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
 
@@ -334,6 +335,7 @@ jobs:
             "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
             "NOTIFICATION_EMAIL=${{ secrets.NOTIFICATION_EMAIL }}" \
             "NOTIFICATION_EMAIL_APP_PASSWORD=${{ secrets.NOTIFICATION_EMAIL_APP_PASSWORD }}" \
+            "USER_EMAIL=$USER_EMAIL" \
             > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
           echo "$PREV_TAG" > "$DEPLOY_DIR/backend/data/deploy_tag.txt"

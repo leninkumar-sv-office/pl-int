@@ -4,10 +4,11 @@
     "label": "Sensex",
     "type": "index",
     "unit": "",
-    "price": 72000.0,
-    "change": 150.0,
-    "change_pct": 0.21,
-    "source": "cached",
+    "price": 74532.96,
+    "change": 325.72,
+    "change_pct": 0.44,
+    "instrument_token": 265,
+    "source": "zerodha",
     "week_change_pct": -0.04,
     "month_change_pct": -10.0
   },
@@ -16,10 +17,11 @@
     "label": "Nifty 50",
     "type": "index",
     "unit": "",
-    "price": 21800.0,
-    "change": -50.0,
-    "change_pct": -0.23,
-    "source": "cached",
+    "price": 23114.5,
+    "change": 112.35,
+    "change_pct": 0.49,
+    "instrument_token": 256265,
+    "source": "zerodha",
     "week_change_pct": -0.16,
     "month_change_pct": -9.61
   },
@@ -31,21 +33,23 @@
     "price": 23146.0,
     "change": 91.2,
     "change_pct": 0.4,
-    "source": "cached",
-    "week_change_pct": -0.16,
-    "month_change_pct": -9.61
+    "instrument_token": 13238786,
+    "source": "zerodha",
+    "week_change_pct": -0.23,
+    "month_change_pct": -10.09
   },
   {
     "key": "GOLD",
     "label": "Gold",
     "type": "commodity",
     "unit": "\u20b9/g",
-    "price": 6200.0,
-    "change": 10.0,
-    "change_pct": 0.16,
-    "source": "cached",
-    "week_change_pct": -9.45,
-    "month_change_pct": -9.57
+    "price": 14482.5,
+    "change": -12.9,
+    "change_pct": -0.09,
+    "instrument_token": 116433415,
+    "source": "zerodha",
+    "week_change_pct": -8.61,
+    "month_change_pct": -7.68
   },
   {
     "key": "SILVER",
@@ -55,9 +59,10 @@
     "price": 232.33,
     "change": 0.58,
     "change_pct": 0.25,
-    "source": "cached",
-    "week_change_pct": -13.9,
-    "month_change_pct": -15.34
+    "instrument_token": 117128455,
+    "source": "zerodha",
+    "week_change_pct": -12.55,
+    "month_change_pct": -11.78
   },
   {
     "key": "SGX",
@@ -103,9 +108,10 @@
     "price": 93.59,
     "change": 0.9,
     "change_pct": 0.97,
-    "source": "cached",
-    "week_change_pct": 1.37,
-    "month_change_pct": 2.87
+    "instrument_token": 579587,
+    "source": "zerodha",
+    "week_change_pct": 1.26,
+    "month_change_pct": 2.71
   },
   {
     "key": "CRUDEOIL",
@@ -115,8 +121,9 @@
     "price": 9245.0,
     "change": 247.0,
     "change_pct": 2.75,
-    "source": "cached",
-    "week_change_pct": -0.49,
-    "month_change_pct": 47.96
+    "instrument_token": 124544519,
+    "source": "zerodha",
+    "week_change_pct": 3.38,
+    "month_change_pct": 52.33
   }
 ]

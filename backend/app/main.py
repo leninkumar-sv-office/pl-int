@@ -149,15 +149,8 @@ def on_startup():
     except Exception as e:
         logger.warning(f"[App] Token migration skipped: {e}")
 
-    # Sync data from Google Drive — blocks startup until complete
-    # so that database modules find files on first request
-    try:
-        from app import drive_service
-        drive_service.sync_all_emails()
-    except Exception as e:
-        logger.warning(f"[App] Drive sync skipped: {e}")
-
-    # Re-index MF database after Drive sync (files may have arrived after module import)
+    # Google Drive desktop sync handles file sync — no API sync needed
+    # Re-index MF database in case files changed
     mf_db.reindex()
     logger.info(f"[App] MF database re-indexed: {len(mf_db._file_map)} funds")
 

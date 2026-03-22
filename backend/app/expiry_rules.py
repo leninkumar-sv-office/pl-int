@@ -64,22 +64,34 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _LEGACY_RULES_FILE = _DATA_DIR / "expiry_rules.json"
 
 
-# ── Persistence (direct Google Drive) ─────────────────────
+# ── Persistence (files on Google Drive mount) ─────────────
 
-_RULES_FILE = "expiry_rules.json"
+def _settings_dir(user_id: str, email: str) -> Path:
+    """Get settings dir: dumps/{email}/{Name}/settings/"""
+    dumps_dir = get_user_dumps_dir(user_id, email)
+    d = dumps_dir / "settings"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _rules_file(user_id: str, email: str) -> Path:
+    return _settings_dir(user_id, email) / "expiry_rules.json"
 
 
 def _load_rules(email: str, user_id: str) -> list:
-    from . import drive_settings
-    data = drive_settings.read_json(email, user_id, _RULES_FILE, default=[])
-    if not data:
-        data = _migrate_legacy(email, user_id)
-    return data if isinstance(data, list) else []
+    fp = _rules_file(user_id, email)
+    try:
+        with open(fp) as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _migrate_legacy(email, user_id)
 
 
 def _save_rules(email: str, user_id: str, rules: list):
-    from . import drive_settings
-    drive_settings.write_json(email, user_id, _RULES_FILE, rules)
+    fp = _rules_file(user_id, email)
+    with open(fp, "w") as f:
+        json.dump(rules, f, indent=2)
 
 
 def _migrate_legacy(email: str, user_id: str) -> list:

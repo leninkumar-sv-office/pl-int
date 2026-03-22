@@ -34,19 +34,27 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _LEGACY_PREFS_FILE = _DATA_DIR / "notification_prefs.json"
 
 
-# ── Per-user notification preferences (direct Google Drive) ────
+# ── Per-user notification preferences (files on Google Drive mount) ────
 
-_PREFS_FILE = "notification_prefs.json"
+def _prefs_file(user_email: str, user_id: str) -> Path:
+    dumps_dir = get_user_dumps_dir(user_id, user_email)
+    d = dumps_dir / "settings"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "notification_prefs.json"
 
 
 def get_user_prefs(user_email: str, user_id: str) -> dict:
-    """Get notification preferences from Google Drive."""
-    from . import drive_settings
-    return drive_settings.read_json(user_email, user_id, _PREFS_FILE, default={"emails": [], "updated_at": ""})
+    """Get notification preferences for a user persona."""
+    fp = _prefs_file(user_email, user_id)
+    try:
+        with open(fp) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"emails": [], "updated_at": ""}
 
 
 def save_user_prefs(user_email: str, user_id: str, emails: List[str]) -> dict:
-    """Save notification email addresses directly to Google Drive."""
+    """Save notification email addresses for a user persona."""
     clean_emails = []
     seen = set()
     for e in emails:
@@ -59,8 +67,9 @@ def save_user_prefs(user_email: str, user_id: str, emails: List[str]) -> dict:
         "emails": clean_emails,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
-    from . import drive_settings
-    drive_settings.write_json(user_email, user_id, _PREFS_FILE, prefs)
+    fp = _prefs_file(user_email, user_id)
+    with open(fp, "w") as f:
+        json.dump(prefs, f, indent=2)
     logger.info(f"[Notify] Saved {len(clean_emails)} notification email(s) for {user_id}")
     return prefs
 
