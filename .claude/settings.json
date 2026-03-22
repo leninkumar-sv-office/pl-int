@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qE '\\.env|\\.jwt_secret|credentials'; then echo 'BLOCKED: Cannot edit sensitive files (.env, .jwt_secret, credentials)' >&2; exit 1; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATH\" | grep -q 'frontend/src/'; then cd /Users/lenin/Desktop/workspace/pl/frontend && npm run build 2>&1 | tail -3; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
