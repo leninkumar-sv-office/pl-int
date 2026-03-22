@@ -56,8 +56,9 @@ DRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-# Token storage path
-_TOKEN_FILE = Path(__file__).resolve().parent.parent / "data" / "google_tokens.json"
+# Token storage — prefer dumps/{email}/settings/ (persists with Docker volume)
+# Falls back to data/google_tokens.json for legacy/migration
+_LEGACY_TOKEN_FILE = Path(__file__).resolve().parent.parent / "data" / "google_tokens.json"
 
 
 def is_auth_enabled() -> bool:
@@ -192,34 +193,84 @@ def verify_session_token(token: str) -> Optional[dict]:
         return None
 
 
+def _token_file_for_email(email: str) -> Path:
+    """Get token file path in dumps/{email}/settings/google_tokens.json."""
+    from .config import DUMPS_BASE
+    if email:
+        d = DUMPS_BASE / email / "settings"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / "google_tokens.json"
+    return _LEGACY_TOKEN_FILE
+
+
 def _load_all_tokens() -> dict:
-    """Load the full email-keyed token store."""
-    if _TOKEN_FILE.exists():
+    """Load tokens from per-email dumps paths + legacy file."""
+    result = {}
+    # Load from per-email dumps paths
+    from .config import DUMPS_BASE
+    if DUMPS_BASE.exists():
+        for email_dir in DUMPS_BASE.iterdir():
+            if email_dir.is_dir() and "@" in email_dir.name:
+                tf = email_dir / "settings" / "google_tokens.json"
+                if tf.exists():
+                    try:
+                        data = json.loads(tf.read_text())
+                        if isinstance(data, dict) and data.get("refresh_token"):
+                            result[email_dir.name] = data
+                    except Exception:
+                        pass
+    # Migrate from legacy file
+    if _LEGACY_TOKEN_FILE.exists():
         try:
-            data = json.loads(_TOKEN_FILE.read_text())
-            # Handle legacy flat format (no email keys)
-            if data and not any("@" in k for k in data.keys()):
-                return {"": data}
-            return data
+            legacy = json.loads(_LEGACY_TOKEN_FILE.read_text())
+            for email, tokens in legacy.items():
+                if email and "@" in email and email not in result:
+                    # Migrate to per-email path
+                    _save_tokens(email, tokens)
+                    result[email] = tokens
+                elif not email and tokens.get("refresh_token") and not result:
+                    result[""] = tokens
+            # Remove legacy file after migration
+            if all("@" in k for k in legacy if k):
+                _LEGACY_TOKEN_FILE.unlink(missing_ok=True)
+                logger.info("[Auth] Migrated tokens from legacy file to per-email dumps paths")
         except Exception:
-            return {}
-    return {}
+            pass
+    return result
 
 
 def _save_tokens(email: str, tokens: dict):
-    """Persist tokens for one email, merging into the store."""
-    all_tokens = _load_all_tokens()
-    all_tokens[email] = tokens
-    _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _TOKEN_FILE.write_text(json.dumps(all_tokens, indent=2))
+    """Persist tokens for one email in dumps/{email}/settings/."""
+    fp = _token_file_for_email(email)
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    fp.write_text(json.dumps(tokens, indent=2))
+    # Also keep legacy file as backup
+    try:
+        all_legacy = {}
+        if _LEGACY_TOKEN_FILE.exists():
+            all_legacy = json.loads(_LEGACY_TOKEN_FILE.read_text())
+        all_legacy[email] = tokens
+        _LEGACY_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _LEGACY_TOKEN_FILE.write_text(json.dumps(all_legacy, indent=2))
+    except Exception:
+        pass
 
 
 def _load_tokens(email: str = "") -> dict | None:
     """Load tokens for a specific email."""
+    if email:
+        fp = _token_file_for_email(email)
+        if fp.exists():
+            try:
+                data = json.loads(fp.read_text())
+                if data.get("refresh_token"):
+                    return data
+            except Exception:
+                pass
+    # Fallback to all tokens
     all_tokens = _load_all_tokens()
     if email:
         return all_tokens.get(email)
-    # Fallback: return first available token
     for v in all_tokens.values():
         return v
     return None

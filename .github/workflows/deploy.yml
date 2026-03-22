@@ -231,18 +231,24 @@ jobs:
 
       - name: Health check (Cloudflare tunnel)
         run: |
-          echo "Checking https://pl.thirumagal.com/health ..."
+          EXPECTED_TAG="${{ needs.tag.outputs.tag }}"
+          echo "Checking https://pl.thirumagal.com/health for tag: $EXPECTED_TAG ..."
           for i in $(seq 1 6); do
             status=$(curl -s -o /tmp/tunnel-health.json -w "%{http_code}" https://pl.thirumagal.com/health 2>/dev/null)
             if [ "$status" = "200" ]; then
-              echo "Tunnel health check passed!"
-              cat /tmp/tunnel-health.json | python3 -m json.tool
-              exit 0
+              actual_tag=$(python3 -c "import json; print(json.load(open('/tmp/tunnel-health.json')).get('tag',''))" 2>/dev/null)
+              if [ "$actual_tag" = "$EXPECTED_TAG" ]; then
+                echo "Tunnel health check passed! Tag: $actual_tag"
+                cat /tmp/tunnel-health.json | python3 -m json.tool
+                exit 0
+              fi
+              echo "  Attempt $i/6: HTTP 200 but tag=$actual_tag (expected $EXPECTED_TAG) — retrying in 5s..."
+            else
+              echo "  Attempt $i/6: HTTP $status — retrying in 5s..."
             fi
-            echo "  Attempt $i/6: HTTP $status — retrying in 5s..."
             sleep 5
           done
-          echo "Tunnel health check failed after 30s"
+          echo "Tunnel health check failed — tag mismatch or unreachable"
           cat /tmp/tunnel-health.json 2>/dev/null
           exit 1
 
