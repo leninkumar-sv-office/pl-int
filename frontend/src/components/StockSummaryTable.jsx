@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getStockHistory, updateHolding, updateSoldRow, renameStock, lookupStockName } from '../services/api';
+import { getStockHistory, updateHolding, updateSoldRow, renameStock, lookupStockName, searchStock } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import ExpiryAlertRules from './ExpiryAlertRules';
 import EditLotModal from './EditLotModal';
@@ -943,22 +943,45 @@ const FILTER_SELECT_STYLE = {
   maxWidth: '110px',
 };
 
-/* ── Rename Stock Modal with auto-fetch ────────────────── */
+/* ── Rename Stock Modal with search suggestions ────────── */
 function RenameStockModal({ stock, onSave, onClose }) {
   const [newSymbol, setNewSymbol] = useState(stock.symbol);
   const [newName, setNewName] = useState(stock.name);
   const [saving, setSaving] = useState(false);
-  const [fetching, setFetching] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef(null);
+  const dropdownRef = useRef(null);
 
-  const handleSymbolBlur = async () => {
-    const sym = newSymbol.trim().toUpperCase();
-    if (!sym || sym === stock.symbol) return;
-    setFetching(true);
-    try {
-      const data = await lookupStockName(sym);
-      if (data?.name) setNewName(data.name);
-    } catch { /* ignore */ }
-    setFetching(false);
+  // Debounced search as user types
+  useEffect(() => {
+    const q = newSymbol.trim();
+    if (!q || q.length < 2) { setSuggestions([]); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchStock(q);
+        setSuggestions((results || []).slice(0, 10));
+        setShowSuggestions(true);
+      } catch { setSuggestions([]); }
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [newSymbol]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShowSuggestions(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const selectSuggestion = (s) => {
+    setNewSymbol(s.symbol);
+    setNewName(s.name || s.symbol);
+    setSuggestions([]);
+    setShowSuggestions(false);
   };
 
   const handleSubmit = async (e) => {
@@ -972,32 +995,63 @@ function RenameStockModal({ stock, onSave, onClose }) {
     }
   };
 
+  const inputStyle = { width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', outline: 'none' };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
         <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Rename Stock — {stock.symbol}</h2>
         <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: '12px' }}>
+          <div className="form-group" style={{ marginBottom: '12px', position: 'relative' }} ref={dropdownRef}>
             <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' }}>New Symbol</label>
             <input
               type="text"
               value={newSymbol}
               onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
-              onBlur={handleSymbolBlur}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="Type to search..."
+              autoFocus
               required
-              style={{ width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', outline: 'none' }}
+              style={inputStyle}
             />
+            {showSuggestions && suggestions.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}>
+                {suggestions.map((s, i) => (
+                  <div key={i}
+                    onClick={() => selectSuggestion(s)}
+                    style={{
+                      padding: '8px 12px', cursor: 'pointer', fontSize: '12px',
+                      borderBottom: '1px solid var(--border)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 600, color: 'var(--text)' }}>{s.symbol}</span>
+                      <span style={{ marginLeft: '8px', color: 'var(--text-muted)', fontSize: '11px' }}>{s.exchange}</span>
+                    </div>
+                    <span style={{ color: 'var(--text-dim)', fontSize: '11px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' }}>
-              Display Name {fetching && <span style={{ color: 'var(--blue)', fontSize: '10px' }}>(fetching...)</span>}
-            </label>
+            <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' }}>Display Name</label>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               required
-              style={{ width: '100%', padding: '8px 12px', fontSize: '13px', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', outline: 'none' }}
+              style={{ ...inputStyle, borderColor: newName && newName !== stock.name ? 'var(--green)' : undefined }}
             />
           </div>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
