@@ -1129,51 +1129,38 @@ class XlsxPortfolio:
             return False
 
     def rename_stock(self, old_symbol: str, new_symbol: str, new_name: str = "") -> bool:
-        """Rename a stock by renaming its xlsx file.
-        Updates internal caches and syncs to Drive."""
-        old_filepath = self._file_map.get(old_symbol)
-        if not old_filepath or not old_filepath.exists():
+        """Rename a stock symbol by updating the Index sheet in-place.
+        Does NOT rename the file — avoids Google Drive creating duplicate copies."""
+        filepath = self._file_map.get(old_symbol)
+        if not filepath or not filepath.exists():
             return False
 
-        # Determine new filename
         display_name = new_name or new_symbol
-        new_filename = f"{display_name}.xlsx"
-        new_filepath = old_filepath.parent / new_filename
-
-        if new_filepath.exists() and new_filepath != old_filepath:
-            logger.error(f"[XlsxDB] Cannot rename: {new_filename} already exists")
-            return False
 
         try:
-            # Also update the Index sheet symbol/name if present
-            wb = openpyxl.load_workbook(old_filepath)
+            wb = openpyxl.load_workbook(filepath)
             if "Index" in wb.sheetnames:
                 idx_ws = wb["Index"]
-                # B1 = symbol, B2 = exchange typically
-                # A1 usually has the company name or symbol
+                # Update symbol references in Index sheet
                 for r in range(1, 6):
-                    val = idx_ws.cell(r, 1).value
-                    if val and str(val).strip().upper() == old_symbol.upper():
-                        idx_ws.cell(r, 1, value=new_symbol)
-                    val_b = idx_ws.cell(r, 2).value
-                    if val_b and str(val_b).strip().upper() == old_symbol.upper():
-                        idx_ws.cell(r, 2, value=new_symbol)
-            wb.save(old_filepath)
+                    for c in range(1, 6):
+                        val = idx_ws.cell(r, c).value
+                        if val and str(val).strip().upper() == old_symbol.upper():
+                            idx_ws.cell(r, c, value=new_symbol)
+            wb.save(filepath)
             wb.close()
 
-            # Rename the file
-            old_filepath.rename(new_filepath)
+            # Clean up any Drive conflict copies
+            _sync_to_drive(filepath)
 
-            # Clean up conflict copies + old filename copies
-            _sync_to_drive(new_filepath)
-
-            # Update internal caches
+            # Update internal caches — same file, new symbol mapping
             self._invalidate_symbol(old_symbol)
-            del self._file_map[old_symbol]
-            self._file_map[new_symbol] = new_filepath
+            if old_symbol in self._file_map:
+                del self._file_map[old_symbol]
+            self._file_map[new_symbol] = filepath
             self._name_map[new_symbol] = display_name
 
-            logger.info(f"[XlsxDB] Renamed stock {old_symbol} -> {new_symbol} ({new_filepath.name})")
+            logger.info(f"[XlsxDB] Renamed stock {old_symbol} -> {new_symbol} (file unchanged: {filepath.name})")
             return True
         except Exception as e:
             logger.error(f"[XlsxDB] Failed to rename {old_symbol} -> {new_symbol}: {e}")

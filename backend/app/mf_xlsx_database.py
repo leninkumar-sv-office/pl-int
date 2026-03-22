@@ -1387,43 +1387,35 @@ class MFXlsxPortfolio:
             return False
 
     def rename_fund(self, old_code: str, new_code: str, new_name: str = "") -> bool:
-        """Rename a fund by renaming its xlsx file and updating caches."""
-        old_filepath = self._file_map.get(old_code)
-        if not old_filepath or not old_filepath.exists():
+        """Rename a fund code by updating the Index sheet in-place.
+        Does NOT rename the file — avoids Google Drive creating duplicate copies."""
+        filepath = self._file_map.get(old_code)
+        if not filepath or not filepath.exists():
             return False
 
         display_name = new_name or new_code
-        new_filename = f"{display_name}.xlsx"
-        new_filepath = old_filepath.parent / new_filename
-
-        if new_filepath.exists() and new_filepath != old_filepath:
-            logger.error(f"[MF-XlsxDB] Cannot rename: {new_filename} already exists")
-            return False
 
         try:
-            # Update Index sheet if present
-            wb = openpyxl.load_workbook(old_filepath)
+            wb = openpyxl.load_workbook(filepath)
             if "Index" in wb.sheetnames:
                 idx_ws = wb["Index"]
                 for r in range(1, 6):
-                    for c in range(1, 4):
+                    for c in range(1, 6):
                         val = idx_ws.cell(r, c).value
                         if val and str(val).strip() == old_code:
                             idx_ws.cell(r, c, value=new_code)
-            wb.save(old_filepath)
+            wb.save(filepath)
             wb.close()
 
-            old_filepath.rename(new_filepath)
-
-            # Clean up conflict copies
-            _sync_to_drive(new_filepath)
+            _sync_to_drive(filepath)
 
             self._cache.pop(old_code, None)
-            del self._file_map[old_code]
-            self._file_map[new_code] = new_filepath
+            if old_code in self._file_map:
+                del self._file_map[old_code]
+            self._file_map[new_code] = filepath
             self._name_map[new_code] = display_name
 
-            logger.info(f"[MF-XlsxDB] Renamed fund {old_code} -> {new_code}")
+            logger.info(f"[MF-XlsxDB] Renamed fund {old_code} -> {new_code} (file unchanged: {filepath.name})")
             return True
         except Exception as e:
             logger.error(f"[MF-XlsxDB] Failed to rename {old_code} -> {new_code}: {e}")
