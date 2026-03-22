@@ -736,10 +736,21 @@ def delete_holding(holding_id: str):
 @app.put("/api/portfolio/holdings/{holding_id}")
 def update_holding_endpoint(holding_id: str, updates: dict):
     """Edit a held lot's Buy row (date, qty, price)."""
-    result = udb().update_holding(holding_id, updates)
+    db = udb()
+    # Ensure holding index is populated
+    holding = db.get_holding_by_id(holding_id)
+    if not holding:
+        logger.error(f"[API] update_holding: holding {holding_id} not found in index")
+        raise HTTPException(status_code=404, detail=f"Holding {holding_id} not found")
+    filepath = db._holding_file.get(holding_id)
+    if not filepath:
+        logger.error(f"[API] update_holding: no file mapping for {holding_id}, holding={holding.symbol}")
+        raise HTTPException(status_code=404, detail=f"No file for holding {holding_id}")
+    result = db.update_holding(holding_id, updates)
     if result:
         return {"message": "Holding updated", "holding": result.dict()}
-    raise HTTPException(status_code=404, detail="Holding not found or update failed")
+    logger.error(f"[API] update_holding: row not matched for {holding_id} ({holding.symbol} date={holding.buy_date} qty={holding.quantity})")
+    raise HTTPException(status_code=404, detail="Row not matched in xlsx — check date/qty")
 
 
 @app.put("/api/portfolio/sold/{symbol}/{row_idx}")
