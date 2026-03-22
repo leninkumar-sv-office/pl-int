@@ -813,9 +813,36 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
     return () => document.removeEventListener('mousedown', handler);
   }, [colPickerOpen]);
 
+  // ── Sort mode: ₹ / % / % p.a. for P&L columns ──
+  const PL_SORT_FIELDS = new Set(['unrealizedPL', 'realizedPL']);
+  const SORT_MODES = ['inr', 'pct', 'pa'];
+  const SORT_MODE_LABELS = { inr: '₹', pct: '%', pa: '% p.a.' };
+  const [sortMode, setSortMode] = useState('inr');
+  const cycleSortMode = () => setSortMode(prev => SORT_MODES[(SORT_MODES.indexOf(prev) + 1) % SORT_MODES.length]);
+
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const mfPctVal = (f, field) => {
+    const val = field === 'unrealizedPL' ? f.unrealized_pl : f.realized_pl;
+    const invested = f.total_invested || 0;
+    if (invested <= 0) return val >= 0 ? -Infinity : Infinity;
+    return (val / invested) * 100;
+  };
+
+  const mfPaVal = (f, field) => {
+    const val = field === 'unrealizedPL' ? f.unrealized_pl : f.realized_pl;
+    const invested = f.total_invested || 0;
+    if (invested <= 0 || !f.total_held_units) return val >= 0 ? -Infinity : Infinity;
+    // Use earliest lot date for duration
+    const lots = f._held_lots || [];
+    const dates = lots.map(l => l.buy_date).filter(Boolean);
+    const earliest = dates.length ? dates.sort()[0] : null;
+    const diffDays = earliest ? Math.floor((Date.now() - new Date(earliest + 'T00:00:00').getTime()) / 86400000) : 0;
+    if (diffDays <= 0) return val >= 0 ? -Infinity : Infinity;
+    return (Math.pow(1 + val / invested, 365 / diffDays) - 1) * 100;
   };
 
   const SortIcon = ({ field }) => {
@@ -844,8 +871,16 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'w52Low':       va = a.week_52_low || 0; vb = b.week_52_low || 0; break;
       case 'w52High':      va = a.week_52_high || 0; vb = b.week_52_high || 0; break;
       case 'currentValue': va = a.current_value; vb = b.current_value; break;
-      case 'unrealizedPL': va = a.unrealized_pl; vb = b.unrealized_pl; break;
-      case 'realizedPL':   va = a.realized_pl; vb = b.realized_pl; break;
+      case 'unrealizedPL':
+        if (sortMode === 'pa') { va = mfPaVal(a, 'unrealizedPL'); vb = mfPaVal(b, 'unrealizedPL'); }
+        else if (sortMode === 'pct') { va = mfPctVal(a, 'unrealizedPL'); vb = mfPctVal(b, 'unrealizedPL'); }
+        else { va = a.unrealized_pl; vb = b.unrealized_pl; }
+        break;
+      case 'realizedPL':
+        if (sortMode === 'pa') { va = mfPaVal(a, 'realizedPL'); vb = mfPaVal(b, 'realizedPL'); }
+        else if (sortMode === 'pct') { va = mfPctVal(a, 'realizedPL'); vb = mfPctVal(b, 'realizedPL'); }
+        else { va = a.realized_pl; vb = b.realized_pl; }
+        break;
       default:             va = a.name; vb = b.name;
     }
     if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
@@ -1168,9 +1203,19 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               </th>}
               {col('unrealizedPL') && <th onClick={() => handleSort('unrealizedPL')} style={{ cursor: 'pointer' }}>
                 Unrealized P&L<SortIcon field="unrealizedPL" />
+                <span
+                  onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
+                >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
               {col('realizedPL') && <th onClick={() => handleSort('realizedPL')} style={{ cursor: 'pointer' }}>
                 Realized P&L<SortIcon field="realizedPL" />
+                <span
+                  onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
+                  style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
+                  title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
+                >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
             </tr>
           </thead>

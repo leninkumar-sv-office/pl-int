@@ -81,6 +81,7 @@ npm run test:report
 - MF NAVs use AMFI NAVAll.txt (bulk fetch, 1hr cache)
 - User data lives in Google Drive desktop sync at `DUMPS_BASE`
 - All MF funds are Direct Growth plans, names in Title Case
+- **Feature parity: StockSummaryTable ↔ MutualFundTable** — any feature added to one (sorting modes, filtering, display options, columns) MUST also be added to the other. They should have the same UX capabilities.
 
 ## Test Strategy
 
