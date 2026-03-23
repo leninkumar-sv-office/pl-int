@@ -3058,6 +3058,48 @@ async def generate_analysis_pdf(request: Request):
     return {"path": filepath, "filename": filename, "drive_synced": True}
 
 
+@app.post("/api/advisor/briefing-html")
+async def generate_briefing_html_endpoint(request: Request):
+    """Generate a styled HTML from markdown briefing text. Body: {"markdown": "..."}"""
+    from .briefing_html import generate_briefing_html as gen_html
+    body = await request.json()
+    md = body.get("markdown", "")
+    if not md:
+        return {"error": "No markdown provided"}
+    filepath = gen_html(md)
+    filename = os.path.basename(filepath)
+    return {"path": filepath, "filename": filename}
+
+
+@app.post("/api/advisor/analysis-html")
+async def generate_analysis_html_endpoint(request: Request):
+    """Generate a styled HTML to dumps/temp/analysis/DD-MM-YY/HH_MMhrs.html and sync to Drive.
+
+    Body: {"markdown": "..."}
+    Returns: {"path": "...", "filename": "...", "drive_synced": true/false}
+    """
+    from .briefing_html import generate_briefing_html as gen_html
+    from datetime import datetime as dt
+
+    body = await request.json()
+    md = body.get("markdown", "")
+    if not md:
+        return {"error": "No markdown provided"}
+
+    now = dt.now()
+    date_dir = now.strftime("%d-%m-%y")
+    hour_label = now.strftime("%H_%M") + "hrs"
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "dumps", "temp", "analysis", date_dir)
+    os.makedirs(base_dir, exist_ok=True)
+    output_path = os.path.join(base_dir, f"{hour_label}.html")
+
+    filepath = gen_html(md, output_path=output_path)
+    filename = os.path.basename(filepath)
+
+    # Google Drive desktop sync handles upload automatically
+    return {"path": filepath, "filename": filename, "drive_synced": True}
+
+
 # ══════════════════════════════════════════════════════════
 #  ALERTS & NOTIFICATIONS
 # ══════════════════════════════════════════════════════════

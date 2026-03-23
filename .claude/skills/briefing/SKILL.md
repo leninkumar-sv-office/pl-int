@@ -71,24 +71,24 @@ Generate a comprehensive, detailed market briefing from the past 7 days of Busin
 
 8. **Produce the briefing** using the Output Format below.
 
-9. **Generate PDF** — After producing the briefing markdown, save it as a PDF:
+9. **Generate HTML** — After producing the briefing markdown, save it as a styled HTML file:
    ```bash
-   curl -s -X POST http://localhost:9999/api/advisor/briefing-pdf \
+   curl -s -X POST http://localhost:9999/api/advisor/briefing-html \
      -H "Content-Type: application/json" \
      -H "Authorization: Bearer $TOKEN" \
      -d "{\"markdown\": \"<the full briefing markdown>\"}"
    ```
-   Report the PDF file path to the user.
+   Report the HTML file path to the user.
 
-10. **Generate analysis PDF** — Save an additional copy to the time-organized analysis directory and sync to Google Drive:
+10. **Generate analysis HTML** — Save an additional copy to the time-organized analysis directory and sync to Google Drive:
     ```bash
-    curl -s -X POST http://localhost:9999/api/advisor/analysis-pdf \
+    curl -s -X POST http://localhost:9999/api/advisor/analysis-html \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $TOKEN" \
       -d "{\"markdown\": \"<the full briefing markdown>\"}"
     ```
-    This saves the PDF to `dumps/temp/analysis/DD-MM-YY/HH_MMhrs.pdf` (e.g., `dumps/temp/analysis/17-03-26/10_00hrs.pdf`) with full styling, colored tables, dashboard metrics, sector bars, and action cards. It also automatically syncs the file to Google Drive.
-    Report both the analysis PDF path and whether Drive sync succeeded.
+    This saves the HTML to `dumps/temp/analysis/DD-MM-YY/HH_MMhrs.html` (e.g., `dumps/temp/analysis/17-03-26/10_00hrs.html`) with full styling: dark theme, colored tables, dashboard metric cards, sector bars, and action cards. It also automatically syncs the file to Google Drive.
+    Report both the analysis HTML path and whether Drive sync succeeded.
 
 ## Output Format
 
@@ -111,8 +111,8 @@ Detailed bullets with context. Format: "**METRIC**: VALUE (CHANGE%) — context 
 ### Actionable Stock Ideas
 | Stock | Signal | Action | Source | Detailed Analysis |
 |-------|--------|--------|--------|-------------------|
-- **Detailed Analysis column: 25-40 words.** Include: specific catalyst, quantified impact, target price, holding value if in portfolio, timeframe, risk.
-  Example: "USFDA issued VAI classification for Andhra plant — removes key overhang. Holding Rs.1.57L. Consensus target Rs.1,400 (18% upside). Accumulate on dips below Rs.1,180. Risk: FDA reinspection."
+- **Detailed Analysis column: 40-80 words.** Must explain the FULL reasoning chain — not just the catalyst but WHY it matters for this stock, HOW it impacts financials, WHAT the market is pricing in, and WHAT to do. Include: specific catalyst from articles, quantified financial impact (revenue/margin/EPS effect), analyst target prices with upside/downside %, holding value if in portfolio, entry/exit price levels, timeframe, key risk, and next catalyst date.
+  Example: "USFDA issued VAI classification for Andhra plant — removes key overhang that depressed valuation by ~15%. Plant contributes 22% of US revenue ($180M). With clearance, consensus EPS upgrades likely from Rs.42 to Rs.48. Holding Rs.1.57L at avg Rs.1,050. Consensus target Rs.1,400 (18% upside). Accumulate below Rs.1,180 in 2-3 tranches. Risk: FDA reinspection typically 6-12 months. Next catalyst: Q4 results April 25 where US business recovery should be visible."
 - Signal: BULLISH, BEARISH, NEUTRAL, BUY PUT, BOOK PROFIT, BREAKOUT, BREAKDOWN
 - Action: BUY, SELL, HOLD, ADD, TRIM, EXIT, AVOID, WATCH, SL@PRICE — always filled
 - Include ALL stocks mentioned in articles with recommendations
@@ -124,7 +124,7 @@ Detailed bullets with context. Format: "**METRIC**: VALUE (CHANGE%) — context 
 - **WHO**: Full entity names with relationship. "Apollo Global Management -> Adani Energy Solutions (via subsidiary)"
 - **WHAT**: Specific action with full context. "Issued secured notes to refinance existing debt on transmission unit. Replaces 9.5% bonds maturing 2025 with 7.8% notes due 2030."
 - **HOW MUCH**: Currency + amount + context. "$500M (Rs.4,150 cr at current rates). Represents 15% of Adani Energy's total debt."
-- **WHY IT MATTERS**: 15-25 words with investor implication. "Signals institutional confidence in India power infra. Lower interest cost improves EBITDA margins by ~80bps. Positive for Adani Green too."
+- **WHY IT MATTERS**: 25-50 words with full investor implication chain. "Signals institutional confidence in India power infra despite macro headwinds. Lower interest cost (9.5% → 7.8%) improves EBITDA margins by ~80bps and saves Rs.850 cr annually. Positive for Adani Green too as it validates the group's refinancing strategy. Watch for rating upgrade from Moody's."
 
 ### Negative News & Risks
 | WHAT | WHO | HOW BAD | ACTION |
@@ -135,18 +135,18 @@ Detailed bullets with context. Format: "**METRIC**: VALUE (CHANGE%) — context 
 - **ACTION**: Specific recommendation. "TRIM export-heavy holdings (Page, Welspun). WATCH Tata Motors for JLR UK exposure clarity. AVOID new positions in textile exporters until tariff rates announced (expected April 15)."
 
 ### Sector Impacts
-Detailed paragraph per sector (3-5 sentences each). Cover all relevant sectors:
+Detailed paragraph per sector (5-8 sentences each). Each sector MUST include: (1) Direction verdict, (2) Primary catalyst with article source, (3) Quantified impact on sector financials, (4) Specific affected stocks with % changes, (5) How this connects to other sectors (chain effects), (6) Clear recommendation with price levels. Cover all relevant sectors:
 
-- **Oil & Energy**: Direction + catalyst + affected stocks + recommendation. "BULLISH. Brent above $90 boosts upstream (ONGC +3%, Oil India +2.5%) but crushes downstream OMCs (BPCL -4%, HPCL -5%). Government may delay fuel price revision ahead of state elections. Avoid OMCs; accumulate ONGC on dips."
-- **Banking & Finance**: NPA trends, credit growth, NIM outlook, rate cycle impact.
-- **IT Services**: Deal wins, attrition, margin guidance, USD/INR impact.
-- **Pharma**: USFDA actions, API pricing, domestic formulation growth.
-- **Auto**: Monthly sales data, EV transition, commodity cost impact.
-- **Metals & Mining**: Global commodity prices, China demand, anti-dumping duties.
-- **Real Estate & Infra**: Project wins, order book, government capex.
-- **FMCG & Consumer**: Rural recovery, input cost inflation, volume vs value growth.
-- **Insurance**: Regulatory changes, premium growth, claims ratio.
-- **Telecom**: ARPU trends, 5G rollout, spectrum costs.
+- **Oil & Energy**: Direction + catalyst + affected stocks + chain effects + recommendation. "BULLISH. Brent above $90 boosts upstream (ONGC +3%, Oil India +2.5%) but crushes downstream OMCs (BPCL -4%, HPCL -5%). Every $10/bbl rise adds Rs.15,000 cr to India's subsidy bill. Government may delay fuel price revision ahead of state elections — this means OMC under-recoveries could reach Rs.8/litre by Q1FY27. Chain effect: higher fuel → input cost inflation for paints (Asian Paints margin compression 200bps), logistics, and FMCG. Avoid OMCs; accumulate ONGC on dips below Rs.260."
+- **Banking & Finance**: NPA trends, credit growth, NIM outlook, rate cycle impact, specific bank performance, FPI flow impact on banking stocks.
+- **IT Services**: Deal wins, attrition, margin guidance, USD/INR impact, Accenture/peer results read-through, AI impact on demand.
+- **Pharma**: USFDA actions, API pricing, domestic formulation growth, patent expiries, rupee depreciation benefit quantified.
+- **Auto**: Monthly sales data, EV transition, commodity cost impact, export orders, specific OEM performance.
+- **Metals & Mining**: Global commodity prices, China demand, anti-dumping duties, domestic capacity, trade policy impact.
+- **Real Estate & Infra**: Project wins, order book, government capex trajectory, interest rate sensitivity, specific company orders.
+- **FMCG & Consumer**: Rural recovery, input cost inflation, volume vs value growth, crude-driven cost pressures.
+- **Insurance**: Regulatory changes, premium growth, claims ratio, investment income impact from market crash.
+- **Telecom**: ARPU trends, 5G rollout, spectrum costs, competitive dynamics.
 
 ### MF / SIP / IPO
 | Item | Type | Detail | Recommendation |
@@ -165,10 +165,10 @@ Detailed bullets with chain-of-impact analysis:
 - **RBI**: Policy stance, liquidity management, forex reserves.
 
 ### Portfolio Impact
-| Stock | Current Value | 1D Change | Signal | Action | Detailed Analysis (30-50 words) |
+| Stock | Current Value | 1D Change | Signal | Action | Detailed Analysis (50-80 words) |
 |-------|--------------|-----------|--------|--------|----------------------------------|
-- **Detailed Analysis**: Include the specific catalyst from articles, quantified impact, what to watch for, and timeline.
-  Example: "Brent >$90 devastates refining margins — GRM dropped from $12 to $6/bbl in Q4. Stock down 4% today. Moody's flagged margin volatility in March report. TRIM 30% position if crude stays above $90 for 2 weeks. Next catalyst: Q4 results April 25."
+- **Detailed Analysis**: Must include the FULL reasoning: (1) the specific catalyst from articles with source, (2) quantified financial impact on the company, (3) how it changes the investment thesis, (4) specific price levels for action, (5) what to watch for next, and (6) timeline.
+  Example: "Brent >$90 devastates refining margins — GRM dropped from $12 to $6/bbl in Q4 (BL). Singapore GRM benchmark confirms sustained compression. This wipes ~Rs.4,000 cr from annual EBITDA. Stock down 4% today, now at cost basis. Moody's flagged margin volatility in March report adding credit risk. TRIM 30% position if crude stays above $90 for 2 weeks — redeploy into upstream ONGC. Next catalyst: Q4 results April 25 where GRM guidance will be key."
 - ONLY stocks with news. List holdings with no news separately at the end.
 - Sort by action urgency: TRIM/EXIT first, then ADD, then HOLD, then WATCH.
 - Include current holding value, day change, and cumulative P&L.
