@@ -7,10 +7,9 @@
     "price": 74532.96,
     "change": 325.72,
     "change_pct": 0.44,
-    "instrument_token": 265,
-    "source": "zerodha",
-    "week_change_pct": -0.04,
-    "month_change_pct": -10.0
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "NIFTY50",
@@ -20,10 +19,9 @@
     "price": 23114.5,
     "change": 112.35,
     "change_pct": 0.49,
-    "instrument_token": 256265,
-    "source": "zerodha",
-    "week_change_pct": -0.16,
-    "month_change_pct": -9.61
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "GIFTNIFTY",
@@ -33,10 +31,9 @@
     "price": 23146.0,
     "change": 91.2,
     "change_pct": 0.4,
-    "instrument_token": 13238786,
-    "source": "zerodha",
-    "week_change_pct": -0.23,
-    "month_change_pct": -10.09
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "GOLD",
@@ -46,10 +43,9 @@
     "price": 14482.5,
     "change": -12.9,
     "change_pct": -0.09,
-    "instrument_token": 116433415,
-    "source": "zerodha",
-    "week_change_pct": -8.61,
-    "month_change_pct": -7.68
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "SILVER",
@@ -59,10 +55,9 @@
     "price": 232.33,
     "change": 0.58,
     "change_pct": 0.25,
-    "instrument_token": 117128455,
-    "source": "zerodha",
-    "week_change_pct": -12.55,
-    "month_change_pct": -11.78
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "SGX",
@@ -72,9 +67,9 @@
     "price": 4948.87,
     "change": 106.6,
     "change_pct": 2.2,
-    "source": "yahoo/google",
-    "week_change_pct": 2.2,
-    "month_change_pct": -1.37
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "NIKKEI",
@@ -84,9 +79,27 @@
     "price": 53372.53,
     "change": -447.08,
     "change_pct": -0.83,
-    "source": "yahoo/google",
-    "week_change_pct": -0.83,
-    "month_change_pct": -6.08
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
+  },
+  {
+    "key": "DOWJONES",
+    "label": "Dow Jones",
+    "type": "index",
+    "unit": "",
+    "price": 0,
+    "change": 0,
+    "change_pct": 0
+  },
+  {
+    "key": "SP500",
+    "label": "S&P 500",
+    "type": "index",
+    "unit": "",
+    "price": 0,
+    "change": 0,
+    "change_pct": 0
   },
   {
     "key": "SGDINR",
@@ -96,9 +109,9 @@
     "price": 73.05,
     "change": 0.94,
     "change_pct": 1.3,
-    "source": "yahoo/google",
-    "week_change_pct": 1.16,
-    "month_change_pct": 1.88
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "USDINR",
@@ -108,10 +121,9 @@
     "price": 93.59,
     "change": 0.9,
     "change_pct": 0.97,
-    "instrument_token": 579587,
-    "source": "zerodha",
-    "week_change_pct": 1.26,
-    "month_change_pct": 2.71
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   },
   {
     "key": "CRUDEOIL",
@@ -121,9 +133,8 @@
     "price": 9245.0,
     "change": 247.0,
     "change_pct": 2.75,
-    "instrument_token": 124544519,
-    "source": "zerodha",
-    "week_change_pct": 3.38,
-    "month_change_pct": 52.33
+    "source": "cached",
+    "week_change_pct": 0.0,
+    "month_change_pct": 0.0
   }
 ]
