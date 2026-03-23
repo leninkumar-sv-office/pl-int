@@ -23,8 +23,8 @@ services:
       - FORCE_COLOR=1
       - PYTHONUNBUFFERED=1
     volumes:
-      # Mount Google Drive synced folder — all file changes auto-sync to Drive
-      - /Users/lenin/Library/CloudStorage/GoogleDrive-${USER_EMAIL}/My Drive/pl/dumps:/app/backend/dumps
+      # Mount dumps folder — synced to Google Drive via rclone
+      - ./backend/dumps:/app/backend/dumps
       - ./backend/data:/app/backend/data
     tty: true
     restart: unless-stopped
