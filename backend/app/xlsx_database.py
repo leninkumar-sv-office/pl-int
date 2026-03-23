@@ -150,10 +150,10 @@ def _extract_index_data(wb) -> dict:
     if "Index" not in wb.sheetnames:
         return data
     ws = wb["Index"]
-    max_row = ws.max_row or 0
-    if max_row == 0:
+    max_row = ws.max_row
+    if max_row is not None and max_row == 0:
         return data
-    for row in ws.iter_rows(min_row=1, max_row=min(15, max_row), values_only=False):
+    for row in ws.iter_rows(min_row=1, max_row=min(15, max_row) if max_row else 15, values_only=False):
         vals = [c.value for c in row]
         if len(vals) >= 3:
             label = vals[1]
