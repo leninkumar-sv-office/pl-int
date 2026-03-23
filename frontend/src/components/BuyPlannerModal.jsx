@@ -10,6 +10,18 @@ const formatINR = (num) => {
   return '₹' + Number(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const fmtAmt = (v) => {
+  if (!v || Math.abs(v) < 0.01) return '';
+  const abs = Math.abs(v);
+  const sign = v >= 0 ? '+' : '-';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(1)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
+  if (abs >= 100) return `${sign}₹${Math.round(abs)}`;
+  if (abs >= 10) return `${sign}₹${abs.toFixed(1)}`;
+  return `${sign}₹${abs.toFixed(2)}`;
+};
+
 const calcPa = (pnl, invested, earliestDate) => {
   if (!earliestDate || invested <= 0 || pnl === 0) return null;
   const days = Math.floor((Date.now() - new Date(earliestDate + 'T00:00:00').getTime()) / 86400000);
@@ -52,6 +64,8 @@ export default function TradePlanner() {
   const [searching, setSearching] = useState(false);
   const [fetchingPrice, setFetchingPrice] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [sortField, setSortField] = useState('symbol');
+  const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null); // "SYMBOL.EXCHANGE" or null
   const [chartPeriod, setChartPeriod] = useState('1y');
   const [chartData, setChartData] = useState([]);
@@ -90,6 +104,8 @@ export default function TradePlanner() {
         totalInvested: s.total_invested || 0, ltcgInvested: s.ltcg_invested || 0, stcgInvested: s.stcg_invested || 0,
         ltcgEarliestDate: s.ltcg_earliest_date || '', stcgEarliestDate: s.stcg_earliest_date || '',
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
+        dayChange: s.live?.day_change || 0, dayChangePct: s.live?.day_change_pct || 0,
+        weekChangePct: s.live?.week_change_pct || 0, monthChangePct: s.live?.month_change_pct || 0,
         buyQty: sv?.buyQty || '', sellQty: sv?.sellQty || '', ltSellQty: sv?.ltSellQty || '', stSellQty: sv?.stSellQty || '',
         ltAvail: ltQty, stAvail: stQty,
       };
@@ -101,6 +117,7 @@ export default function TradePlanner() {
       const placeholders = remaining.map(s => ({
         symbol: s.symbol, exchange: s.exchange, name: s.symbol,
         onHand: 0, low: 0, current: 0, high: 0,
+        dayChange: 0, dayChangePct: 0, weekChangePct: 0, monthChangePct: 0,
         buyQty: s.buyQty || '', sellQty: s.sellQty || '', ltSellQty: s.ltSellQty || '', stSellQty: s.stSellQty || '',
         ltAvail: 0, stAvail: 0,
       }));
@@ -110,7 +127,9 @@ export default function TradePlanner() {
           const price = await fetchStockPrice(s.symbol, s.exchange);
           setRows(prev => prev.map(r =>
             r.symbol === s.symbol && r.exchange === s.exchange
-              ? { ...r, name: price.name || s.symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0 }
+              ? { ...r, name: price.name || s.symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
+                  dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
+                  weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0 }
               : r
           ));
         } catch {}
@@ -125,10 +144,48 @@ export default function TradePlanner() {
     if (initializedRef.current && rows.length > 0) savePlan(rows);
   }, [rows]);
 
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <span style={{ opacity: 0.3, marginLeft: '4px' }}>↕</span>;
+    return <span style={{ marginLeft: '4px' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   const sortedRows = [...rows].sort((a, b) => {
+    // Rows with qty always first
     const aHas = (parseInt(a.buyQty) || 0) > 0 || (parseInt(a.sellQty) || 0) > 0 ? 0 : 1;
     const bHas = (parseInt(b.buyQty) || 0) > 0 || (parseInt(b.sellQty) || 0) > 0 ? 0 : 1;
-    return aHas - bHas;
+    if (aHas !== bHas) return aHas - bHas;
+
+    let av, bv;
+    switch (sortField) {
+      case 'symbol': av = a.symbol; bv = b.symbol; break;
+      case 'onHand': av = a.onHand || 0; bv = b.onHand || 0; break;
+      case 'week_52_low': {
+        av = a.current > 0 && a.low > 0 ? ((a.current - a.low) / a.low * 100) : 9999;
+        bv = b.current > 0 && b.low > 0 ? ((b.current - b.low) / b.low * 100) : 9999;
+        break;
+      }
+      case 'day_change_pct': av = a.dayChangePct || 0; bv = b.dayChangePct || 0; break;
+      case 'week_52_high': {
+        av = a.current > 0 && a.high > 0 ? ((a.high - a.current) / a.high * 100) : 9999;
+        bv = b.current > 0 && b.high > 0 ? ((b.high - b.current) / b.high * 100) : 9999;
+        break;
+      }
+      default: av = a.symbol; bv = b.symbol;
+    }
+    if (typeof av === 'string') {
+      const cmp = av.localeCompare(bv);
+      return sortDir === 'asc' ? cmp : -cmp;
+    }
+    return sortDir === 'asc' ? av - bv : bv - av;
   });
 
   const filteredRows = searchQuery.trim()
@@ -163,10 +220,13 @@ export default function TradePlanner() {
       const price = await fetchStockPrice(result.symbol, result.exchange);
       setRows(prev => [{ symbol: result.symbol, exchange: result.exchange, name: price.name || result.name,
         onHand: 0, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
+        dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
+        weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0,
         buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
     } catch {
       setRows(prev => [{ symbol: result.symbol, exchange: result.exchange, name: result.name,
-        onHand: 0, low: 0, current: 0, high: 0, buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
+        onHand: 0, low: 0, current: 0, high: 0, dayChange: 0, dayChangePct: 0, weekChangePct: 0, monthChangePct: 0,
+        buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
     } finally { setFetchingPrice(null); }
   };
 
@@ -325,10 +385,12 @@ export default function TradePlanner() {
         try {
           const price = await fetchStockPrice(symbol, exchange);
           newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: false,
-            name: price.name || symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0 });
+            name: price.name || symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
+            dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
+            weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0 });
         } catch {
           newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: false,
-            name: symbol, low: 0, current: 0, high: 0 });
+            name: symbol, low: 0, current: 0, high: 0, dayChange: 0, dayChangePct: 0, weekChangePct: 0, monthChangePct: 0 });
         }
       }
     }
@@ -345,7 +407,10 @@ export default function TradePlanner() {
           updated[idx] = { ...r, buyQty: s.buyQty, sellQty: s.sellQty, ltSellQty: lt > 0 ? String(lt) : '', stSellQty: st > 0 ? String(st) : '' };
         } else {
           toAdd.push({ symbol: s.symbol, exchange: s.exchange, name: s.name, onHand: 0,
-            low: s.low, current: s.current, high: s.high, buyQty: s.buyQty, sellQty: s.sellQty, ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 });
+            low: s.low, current: s.current, high: s.high,
+            dayChange: s.dayChange || 0, dayChangePct: s.dayChangePct || 0,
+            weekChangePct: s.weekChangePct || 0, monthChangePct: s.monthChangePct || 0,
+            buyQty: s.buyQty, sellQty: s.sellQty, ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 });
         }
       }
       return [...toAdd, ...updated];
@@ -429,11 +494,11 @@ export default function TradePlanner() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-              <th style={thStyle}>Stock</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>On Hand</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>52W Low</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>CMP</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>52W High</th>
+              <th style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('symbol')}>Stock<SortIcon field="symbol" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('onHand')}>On Hand<SortIcon field="onHand" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_low')}>52W Low<SortIcon field="week_52_low" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('day_change_pct')}>CMP<SortIcon field="day_change_pct" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_high')}>52W High<SortIcon field="week_52_high" /></th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Buy Qty</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Sell Qty</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>LT</th>
@@ -480,9 +545,78 @@ export default function TradePlanner() {
                     </div>
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHand || '--'}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.low ? formatINR(row.low) : '--'}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{row.current ? formatINR(row.current) : '--'}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.high ? formatINR(row.high) : '--'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.low ? (() => {
+                      const nearLow = row.current > 0 && row.current <= row.low * 1.05;
+                      const pctFromLow = row.current > 0 && row.low > 0 ? ((row.current - row.low) / row.low * 100) : 0;
+                      const delta = row.current - row.low;
+                      return (
+                        <div>
+                          <div style={{ color: nearLow ? 'var(--red)' : 'var(--text)', fontWeight: nearLow ? 600 : 400 }}>
+                            {formatINR(row.low)}
+                          </div>
+                          {row.current > 0 && (
+                            <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              {delta >= 0 ? '+' : ''}{pctFromLow.toFixed(2)}%, {fmtAmt(delta) || '+₹0'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })() : '--'}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.current ? (
+                      <div>
+                        <div style={{ fontWeight: 600, color: row.onHand > 0 && row.avgBuy > 0 ? (row.current >= row.avgBuy ? 'var(--green)' : 'var(--red)') : 'var(--text)' }}>
+                          {formatINR(row.current)}
+                        </div>
+                        {(() => {
+                          const pct = row.dayChangePct || 0;
+                          const amt = fmtAmt(row.dayChange || 0) || '+₹0';
+                          return (
+                            <div style={{ fontSize: '10px', color: pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              1D: {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%, {amt}
+                            </div>
+                          );
+                        })()}
+                        {row.weekChangePct !== 0 && (() => {
+                          const amt = fmtAmt(row.current * row.weekChangePct / (100 + row.weekChangePct));
+                          return (
+                            <div style={{ fontSize: '10px', color: row.weekChangePct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              7D: {row.weekChangePct >= 0 ? '+' : ''}{row.weekChangePct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                            </div>
+                          );
+                        })()}
+                        {row.monthChangePct !== 0 && (() => {
+                          const amt = fmtAmt(row.current * row.monthChangePct / (100 + row.monthChangePct));
+                          return (
+                            <div style={{ fontSize: '10px', color: row.monthChangePct >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              1M: {row.monthChangePct >= 0 ? '+' : ''}{row.monthChangePct.toFixed(2)}%{amt ? `, ${amt}` : ''}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : '--'}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.high ? (() => {
+                      const nearHigh = row.current > 0 && row.current >= row.high * 0.95;
+                      const pctFromHigh = row.current > 0 && row.high > 0 ? ((row.high - row.current) / row.high * 100) : 0;
+                      const delta = row.current - row.high;
+                      return (
+                        <div>
+                          <div style={{ color: nearHigh ? 'var(--green)' : 'var(--text)', fontWeight: nearHigh ? 600 : 400 }}>
+                            {formatINR(row.high)}
+                          </div>
+                          {row.current > 0 && (
+                            <div style={{ fontSize: '10px', color: delta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                              {delta >= 0 ? '+' : ''}{(-pctFromHigh).toFixed(2)}%, {fmtAmt(delta) || '-₹0'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })() : '--'}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     <input type="number" min="0" value={row.buyQty} onChange={(e) => updateQty(idx, 'buyQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
                   </td>
