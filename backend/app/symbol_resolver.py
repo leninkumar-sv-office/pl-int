@@ -159,7 +159,7 @@ def _load_from_network() -> Tuple[Dict, Dict]:
         for row in reader:
             instrument_type = (row.get("instrument_type") or "").strip()
             exchange = (row.get("exchange") or "").strip()
-            if instrument_type != "EQ" or exchange not in ("NSE", "BSE"):
+            if instrument_type not in ("EQ", "ETF") or exchange not in ("NSE", "BSE"):
                 continue
             tradingsymbol = (row.get("tradingsymbol") or "").strip()
             name = (row.get("name") or "").strip()

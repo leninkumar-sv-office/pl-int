@@ -82,7 +82,19 @@ def _resolve_symbol(isin: str, sec_name: str,
         logger.info(f"[ContractNote] Resolved '{sec_name}' → {zerodha_symbol} via Zerodha name match")
         return zerodha_symbol, exchange, sec_name.title()
 
-    # 3. Last resort: derive from security name
+    # 3. Check existing stock files' Index sheets (SYMBOL_MAP from xlsx_database)
+    try:
+        from .xlsx_database import SYMBOL_MAP
+        for name, sym in SYMBOL_MAP.items():
+            if _sym_resolver._normalize(sec_name) in _sym_resolver._normalize(name) or \
+               _sym_resolver._normalize(name) in _sym_resolver._normalize(sec_name):
+                exchange = exchange_map.get(isin, "NSE")
+                logger.info(f"[ContractNote] Resolved '{sec_name}' → {sym} via SYMBOL_MAP ('{name}')")
+                return sym, exchange, name.title()
+    except Exception:
+        pass
+
+    # 4. Last resort: derive from security name
     symbol = _sym_resolver.derive_symbol(sec_name)
     default_exchange = "NSE"
     company_name = sec_name.title()
