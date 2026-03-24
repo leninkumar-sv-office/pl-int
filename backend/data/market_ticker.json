@@ -44,8 +44,8 @@
     "change": -684.9,
     "change_pct": -4.74,
     "source": "cached",
-    "week_change_pct": -11.74,
-    "month_change_pct": -12.75
+    "week_change_pct": -11.92,
+    "month_change_pct": -12.94
   },
   {
     "key": "SILVER",
@@ -56,8 +56,8 @@
     "change": -13.11,
     "change_pct": -5.66,
     "source": "cached",
-    "week_change_pct": -12.41,
-    "month_change_pct": -15.34
+    "week_change_pct": -12.88,
+    "month_change_pct": -15.8
   },
   {
     "key": "SGX",
@@ -128,7 +128,7 @@
     "change": 0.34,
     "change_pct": 0.37,
     "source": "cached",
-    "week_change_pct": 1.57,
+    "week_change_pct": 1.58,
     "month_change_pct": 2.96
   },
   {
@@ -140,7 +140,7 @@
     "change": 89.0,
     "change_pct": 0.96,
     "source": "cached",
-    "week_change_pct": -4.73,
-    "month_change_pct": 38.06
+    "week_change_pct": -4.68,
+    "month_change_pct": 38.14
   }
 ]
