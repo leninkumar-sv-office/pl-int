@@ -3232,6 +3232,69 @@ def save_user_settings(updates: dict):
 
 
 # ══════════════════════════════════════════════════════════
+#  LEGAL PAGES (Privacy Policy & Terms of Service)
+# ══════════════════════════════════════════════════════════
+
+@app.get("/privacy")
+def privacy_policy():
+    """Privacy Policy page for Google OAuth verification."""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — Portfolio Dashboard</title>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#333}h1{color:#1a1a1a}h2{margin-top:2rem}</style>
+</head><body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated:</strong> 25 March 2026</p>
+<p>Portfolio Dashboard ("the App") is a personal portfolio tracking tool hosted at <strong>pl.thirumagal.com</strong>.</p>
+<h2>Data We Collect</h2>
+<ul>
+<li><strong>Google Account Info:</strong> Your name, email address, and profile picture — used solely for authentication.</li>
+<li><strong>Google Drive Access:</strong> The App accesses Google Drive to sync your portfolio data files. It only reads and writes files within its designated folder.</li>
+</ul>
+<h2>How We Use Your Data</h2>
+<ul>
+<li>To authenticate you via Google Sign-In.</li>
+<li>To sync portfolio data between the App and your Google Drive.</li>
+<li>We do <strong>not</strong> sell, share, or transfer your data to any third parties.</li>
+</ul>
+<h2>Data Storage</h2>
+<ul>
+<li>Authentication tokens are stored securely on the server and are scoped to your account.</li>
+<li>Portfolio data remains on your Google Drive and the App's server storage.</li>
+</ul>
+<h2>Data Deletion</h2>
+<p>You can revoke the App's access at any time from your <a href="https://myaccount.google.com/permissions">Google Account permissions</a>. This will remove the App's ability to access your Drive.</p>
+<h2>Contact</h2>
+<p>For questions about this policy, contact the App administrator.</p>
+</body></html>""")
+
+
+@app.get("/terms")
+def terms_of_service():
+    """Terms of Service page for Google OAuth verification."""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of Service — Portfolio Dashboard</title>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#333}h1{color:#1a1a1a}h2{margin-top:2rem}</style>
+</head><body>
+<h1>Terms of Service</h1>
+<p><strong>Last updated:</strong> 25 March 2026</p>
+<p>By using Portfolio Dashboard ("the App") at <strong>pl.thirumagal.com</strong>, you agree to these terms.</p>
+<h2>Access</h2>
+<p>The App is a private, invite-only portfolio tracker. Access is restricted to authorised users.</p>
+<h2>Use of Google Services</h2>
+<p>The App uses Google OAuth for authentication and Google Drive for data synchronisation. Your use of these services is also subject to Google's Terms of Service.</p>
+<h2>Disclaimer</h2>
+<p>The App is provided "as is" without warranty. Portfolio data, market prices, and calculations are for informational purposes only and do not constitute financial advice.</p>
+<h2>Limitation of Liability</h2>
+<p>The App administrator is not liable for any losses arising from the use of this application or reliance on its data.</p>
+<h2>Changes</h2>
+<p>These terms may be updated at any time. Continued use of the App constitutes acceptance of the updated terms.</p>
+</body></html>""")
+
+
 #  STATIC FILE SERVING (Production)
 # ══════════════════════════════════════════════════════════
 
