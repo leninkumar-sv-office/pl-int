@@ -130,15 +130,15 @@ jobs:
             "ZERODHA_API_KEY=${{ secrets.ZERODHA_API_KEY }}" \
             "ZERODHA_API_SECRET=${{ secrets.ZERODHA_API_SECRET }}" \
             "ZERODHA_ACCESS_TOKEN=${{ secrets.ZERODHA_ACCESS_TOKEN }}" \
-            "ZERODHA_USER_ID=${{ secrets.ZERODHA_USER_ID }}" \
+            "ZERODHA_USER_ID=${{ vars.ZERODHA_USER_ID }}" \
             "ZERODHA_PASSWORD=${{ secrets.ZERODHA_PASSWORD }}" \
             "ZERODHA_TOTP_SECRET=${{ secrets.ZERODHA_TOTP_SECRET }}" \
-            "AUTH_MODE=${{ secrets.AUTH_MODE }}" \
-            "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
-            "ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}" \
+            "AUTH_MODE=${{ vars.AUTH_MODE }}" \
+            "GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
+            "ALLOWED_EMAILS=${{ vars.ALLOWED_EMAILS }}" \
             "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-            "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
-            "NOTIFICATION_EMAIL=${{ secrets.NOTIFICATION_EMAIL }}" \
+            "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ vars.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
+            "NOTIFICATION_EMAIL=${{ vars.NOTIFICATION_EMAIL }}" \
             "NOTIFICATION_EMAIL_APP_PASSWORD=${{ secrets.NOTIFICATION_EMAIL_APP_PASSWORD }}" \
             "USER_EMAIL=$USER_EMAIL" \
             > "$DEPLOY_DIR/.env"
@@ -325,15 +325,15 @@ jobs:
             "ZERODHA_API_KEY=${{ secrets.ZERODHA_API_KEY }}" \
             "ZERODHA_API_SECRET=${{ secrets.ZERODHA_API_SECRET }}" \
             "ZERODHA_ACCESS_TOKEN=${{ secrets.ZERODHA_ACCESS_TOKEN }}" \
-            "ZERODHA_USER_ID=${{ secrets.ZERODHA_USER_ID }}" \
+            "ZERODHA_USER_ID=${{ vars.ZERODHA_USER_ID }}" \
             "ZERODHA_PASSWORD=${{ secrets.ZERODHA_PASSWORD }}" \
             "ZERODHA_TOTP_SECRET=${{ secrets.ZERODHA_TOTP_SECRET }}" \
-            "AUTH_MODE=${{ secrets.AUTH_MODE }}" \
-            "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
-            "ALLOWED_EMAILS=${{ secrets.ALLOWED_EMAILS }}" \
+            "AUTH_MODE=${{ vars.AUTH_MODE }}" \
+            "GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}" \
+            "ALLOWED_EMAILS=${{ vars.ALLOWED_EMAILS }}" \
             "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-            "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
-            "NOTIFICATION_EMAIL=${{ secrets.NOTIFICATION_EMAIL }}" \
+            "GOOGLE_DRIVE_DUMPS_FOLDER_ID=${{ vars.GOOGLE_DRIVE_DUMPS_FOLDER_ID }}" \
+            "NOTIFICATION_EMAIL=${{ vars.NOTIFICATION_EMAIL }}" \
             "NOTIFICATION_EMAIL_APP_PASSWORD=${{ secrets.NOTIFICATION_EMAIL_APP_PASSWORD }}" \
             "USER_EMAIL=$USER_EMAIL" \
             > "$DEPLOY_DIR/.env"
