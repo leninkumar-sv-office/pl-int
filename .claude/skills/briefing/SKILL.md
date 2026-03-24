@@ -53,34 +53,79 @@ Generate a comprehensive, detailed market briefing from the past 7 days of Busin
    ```
    Returns tickers array with: key, label, price, change, change_pct, week_change_pct, month_change_pct. Includes GIFT Nifty, Sensex, Nifty50, crude oil, gold, silver, USDINR.
 
+### Stock Deep Research (for Portfolio Analysis section)
+
+7. **Fetch price history for EVERY stock** in the portfolio (both held and 0-unit):
+   For each stock from the stock-summary response, fetch 1-year history:
+   ```bash
+   curl -s "http://localhost:9999/api/stock/SYMBOL/history?exchange=NSE&period=1y" -H "Authorization: Bearer $TOKEN"
+   ```
+   This returns daily OHLCV candles. Use this to identify:
+   - 52-week high/low and where current price sits in that range
+   - Recent trend (last 1 month vs 3 months vs 6 months)
+   - Support/resistance levels from price action
+   - Volume trends (increasing/decreasing conviction)
+   - Whether the stock is in an uptrend, downtrend, or consolidation
+
+8. **Web search for EVERY stock** — For each stock in the portfolio, perform multiple web searches to gather comprehensive intelligence. This is the most critical step — do NOT skip or rush it:
+
+   **Round 1 — Latest news & analyst views:**
+   ```
+   WebSearch: "{STOCK_NAME} NSE stock latest news analyst target price 2026"
+   ```
+
+   **Round 2 — Quarterly results & financials:**
+   ```
+   WebSearch: "{STOCK_NAME} quarterly results revenue profit margin Q3 Q4 FY2026"
+   ```
+
+   **Round 3 — Risks & concerns:**
+   ```
+   WebSearch: "{STOCK_NAME} stock risks concerns downgrade sell 2026"
+   ```
+
+   **Round 4 — Sector outlook & competitive position:**
+   ```
+   WebSearch: "{STOCK_NAME} sector outlook competition market share India"
+   ```
+
+   For each stock, after gathering all search results, READ the most relevant articles (at least 2-3 per stock) using WebFetch to get full details — not just snippets.
+
+9. **Iterative reasoning for each stock** — After gathering all data, reason through each stock's recommendation:
+   - **Iteration 1**: Form initial thesis based on price history + news + financials
+   - **Iteration 2**: Challenge the thesis — search for counter-arguments, bearish cases, risks you may have missed
+   - **Iteration 3**: Synthesize final recommendation with conviction level, incorporating all evidence
+
+   Do NOT finalize a recommendation until you have considered BOTH bull and bear cases. If your reasoning feels thin or unconvincing, do another search round. You must be convinced of your own explanation before writing it.
+
 ### Article Analysis
 
-7. **Read the BODY of every article** — not just headlines. The `body` field contains actual article text. Extract:
-   - Specific investment amounts ("Apollo-led funds invest $500M in Adani Energy")
-   - Company names involved in deals, mergers, partnerships
-   - Negative news — lawsuits, frauds, earnings misses, downgrades
-   - Analyst recommendations with target prices
-   - Government policy changes with affected companies
-   - IPO details with subscription recommendations
-   - Earnings results with revenue/profit figures and YoY comparisons
-   - Management commentary and forward guidance
-   - Regulatory actions (SEBI, RBI, IRDAI, TRAI)
-   - Foreign investment flows (FII/DII daily and weekly figures)
+10. **Read the BODY of every article** — not just headlines. The `body` field contains actual article text. Extract:
+    - Specific investment amounts ("Apollo-led funds invest $500M in Adani Energy")
+    - Company names involved in deals, mergers, partnerships
+    - Negative news — lawsuits, frauds, earnings misses, downgrades
+    - Analyst recommendations with target prices
+    - Government policy changes with affected companies
+    - IPO details with subscription recommendations
+    - Earnings results with revenue/profit figures and YoY comparisons
+    - Management commentary and forward guidance
+    - Regulatory actions (SEBI, RBI, IRDAI, TRAI)
+    - Foreign investment flows (FII/DII daily and weekly figures)
 
 ### Briefing Generation
 
-8. **Produce the briefing** using the Output Format below.
+11. **Produce the briefing** using the Output Format below.
 
-9. **Generate HTML** — After producing the briefing markdown, save it as a styled HTML file:
-   ```bash
-   curl -s -X POST http://localhost:9999/api/advisor/briefing-html \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer $TOKEN" \
-     -d "{\"markdown\": \"<the full briefing markdown>\"}"
-   ```
-   Report the HTML file path to the user.
+12. **Generate HTML** — After producing the briefing markdown, save it as a styled HTML file:
+    ```bash
+    curl -s -X POST http://localhost:9999/api/advisor/briefing-html \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $TOKEN" \
+      -d "{\"markdown\": \"<the full briefing markdown>\"}"
+    ```
+    Report the HTML file path to the user.
 
-10. **Generate analysis HTML** — Save an additional copy to the time-organized analysis directory and sync to Google Drive:
+13. **Generate analysis HTML** — Save an additional copy to the time-organized analysis directory and sync to Google Drive:
     ```bash
     curl -s -X POST http://localhost:9999/api/advisor/analysis-html \
       -H "Content-Type: application/json" \
@@ -173,6 +218,53 @@ Detailed bullets with chain-of-impact analysis:
 - Sort by action urgency: TRIM/EXIT first, then ADD, then HOLD, then WATCH.
 - Include current holding value, day change, and cumulative P&L.
 
+### Stock-by-Stock Deep Analysis Report
+
+This is the most important section. Cover EVERY stock from the portfolio (both currently held AND previously held with 0 units). For each stock, provide a deeply researched, multi-source analysis that you have verified through iterative reasoning.
+
+**Group stocks into three sections:**
+
+#### Currently Held Stocks (Qty > 0)
+#### Previously Held / Watchlist Stocks (Qty = 0)
+#### Stocks Worth Considering (from article research — not in portfolio but compelling)
+
+**For EACH stock, provide ALL of the following:**
+
+| Field | Content |
+|-------|---------|
+| **Stock** | Name (Symbol) — Exchange |
+| **Current Price** | Rs.XXX (day change %) |
+| **Portfolio Position** | Qty held, Avg buy price, Current value, Unrealized P&L (%), Realized P&L from sold lots |
+| **Verdict** | **BUY** / **SELL** / **HOLD** / **ADD** / **TRIM** / **EXIT** / **ACCUMULATE** / **AVOID** / **RE-ENTER** (for 0-qty stocks) |
+| **Conviction** | HIGH / MEDIUM / LOW |
+| **Target Price** | Rs.XXX (X% upside/downside) — with timeframe |
+| **Stop Loss** | Rs.XXX (X% below current price) |
+
+**Detailed Analysis (150-300 words per stock, structured as follows):**
+
+1. **Price Action & Technicals**: Where is the stock in its 52-week range? Recent trend (1m/3m/6m). Key support/resistance levels from the history data. Volume trend — is conviction building or fading? Any chart pattern (breakout, breakdown, consolidation, double bottom, etc.).
+
+2. **Fundamental Story**: Latest quarterly results (revenue, profit, margins — YoY and QoQ). Forward guidance from management. EPS trend. Valuation — current PE vs historical PE vs sector PE. Debt/equity position. ROE/ROCE trajectory.
+
+3. **News & Catalysts**: What are the latest developments from web search? Analyst upgrades/downgrades with specific target prices (cite the brokerage). Upcoming catalysts — earnings dates, AGM, product launches, regulatory decisions. Any corporate actions — splits, bonuses, buybacks, M&A.
+
+4. **Bull Case**: Why this stock could go up. Best-case scenario with quantified upside. What needs to go right.
+
+5. **Bear Case**: Why this stock could go down. Worst-case scenario with quantified downside. Key risks — sector-specific, company-specific, macro. What could go wrong.
+
+6. **Final Reasoning**: Synthesize bull vs bear. WHY you chose this verdict. What tipped the balance. How does this fit in the overall portfolio context (sector allocation, concentration risk). Compare with sector peers if relevant.
+
+7. **Action Plan**: Specific executable instructions — at what price to buy/sell, how many tranches, what % of portfolio, what to watch as confirmation/invalidation of thesis. For 0-qty stocks: whether to re-enter and at what price. For held stocks: position sizing advice.
+
+**CRITICAL RULES for this section:**
+- Do NOT provide shallow one-line verdicts. Each stock must have genuine analytical depth.
+- You MUST have searched for and read actual recent articles/analyst reports for each stock before writing. If your WebSearch returned thin results for a stock, try alternate search terms (company name vs ticker, include "NSE", try "moneycontrol", "screener.in", "trendlyne" in the query).
+- Challenge your own reasoning. If you think "BUY", force yourself to articulate the bear case. If you think "SELL", force yourself to articulate what could make you wrong.
+- Include SPECIFIC numbers: target prices from real analysts, actual quarterly figures, real PE ratios. Do not make up numbers.
+- For 0-qty (previously sold) stocks: analyze whether the reason you sold still holds. Has anything changed that warrants re-entry? What price would make it attractive again?
+- Cross-reference with the news articles already fetched — connect company-specific analysis with macro/sector themes from the briefing.
+- Sort within each group by conviction (HIGH first) then by action urgency (SELL/EXIT/TRIM before BUY/ADD/HOLD).
+
 ### Weekly Trends
 Since articles span 7 days, identify emerging patterns:
 - Stocks with 3+ articles in the week (building momentum or trouble)
@@ -197,3 +289,4 @@ Since articles span 7 days, identify emerging patterns:
 - Include source attribution: "(BL)", "(TH)", "(GN-ET)", "(GN-Mint)" after each insight
 - Quantify everything: Rs. amounts, % changes, target prices, timeframes
 - Portfolio impact section must map EVERY article with portfolio relevance to specific holdings
+- **Stock Deep Analysis is the highest-effort section** — spend the most time here. Every stock must have web-searched evidence, price history analysis, and multi-iteration reasoning. Do not shortcut this section. If you have 50 stocks, analyze all 50. Use parallel WebSearch calls where possible to save time, but do not sacrifice depth for speed.
