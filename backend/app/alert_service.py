@@ -163,7 +163,16 @@ def _record_history(alert_id: str, alert_name: str, channel: str, message: str, 
 # ── Background Evaluation ────────────────────────────────
 
 def _evaluate_once():
-    """Evaluate all enabled alerts against registered condition evaluators."""
+    """Evaluate all registered evaluators, then any custom alerts from alerts.json."""
+    # 1. Run all registered evaluators directly (e.g. expiry_check)
+    #    These handle their own notification logic internally.
+    for ctype, fn in _condition_evaluators.items():
+        try:
+            fn({})
+        except Exception as e:
+            logger.error(f"[Alerts] Evaluator error for {ctype}: {e}")
+
+    # 2. Evaluate custom alerts from alerts.json (if any)
     with _lock:
         alerts = _load_alerts()
 
@@ -174,7 +183,7 @@ def _evaluate_once():
         condition = alert.get("condition", {})
         ctype = condition.get("type", "")
         if not ctype or ctype not in _condition_evaluators:
-            continue  # No evaluator registered for this type — skip silently
+            continue
 
         try:
             triggered, message = _condition_evaluators[ctype](condition)
