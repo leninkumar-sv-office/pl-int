@@ -48,12 +48,11 @@ if not _JWT_SECRET:
 
 JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "168"))  # 7 days default
 
-# Drive OAuth scopes
+# OAuth scopes (Drive removed — not needed)
 DRIVE_SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/drive",
 ]
 
 # Token storage — prefer dumps/{email}/settings/ (persists with Docker volume)

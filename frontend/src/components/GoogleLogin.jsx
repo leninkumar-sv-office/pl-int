@@ -13,7 +13,7 @@ export default function GoogleLogin({ clientId, onSuccess }) {
       if (!window.google?.accounts?.oauth2) return;
       clientRef.current = window.google.accounts.oauth2.initCodeClient({
         client_id: clientId,
-        scope: 'openid email profile https://www.googleapis.com/auth/drive',
+        scope: 'openid email profile',
         ux_mode: 'popup',
         select_account: true,
         callback: async (response) => {
