@@ -112,7 +112,8 @@ export default function TradePlanner() {
     });
     initial.sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-    const remaining = Object.values(savedMap);
+    const heldSymbols = new Set(initial.map(r => r.symbol));
+    const remaining = Object.values(savedMap).filter(s => !heldSymbols.has(s.symbol));
     if (remaining.length > 0) {
       const placeholders = remaining.map(s => ({
         symbol: s.symbol, exchange: s.exchange, name: s.symbol,
