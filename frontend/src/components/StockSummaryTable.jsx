@@ -922,59 +922,81 @@ const SIGNAL_RULES_TABLE = [
 
 function SignalRulesPopup() {
   const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
   const ts = { padding: '3px 6px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
+
+  const onMouseDown = (e) => {
+    dragging.current = true;
+    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+    const onMove = (e2) => { if (dragging.current) setPos({ x: e2.clientX - dragOffset.current.x, y: e2.clientY - dragOffset.current.y }); };
+    const onUp = () => { dragging.current = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   return (
-    <span style={{ position: 'relative', display: 'inline-block' }}
-      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-      <span style={{ fontSize: '13px', cursor: 'help', opacity: 0.5 }}>📋</span>
+    <>
+      <span onClick={() => setShow(s => !s)} style={{ fontSize: '13px', cursor: 'pointer', opacity: 0.6 }} title="Signal Rules">📋</span>
       {show && (
-        <div style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 100,
-          background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
-          borderRadius: '8px', padding: '10px', maxWidth: '720px', width: 'max-content',
-          maxHeight: '70vh', overflowY: 'auto',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.5)', fontSize: '10px', lineHeight: 1.4,
-        }}>
-          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '6px', color: 'var(--text)' }}>
-            Signal Rules — All 18 Combinations (grouped by signal)
+        <>
+          <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'rgba(0,0,0,0.3)' }} />
+          <div style={{
+            position: 'fixed', top: `calc(50% + ${pos.y}px)`, left: `calc(50% + ${pos.x}px)`, transform: 'translate(-50%, -50%)', zIndex: 100,
+            background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
+            borderRadius: '8px', maxWidth: '720px', width: 'max-content',
+            maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)', fontSize: '10px', lineHeight: 1.4,
+          }}>
+            <div onMouseDown={onMouseDown} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 12px', borderBottom: '1px solid var(--border)',
+              cursor: 'grab', userSelect: 'none',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text)' }}>Signal Rules — 18 Combinations</span>
+              <span onClick={() => setShow(false)} style={{ cursor: 'pointer', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1 }}>&times;</span>
+            </div>
+            <div style={{ overflowY: 'auto', padding: '8px 10px' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card, #1e1e2e)' }}>
+                  <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <th style={{ ...ts, fontWeight: 700 }}>#</th>
+                    <th style={{ ...ts, fontWeight: 700 }}>Trend</th>
+                    <th style={{ ...ts, fontWeight: 700 }}>vs SMA</th>
+                    <th style={{ ...ts, fontWeight: 700 }}>RSI</th>
+                    <th style={{ ...ts, fontWeight: 700 }}>Signal</th>
+                    <th style={{ ...ts, fontWeight: 700 }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SIGNAL_RULES_TABLE.map((r, i) => r.n === 0 ? (
+                    <tr key={i}><td colSpan={6} style={{ padding: '4px 6px', fontWeight: 700, fontSize: '11px', color: 'var(--text)', background: 'rgba(255,255,255,0.03)' }}>{r.header}</td></tr>
+                  ) : (
+                    <tr key={r.n}>
+                      <td style={ts}>{r.n}</td>
+                      <td style={ts}>{r.trend}</td>
+                      <td style={ts}>{r.sma}</td>
+                      <td style={ts}>{r.rsi}</td>
+                      <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
+                      <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '220px' }}>{r.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <span><b style={{ color: '#22c55e' }}>🟢 BUY</b> #3,5,6</span>
+                <span><b style={{ color: '#60a5fa' }}>📊 HOLD</b> #1,2,8</span>
+                <span><b style={{ color: '#f0ad4e' }}>⚠️ WATCH</b> #4,9,10,12</span>
+                <span><b style={{ color: '#ef4444' }}>🔴 SELL</b> #7,13,14,16</span>
+                <span><b style={{ color: '#9ca3af' }}>🚫 AVOID</b> #15,17,18</span>
+                <span><b style={{ color: '#6b7280' }}>⏸️ WAIT</b> #11</span>
+              </div>
+            </div>
           </div>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card, #1e1e2e)' }}>
-              <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-                <th style={{ ...ts, fontWeight: 700 }}>#</th>
-                <th style={{ ...ts, fontWeight: 700 }}>Trend</th>
-                <th style={{ ...ts, fontWeight: 700 }}>vs SMA</th>
-                <th style={{ ...ts, fontWeight: 700 }}>RSI</th>
-                <th style={{ ...ts, fontWeight: 700 }}>Signal</th>
-                <th style={{ ...ts, fontWeight: 700 }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SIGNAL_RULES_TABLE.map((r, i) => r.n === 0 ? (
-                <tr key={i}><td colSpan={6} style={{ padding: '4px 6px', fontWeight: 700, fontSize: '11px', color: 'var(--text)', background: 'rgba(255,255,255,0.03)' }}>{r.header}</td></tr>
-              ) : (
-                <tr key={r.n}>
-                  <td style={ts}>{r.n}</td>
-                  <td style={ts}>{r.trend}</td>
-                  <td style={ts}>{r.sma}</td>
-                  <td style={ts}>{r.rsi}</td>
-                  <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
-                  <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '220px' }}>{r.action}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <span><b style={{ color: '#22c55e' }}>🟢 BUY</b> #3,5,6</span>
-            <span><b style={{ color: '#60a5fa' }}>📊 HOLD</b> #1,2,8</span>
-            <span><b style={{ color: '#f0ad4e' }}>⚠️ WATCH</b> #4,9,10,12</span>
-            <span><b style={{ color: '#ef4444' }}>🔴 SELL</b> #7,13,14,16</span>
-            <span><b style={{ color: '#9ca3af' }}>🚫 AVOID</b> #15,17,18</span>
-            <span><b style={{ color: '#6b7280' }}>⏸️ WAIT</b> #11</span>
-          </div>
-        </div>
+        </>
       )}
-    </span>
+    </>
   );
 }
 
