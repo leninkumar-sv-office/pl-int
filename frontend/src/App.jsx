@@ -1347,7 +1347,7 @@ export default function App() {
       </header>
 
       {/* Market Ticker */}
-      <MarketTicker tickers={marketTicker} loading={loading} lastUpdated={tickerLastUpdated} />
+      <MarketTicker tickers={marketTicker} loading={false} lastUpdated={tickerLastUpdated} />
 
       {/* Tabs */}
       <div className="tabs">
