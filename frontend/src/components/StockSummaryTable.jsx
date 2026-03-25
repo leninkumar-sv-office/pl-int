@@ -892,41 +892,47 @@ function getSignalGroup(ruleNum) {
   return null;
 }
 
-const SIGNAL_RULES_TOOLTIP = `Signal Rules (Trend + vs SMA + RSI)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# │ Trend     │ vs SMA │ RSI        │ Signal
-──┼───────────┼────────┼────────────┼────────
-1 │ ↑ Uptrend │ Above  │ Overbought │ HOLD — don't buy more
-2 │ ↑ Uptrend │ Above  │ Neutral    │ HOLD — best position
-3 │ ↑ Uptrend │ Above  │ Oversold   │ BUY — rare golden buy
-4 │ ↑ Uptrend │ Below  │ Overbought │ WATCH — recovering
-5 │ ↑ Uptrend │ Below  │ Neutral    │ BUY — accumulate
-6 │ ↑ Uptrend │ Below  │ Oversold   │ BUY — strong buy
-7 │ → Sideways│ Above  │ Overbought │ SELL — topping out
-8 │ → Sideways│ Above  │ Neutral    │ HOLD — wait for clarity
-9 │ → Sideways│ Above  │ Oversold   │ WATCH — breaking down?
-10│ → Sideways│ Below  │ Overbought │ WATCH — dead cat bounce?
-11│ → Sideways│ Below  │ Neutral    │ WAIT — no signal
-12│ → Sideways│ Below  │ Oversold   │ WATCH — bottoming?
-13│ ↓ Downtrend│Above  │ Overbought │ SELL — last chance exit
-14│ ↓ Downtrend│Above  │ Neutral    │ SELL — reduce position
-15│ ↓ Downtrend│Above  │ Oversold   │ AVOID — too chaotic
-16│ ↓ Downtrend│Below  │ Overbought │ SELL — sell the bounce
-17│ ↓ Downtrend│Below  │ Neutral    │ AVOID — falling knife
-18│ ↓ Downtrend│Below  │ Oversold   │ AVOID — value trap
+const SIGNAL_RULES_GROUPED = [
+  { icon: '🟢', label: 'BUY', rules: '#3 Uptrend+Above+Oversold (rare golden buy) · #5 Uptrend+Below+Neutral (accumulate) · #6 Uptrend+Below+Oversold (strong buy)', color: '#22c55e' },
+  { icon: '📊', label: 'HOLD', rules: '#1 Uptrend+Above+Overbought (don\'t buy more) · #2 Uptrend+Above+Neutral (best position) · #8 Sideways+Above+Neutral (wait for clarity)', color: '#60a5fa' },
+  { icon: '⚠️', label: 'WATCH', rules: '#4 Uptrend+Below+Overbought (recovering?) · #9 Sideways+Above+Oversold (breaking down?) · #10 Sideways+Below+Overbought (dead cat bounce?) · #12 Sideways+Below+Oversold (bottoming?)', color: '#f0ad4e' },
+  { icon: '🔴', label: 'SELL', rules: '#7 Sideways+Above+Overbought (topping out) · #13 Downtrend+Above+Overbought (last exit) · #14 Downtrend+Above+Neutral (reduce) · #16 Downtrend+Below+Overbought (sell bounce)', color: '#ef4444' },
+  { icon: '🚫', label: 'AVOID', rules: '#15 Downtrend+Above+Oversold (chaotic) · #17 Downtrend+Below+Neutral (falling knife) · #18 Downtrend+Below+Oversold (value trap)', color: '#9ca3af' },
+  { icon: '⏸️', label: 'WAIT', rules: '#11 Sideways+Below+Neutral (no signal)', color: '#6b7280' },
+];
 
-Key:
-🟢 BUY:  #3, #5, #6 (Uptrend + dip)
-📊 HOLD: #1, #2, #8 (Good position)
-⚠️ WATCH: #4, #9, #10, #12 (Unclear)
-🔴 SELL: #7, #13, #14, #16 (Weakening)
-🚫 AVOID: #15, #17, #18 (Downtrend)
-⏸️ WAIT: #11 (No signal)
-
-Most Important:
-#3  ↑ Uptrend + Above + Oversold = Rare golden buy
-#2  ↑ Uptrend + Above + Neutral = Ideal hold
-#18 ↓ Downtrend + Below + Oversold = Value trap`;
+function SignalRulesPopup() {
+  const [show, setShow] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      <span style={{ fontSize: '13px', cursor: 'help', opacity: 0.5 }}>📋</span>
+      {show && (
+        <div style={{
+          position: 'absolute', bottom: '24px', right: 0, zIndex: 100,
+          background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
+          borderRadius: '8px', padding: '12px 14px', width: '380px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)', fontSize: '11px', lineHeight: 1.5,
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '8px', color: 'var(--text)' }}>
+            Signal Rules (Trend + vs SMA + RSI)
+          </div>
+          {SIGNAL_RULES_GROUPED.map(g => (
+            <div key={g.label} style={{ marginBottom: '6px' }}>
+              <div style={{ fontWeight: 700, color: g.color }}>{g.icon} {g.label}</div>
+              <div style={{ color: 'var(--text-muted)', paddingLeft: '20px' }}>
+                {g.rules.split(' · ').map((r, i) => <div key={i}>{r}</div>)}
+              </div>
+            </div>
+          ))}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '6px', color: 'var(--text-muted)' }}>
+            <strong style={{ color: 'var(--text)' }}>Key:</strong> #3 = Rare golden buy · #2 = Ideal hold · #18 = Value trap
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
 
 /* ── Sort by ₹ / % total / % p.a. support ─────────────── */
 const PL_SORT_FIELDS = new Set([
@@ -1761,7 +1767,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           {activeSignals.size > 0 && (
             <span onClick={clearSignals} style={{ fontSize: '10px', color: 'var(--blue)', cursor: 'pointer', textDecoration: 'underline' }}>Clear</span>
           )}
-          <span title={SIGNAL_RULES_TOOLTIP} style={{ fontSize: '13px', cursor: 'help', opacity: 0.5, marginLeft: '2px' }}>📋</span>
+          <SignalRulesPopup />
         </div>
         {/* Filters toggle */}
         <button
