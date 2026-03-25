@@ -744,11 +744,6 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "trend": cached.get("trend"),
                 "rsi": cached.get("rsi"),
             }
-            # Queue re-fetch if missing adaptive SMA data
-            if "sma_period" not in cached:
-                token = _get_instrument_token(sym, exch)
-                if token:
-                    need_fetch.append((sym, exch, token))
             continue
 
         # Need to fetch — look up instrument token
