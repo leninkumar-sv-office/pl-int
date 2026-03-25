@@ -2347,7 +2347,7 @@ def get_market_ticker():
         if _ticker_cache:
             return {
                 "tickers": _ticker_cache,
-                "last_updated": datetime.fromtimestamp(_ticker_cache_time).isoformat() if _ticker_cache_time else None,
+                "last_updated": datetime.fromtimestamp(_ticker_cache_time).astimezone().isoformat() if _ticker_cache_time else None,
             }
     # Fallback: if background hasn't populated cache yet, load from file
     saved = _load_ticker_file()
