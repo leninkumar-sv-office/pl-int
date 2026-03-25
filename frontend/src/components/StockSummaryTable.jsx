@@ -726,6 +726,8 @@ const COL_DEFS = [
   { id: 'w52Low',         label: '52W Low',         grouped: false },
   { id: 'currentPrice',   label: 'Current Price',   grouped: false },
   { id: 'w52High',        label: '52W High',        grouped: false },
+  { id: 'trend',          label: 'Trend',           grouped: false },
+  { id: 'vsSma200',       label: 'vs 200-SMA',      grouped: false },
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
   { id: 'status',         label: 'Status',          grouped: false },
   { id: 'unrealizedLoss', label: 'Unrealized Loss', grouped: true },
@@ -758,6 +760,12 @@ function pctFromHigh(stock) {
   return (high > 0 && cp > 0) ? ((high - cp) / high * 100) : 9999;
 }
 
+function pctVsSma200(stock) {
+  const cp = stock.live?.current_price || 0;
+  const sma = stock.live?.sma_200;
+  return (sma > 0 && cp > 0) ? ((cp - sma) / sma * 100) : null;
+}
+
 function getFilterValue(stock, colId) {
   switch (colId) {
     case 'held': return stock.total_held_qty;
@@ -767,6 +775,7 @@ function getFilterValue(stock, colId) {
     case 'currentPrice': return stock.live?.current_price || 0;
     case 'w52Low': return pctFromLow(stock);
     case 'w52High': return pctFromHigh(stock);
+    case 'vsSma200': return pctVsSma200(stock);
     case 'unrealizedPF': return stock.unrealized_profit || 0;
     case 'unrealizedLoss': return Math.abs(stock.unrealized_loss || 0);
     case 'dividends': return stock.total_dividend || 0;
@@ -797,6 +806,13 @@ function matchesPreset(stock, colId, preset) {
       if (preset === 'sold') return stock.total_held_qty === 0;
       if (preset === 'ltcg') return (stock.ltcg_profitable_qty > 0) || (stock.ltcg_loss_qty > 0);
       if (preset === 'stcg') return (stock.stcg_profitable_qty > 0) || (stock.stcg_loss_qty > 0);
+      return true;
+    }
+    case 'trend': {
+      const t = stock.live?.trend;
+      if (preset === 'uptrend') return t === 'uptrend';
+      if (preset === 'downtrend') return t === 'downtrend';
+      if (preset === 'sideways') return t === 'sideways';
       return true;
     }
     case 'unrealizedPF': {
@@ -1306,6 +1322,19 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         bVal = bHigh > 0 && bCP2 > 0 ? ((bHigh - bCP2) / bHigh * 100) : 9999;
         break;
       }
+      case 'trend': {
+        const order = { uptrend: 1, sideways: 2, downtrend: 3 };
+        aVal = order[a.live?.trend] || 99;
+        bVal = order[b.live?.trend] || 99;
+        break;
+      }
+      case 'sma_200': {
+        const aS = a.live?.sma_200, aP = a.live?.current_price || 0;
+        const bS = b.live?.sma_200, bP = b.live?.current_price || 0;
+        aVal = aS > 0 && aP > 0 ? ((aP - aS) / aS * 100) : -9999;
+        bVal = bS > 0 && bP > 0 ? ((bP - bS) / bS * 100) : -9999;
+        break;
+      }
       default: aVal = a.unrealized_profit; bVal = b.unrealized_profit;
     }
     if (typeof aVal === 'string') {
@@ -1740,6 +1769,13 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
               </th>}
+              {col('trend') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('trend')} style={{ cursor: 'pointer' }}>
+                Trend<SortIcon field="trend" />
+                <span title={"↑ Uptrend: Price > 200-SMA AND 50-SMA > 200-SMA\n↓ Downtrend: Price < 200-SMA AND 50-SMA < 200-SMA\n→ Sideways: Mixed signals"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+              </th>}
+              {col('vsSma200') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('sma_200')} style={{ cursor: 'pointer' }}>
+                vs 200-SMA<SortIcon field="sma_200" />
+              </th>}
               {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
                 <span
@@ -1850,6 +1886,20 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <option value="near10">&lt;10% from High</option>
                     <option value="near20">&lt;20% from High</option>
                   </select>
+                </th>}
+                {col('trend') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.trend?.preset || 'all'} onChange={e => updateFilter('trend', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                    <option value="all">All</option>
+                    <option value="uptrend">↑ Uptrend</option>
+                    <option value="downtrend">↓ Downtrend</option>
+                    <option value="sideways">→ Sideways</option>
+                  </select>
+                </th>}
+                {col('vsSma200') && <th style={{ padding: '4px 6px' }}>
+                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                    <input type="number" placeholder="min %" value={columnFilters.vsSma200?.min ?? ''} onChange={e => updateFilter('vsSma200', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                    <input type="number" placeholder="max %" value={columnFilters.vsSma200?.max ?? ''} onChange={e => updateFilter('vsSma200', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
+                  </div>
                 </th>}
                 {col('unrealizedPF') && <th colSpan={3} style={{ padding: '4px 6px' }}>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2188,6 +2238,35 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>}
+
+                    {col('trend') && <td>
+                      {(() => {
+                        const t = live?.trend;
+                        if (!t) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const cfg = { uptrend: { icon: '↑', label: 'Uptrend', color: 'var(--green)' }, downtrend: { icon: '↓', label: 'Downtrend', color: 'var(--red)' }, sideways: { icon: '→', label: 'Sideways', color: 'var(--yellow, #f0ad4e)' } };
+                        const c = cfg[t] || cfg.sideways;
+                        return <span style={{ color: c.color, fontSize: '12px', fontWeight: 600 }}>{c.icon} {c.label}</span>;
+                      })()}
+                    </td>}
+
+                    {col('vsSma200') && <td>
+                      {(() => {
+                        const sma = live?.sma_200;
+                        if (!sma || !currentPrice) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const pct = ((currentPrice - sma) / sma * 100);
+                        return (
+                          <div>
+                            <div style={{ fontSize: '13px', color: pct >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                              {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              SMA: {formatINR(sma)}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>}
+
                     {/* ── Unrealized PF: Total | LTCG | STCG ── */}
                     {col('unrealizedPF') && (() => {
                       const nw = { whiteSpace: 'nowrap' };

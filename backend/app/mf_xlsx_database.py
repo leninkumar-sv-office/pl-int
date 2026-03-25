@@ -279,7 +279,7 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
 def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
     """Compute 1D, 7D and 30D NAV change % using mfapi.in historical data.
     Returns {day_change_pct, week_change_pct, month_change_pct}."""
-    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0}
+    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_50": None, "sma_200": None, "trend": None}
     if current_nav <= 0:
         return result
 
@@ -295,6 +295,9 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
                 "month_change_pct": cached["month_change_pct"],
                 "week_52_high": cached.get("week_52_high", 0.0),
                 "week_52_low": cached.get("week_52_low", 0.0),
+                "sma_50": cached.get("sma_50"),
+                "sma_200": cached.get("sma_200"),
+                "trend": cached.get("trend"),
             }
 
     # Look up AMFI scheme code (cached on disk)
@@ -375,6 +378,21 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         result["week_52_high"] = round(max(navs_52w), 4)
         result["week_52_low"] = round(min(navs_52w), 4)
 
+    # SMA & trend calculation (navs_52w is chronological — oldest first from dated_navs)
+    all_navs = [nav for _, nav in dated_navs if nav > 0]
+    if len(all_navs) >= 50:
+        result["sma_50"] = round(sum(all_navs[:50]) / 50, 4)
+    if len(all_navs) >= 200:
+        result["sma_200"] = round(sum(all_navs[:200]) / 200, 4)
+
+    if result["sma_50"] is not None and result["sma_200"] is not None and current_nav > 0:
+        if current_nav > result["sma_200"] and result["sma_50"] > result["sma_200"]:
+            result["trend"] = "uptrend"
+        elif current_nav < result["sma_200"] and result["sma_50"] < result["sma_200"]:
+            result["trend"] = "downtrend"
+        else:
+            result["trend"] = "sideways"
+
     # Cache result
     with _nav_change_cache_lock:
         _nav_change_cache[fund_code] = {
@@ -384,6 +402,9 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             "month_change_pct": result["month_change_pct"],
             "week_52_high": result["week_52_high"],
             "week_52_low": result["week_52_low"],
+            "sma_50": result["sma_50"],
+            "sma_200": result["sma_200"],
+            "trend": result["trend"],
             "fetched_at": now,
         }
 
@@ -1013,6 +1034,9 @@ class MFXlsxPortfolio:
                 "week_change_pct": nav_changes["week_change_pct"],
                 "month_change_pct": nav_changes["month_change_pct"],
                 "is_above_avg_nav": current_nav > avg_nav if current_nav > 0 and avg_nav > 0 else False,
+                "sma_50": nav_changes.get("sma_50"),
+                "sma_200": nav_changes.get("sma_200"),
+                "trend": nav_changes.get("trend"),
                 # Include held lots and sold lots for detail view
                 "held_lots": [
                     {

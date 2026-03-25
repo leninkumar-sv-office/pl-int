@@ -652,11 +652,28 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         if close_30d > 0:
             month_change_pct = round((latest_close - close_30d) / close_30d * 100, 2)
 
+    # SMA & trend calculation
+    closes = [c[4] for c in candles if len(c) >= 5]
+    sma_50 = round(sum(closes[-50:]) / 50, 2) if len(closes) >= 50 else None
+    sma_200 = round(sum(closes[-200:]) / 200, 2) if len(closes) >= 200 else None
+
+    trend = None
+    if sma_50 is not None and sma_200 is not None and latest_close > 0:
+        if latest_close > sma_200 and sma_50 > sma_200:
+            trend = "uptrend"
+        elif latest_close < sma_200 and sma_50 < sma_200:
+            trend = "downtrend"
+        else:
+            trend = "sideways"
+
     return {
         "week_52_high": max(highs),
         "week_52_low": min(lows),
         "week_change_pct": week_change_pct,
         "month_change_pct": month_change_pct,
+        "sma_50": sma_50,
+        "sma_200": sma_200,
+        "trend": trend,
     }
 
 
@@ -686,6 +703,9 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "week_52_low": cached["week_52_low"],
                 "week_change_pct": cached.get("week_change_pct", 0.0),
                 "month_change_pct": cached.get("month_change_pct", 0.0),
+                "sma_50": cached.get("sma_50"),
+                "sma_200": cached.get("sma_200"),
+                "trend": cached.get("trend"),
             }
             continue
 
@@ -731,6 +751,9 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "week_52_low": round(result["week_52_low"], 2),
                     "week_change_pct": result.get("week_change_pct", 0.0),
                     "month_change_pct": result.get("month_change_pct", 0.0),
+                    "sma_50": result.get("sma_50"),
+                    "sma_200": result.get("sma_200"),
+                    "trend": result.get("trend"),
                     "fetched_at": now,
                 }
                 with _52w_cache_lock:
@@ -740,6 +763,9 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "week_52_low": entry["week_52_low"],
                     "week_change_pct": entry["week_change_pct"],
                     "month_change_pct": entry["month_change_pct"],
+                    "sma_50": entry["sma_50"],
+                    "sma_200": entry["sma_200"],
+                    "trend": entry["trend"],
                 }
                 fetched += 1
             else:

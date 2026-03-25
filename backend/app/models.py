@@ -89,6 +89,9 @@ class StockLiveData(BaseModel):
     volume: int = 0
     previous_close: float = 0.0
     is_manual: bool = False
+    sma_50: Optional[float] = None
+    sma_200: Optional[float] = None
+    trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
 
 
 class PortfolioSummary(BaseModel):
@@ -224,6 +227,9 @@ class MFSummaryItem(BaseModel):
     week_52_high: float = 0.0
     week_52_low: float = 0.0
     is_above_avg_nav: bool = False
+    sma_50: Optional[float] = None
+    sma_200: Optional[float] = None
+    trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
 
 
 # ── MF Request Models ──────────────────────────────────

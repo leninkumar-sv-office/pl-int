@@ -107,6 +107,8 @@ const COL_DEFS = [
   { id: 'currentNav',   label: 'Current NAV' },
   { id: 'w52Low',       label: '52W Low' },
   { id: 'w52High',      label: '52W High' },
+  { id: 'trend',        label: 'Trend' },
+  { id: 'vsSma200',     label: 'vs 200-SMA' },
   { id: 'currentValue', label: 'Current Value' },
   { id: 'invested',     label: 'Invested' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
@@ -810,6 +812,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
   const [heldOnly, setHeldOnly] = useState(true);
+  const [trendFilter, setTrendFilter] = useState('all');
 
   // ── Lot-level selection for bulk redeem ──
   const [selectedLots, setSelectedLots] = useState(new Set());
@@ -915,8 +918,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   let filtered = (funds || []).filter(f => {
     if (heldOnly && f.total_held_units <= 0) return false;
     if (q) {
-      return f.name.toLowerCase().includes(q) || f.fund_code.toLowerCase().includes(q);
+      if (!f.name.toLowerCase().includes(q) && !f.fund_code.toLowerCase().includes(q)) return false;
     }
+    if (trendFilter !== 'all' && f.trend !== trendFilter) return false;
     return true;
   });
 
@@ -930,6 +934,15 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'currentNav':   va = a.current_nav; vb = b.current_nav; break;
       case 'w52Low':       va = a.week_52_low || 0; vb = b.week_52_low || 0; break;
       case 'w52High':      va = a.week_52_high || 0; vb = b.week_52_high || 0; break;
+      case 'trend': {
+        const order = { uptrend: 1, sideways: 2, downtrend: 3 };
+        va = order[a.trend] || 99; vb = order[b.trend] || 99; break;
+      }
+      case 'vsSma200': {
+        va = a.sma_200 > 0 && a.current_nav > 0 ? ((a.current_nav - a.sma_200) / a.sma_200 * 100) : -9999;
+        vb = b.sma_200 > 0 && b.current_nav > 0 ? ((b.current_nav - b.sma_200) / b.sma_200 * 100) : -9999;
+        break;
+      }
       case 'currentValue': va = a.current_value; vb = b.current_value; break;
       case 'unrealizedPL':
         if (sortMode === 'pa') { va = mfPaVal(a, 'unrealizedPL'); vb = mfPaVal(b, 'unrealizedPL'); }
@@ -1158,7 +1171,13 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           />
           Held only
         </label>
-        {(q || heldOnly) && (
+        <select value={trendFilter} onChange={e => setTrendFilter(e.target.value)} style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)' }}>
+          <option value="all">All Trends</option>
+          <option value="uptrend">↑ Uptrend</option>
+          <option value="downtrend">↓ Downtrend</option>
+          <option value="sideways">→ Sideways</option>
+        </select>
+        {(q || heldOnly || trendFilter !== 'all') && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             {filtered.length} of {(funds || []).length} funds
           </span>
@@ -1255,6 +1274,13 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               </th>}
               {col('w52High') && <th onClick={() => handleSort('w52High')} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="w52High" />
+              </th>}
+              {col('trend') && <th onClick={() => handleSort('trend')} style={{ cursor: 'pointer' }}>
+                Trend<SortIcon field="trend" />
+                <span title={"↑ Uptrend: NAV > 200-SMA AND 50-SMA > 200-SMA\n↓ Downtrend: NAV < 200-SMA AND 50-SMA < 200-SMA\n→ Sideways: Mixed signals"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+              </th>}
+              {col('vsSma200') && <th onClick={() => handleSort('vsSma200')} style={{ cursor: 'pointer' }}>
+                vs 200-SMA<SortIcon field="vsSma200" />
               </th>}
               {col('currentValue') && <th onClick={() => handleSort('currentValue')} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="currentValue" />
@@ -1463,6 +1489,36 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         <span style={{ color: 'var(--text-muted)' }}>--</span>
                       )}
                     </td>}
+
+                    {col('trend') && <td>
+                      {(() => {
+                        const t = f.trend;
+                        if (!t) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const cfg = { uptrend: { icon: '↑', label: 'Uptrend', color: 'var(--green)' }, downtrend: { icon: '↓', label: 'Downtrend', color: 'var(--red)' }, sideways: { icon: '→', label: 'Sideways', color: 'var(--yellow, #f0ad4e)' } };
+                        const c = cfg[t] || cfg.sideways;
+                        return <span style={{ color: c.color, fontSize: '12px', fontWeight: 600 }}>{c.icon} {c.label}</span>;
+                      })()}
+                    </td>}
+
+                    {col('vsSma200') && <td>
+                      {(() => {
+                        const sma = f.sma_200;
+                        const nav = f.current_nav;
+                        if (!sma || !nav) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const pct = ((nav - sma) / sma * 100);
+                        return (
+                          <div>
+                            <div style={{ fontSize: '13px', color: pct >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                              {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              SMA: {formatINR(sma)}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>}
+
                     {col('currentValue') && <td>
                       <div style={{ fontWeight: 600 }}>
                         {hasHeld ? formatINR(f.current_value) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
