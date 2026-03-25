@@ -2486,7 +2486,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         if (!t) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
                         const cfg = { uptrend: { icon: '↑', label: 'Uptrend', color: 'var(--green)' }, downtrend: { icon: '↓', label: 'Downtrend', color: 'var(--red)' }, sideways: { icon: '→', label: 'Sideways', color: 'var(--yellow, #f0ad4e)' } };
                         const c = cfg[t] || cfg.sideways;
-                        return <span style={{ color: c.color, fontSize: '12px', fontWeight: 600 }}>{c.icon} {c.label}</span>;
+                        return <span style={{ color: c.color, fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.icon} {c.label}</span>;
                       })()}
                     </td>}
 
