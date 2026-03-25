@@ -183,7 +183,7 @@ function SignalRulesPopup() {
       <span style={{ fontSize: '13px', cursor: 'help', opacity: 0.5 }}>📋</span>
       {show && (
         <div style={{
-          position: 'absolute', bottom: '24px', right: 0, zIndex: 100,
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 100,
           background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
           borderRadius: '8px', padding: '10px', maxWidth: '720px', width: 'max-content',
           maxHeight: '70vh', overflowY: 'auto',
