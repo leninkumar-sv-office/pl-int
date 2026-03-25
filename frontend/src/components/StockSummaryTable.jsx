@@ -844,6 +844,90 @@ function matchesPreset(stock, colId, preset) {
   }
 }
 
+/* ── Signal classification (Trend + vs SMA + RSI) ────── */
+const SIGNAL_DEFS = {
+  BUY:   { label: 'BUY',   icon: '🟢', rules: [3, 5, 6],          desc: 'Uptrend + dip' },
+  HOLD:  { label: 'HOLD',  icon: '📊', rules: [1, 2, 8],          desc: 'Good position, stay' },
+  WATCH: { label: 'WATCH', icon: '⚠️', rules: [4, 9, 10, 12],     desc: 'Unclear, need more data' },
+  SELL:  { label: 'SELL',  icon: '🔴', rules: [7, 13, 14, 16],    desc: 'Weakening or reversing' },
+  AVOID: { label: 'AVOID', icon: '🚫', rules: [15, 17, 18],       desc: 'Downtrend, stay away' },
+  WAIT:  { label: 'WAIT',  icon: '⏸️', rules: [11],                desc: 'No signal' },
+};
+
+function classifySignal(stock) {
+  const trend = stock.live?.trend;
+  const sma = stock.live?.sma_200;
+  const cp = stock.live?.current_price || 0;
+  const rsi = stock.live?.rsi;
+  if (!trend || !sma || !cp || rsi == null) return null;
+  const above = cp > sma;
+  const ob = rsi > 70, os = rsi < 30; // overbought / oversold
+  // Map to rule number
+  if (trend === 'uptrend' && above && ob) return 1;
+  if (trend === 'uptrend' && above && !ob && !os) return 2;
+  if (trend === 'uptrend' && above && os) return 3;
+  if (trend === 'uptrend' && !above && ob) return 4;
+  if (trend === 'uptrend' && !above && !ob && !os) return 5;
+  if (trend === 'uptrend' && !above && os) return 6;
+  if (trend === 'sideways' && above && ob) return 7;
+  if (trend === 'sideways' && above && !ob && !os) return 8;
+  if (trend === 'sideways' && above && os) return 9;
+  if (trend === 'sideways' && !above && ob) return 10;
+  if (trend === 'sideways' && !above && !ob && !os) return 11;
+  if (trend === 'sideways' && !above && os) return 12;
+  if (trend === 'downtrend' && above && ob) return 13;
+  if (trend === 'downtrend' && above && !ob && !os) return 14;
+  if (trend === 'downtrend' && above && os) return 15;
+  if (trend === 'downtrend' && !above && ob) return 16;
+  if (trend === 'downtrend' && !above && !ob && !os) return 17;
+  if (trend === 'downtrend' && !above && os) return 18;
+  return null;
+}
+
+function getSignalGroup(ruleNum) {
+  if (!ruleNum) return null;
+  for (const [key, def] of Object.entries(SIGNAL_DEFS)) {
+    if (def.rules.includes(ruleNum)) return key;
+  }
+  return null;
+}
+
+const SIGNAL_RULES_TOOLTIP = `Signal Rules (Trend + vs SMA + RSI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# │ Trend     │ vs SMA │ RSI        │ Signal
+──┼───────────┼────────┼────────────┼────────
+1 │ ↑ Uptrend │ Above  │ Overbought │ HOLD — don't buy more
+2 │ ↑ Uptrend │ Above  │ Neutral    │ HOLD — best position
+3 │ ↑ Uptrend │ Above  │ Oversold   │ BUY — rare golden buy
+4 │ ↑ Uptrend │ Below  │ Overbought │ WATCH — recovering
+5 │ ↑ Uptrend │ Below  │ Neutral    │ BUY — accumulate
+6 │ ↑ Uptrend │ Below  │ Oversold   │ BUY — strong buy
+7 │ → Sideways│ Above  │ Overbought │ SELL — topping out
+8 │ → Sideways│ Above  │ Neutral    │ HOLD — wait for clarity
+9 │ → Sideways│ Above  │ Oversold   │ WATCH — breaking down?
+10│ → Sideways│ Below  │ Overbought │ WATCH — dead cat bounce?
+11│ → Sideways│ Below  │ Neutral    │ WAIT — no signal
+12│ → Sideways│ Below  │ Oversold   │ WATCH — bottoming?
+13│ ↓ Downtrend│Above  │ Overbought │ SELL — last chance exit
+14│ ↓ Downtrend│Above  │ Neutral    │ SELL — reduce position
+15│ ↓ Downtrend│Above  │ Oversold   │ AVOID — too chaotic
+16│ ↓ Downtrend│Below  │ Overbought │ SELL — sell the bounce
+17│ ↓ Downtrend│Below  │ Neutral    │ AVOID — falling knife
+18│ ↓ Downtrend│Below  │ Oversold   │ AVOID — value trap
+
+Key:
+🟢 BUY:  #3, #5, #6 (Uptrend + dip)
+📊 HOLD: #1, #2, #8 (Good position)
+⚠️ WATCH: #4, #9, #10, #12 (Unclear)
+🔴 SELL: #7, #13, #14, #16 (Weakening)
+🚫 AVOID: #15, #17, #18 (Downtrend)
+⏸️ WAIT: #11 (No signal)
+
+Most Important:
+#3  ↑ Uptrend + Above + Oversold = Rare golden buy
+#2  ↑ Uptrend + Above + Neutral = Ideal hold
+#18 ↓ Downtrend + Below + Oversold = Value trap`;
+
 /* ── Sort by ₹ / % total / % p.a. support ─────────────── */
 const PL_SORT_FIELDS = new Set([
   'unrealized_profit', 'ltcg_unrealized_profit', 'stcg_unrealized_profit',
@@ -1129,6 +1213,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     try { const s = localStorage.getItem('stockColumnFilters'); return s ? JSON.parse(s) : {}; } catch { return {}; }
   });
 
+  // ── Signal filter (BUY/HOLD/WATCH/SELL/AVOID/WAIT) ──
+  const [activeSignals, setActiveSignals] = useState(new Set());
+  const toggleSignal = (sig) => setActiveSignals(prev => {
+    const next = new Set(prev);
+    if (next.has(sig)) next.delete(sig); else next.add(sig);
+    return next;
+  });
+  const clearSignals = () => setActiveSignals(new Set());
+
   // ── Sort mode toggle: inr → pct → pa ──
   const [sortMode, setSortMode] = useState('inr');
   const cycleSortMode = () => setSortMode(prev => SORT_MODES[(SORT_MODES.indexOf(prev) + 1) % SORT_MODES.length]);
@@ -1271,6 +1364,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         if (f.min !== undefined && f.min !== '' && val < Number(f.min)) return false;
         if (f.max !== undefined && f.max !== '' && val > Number(f.max)) return false;
       }
+    }
+    // Signal filters
+    if (activeSignals.size > 0) {
+      const rule = classifySignal(s);
+      const group = getSignalGroup(rule);
+      if (!group || !activeSignals.has(group)) return false;
     }
     return true;
   });
@@ -1631,11 +1730,39 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           />
           Held only
         </label>
-        {(q || hideZeroHeld) && (
+        {(q || hideZeroHeld || activeSignals.size > 0) && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             {filtered.length} of {stocks.length} stocks
           </span>
         )}
+        {/* Signal filter buttons */}
+        <div style={{ display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {Object.entries(SIGNAL_DEFS).map(([key, def]) => (
+            <button
+              key={key}
+              onClick={() => toggleSignal(key)}
+              style={{
+                padding: '2px 7px',
+                fontSize: '10px',
+                fontWeight: 600,
+                background: activeSignals.has(key) ? 'var(--blue)' : 'var(--bg-input)',
+                color: activeSignals.has(key) ? '#fff' : 'var(--text-muted)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                lineHeight: '16px',
+              }}
+              title={`${def.icon} ${def.label}: ${def.desc} (Rules: #${def.rules.join(', #')})`}
+            >
+              {def.icon} {def.label}
+            </button>
+          ))}
+          {activeSignals.size > 0 && (
+            <span onClick={clearSignals} style={{ fontSize: '10px', color: 'var(--blue)', cursor: 'pointer', textDecoration: 'underline' }}>Clear</span>
+          )}
+          <span title={SIGNAL_RULES_TOOLTIP} style={{ fontSize: '13px', cursor: 'help', opacity: 0.5, marginLeft: '2px' }}>📋</span>
+        </div>
         {/* Filters toggle */}
         <button
           onClick={() => setFiltersVisible(v => !v)}

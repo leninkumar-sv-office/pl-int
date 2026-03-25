@@ -100,6 +100,55 @@ function durationText(dateStr) {
   return `${days}d`;
 }
 
+/* ── Signal classification (same as StockSummaryTable) ── */
+const SIGNAL_DEFS = {
+  BUY:   { label: 'BUY',   icon: '🟢', rules: [3, 5, 6],          desc: 'Uptrend + dip' },
+  HOLD:  { label: 'HOLD',  icon: '📊', rules: [1, 2, 8],          desc: 'Good position, stay' },
+  WATCH: { label: 'WATCH', icon: '⚠️', rules: [4, 9, 10, 12],     desc: 'Unclear, need more data' },
+  SELL:  { label: 'SELL',  icon: '🔴', rules: [7, 13, 14, 16],    desc: 'Weakening or reversing' },
+  AVOID: { label: 'AVOID', icon: '🚫', rules: [15, 17, 18],       desc: 'Downtrend, stay away' },
+  WAIT:  { label: 'WAIT',  icon: '⏸️', rules: [11],                desc: 'No signal' },
+};
+
+function classifyMFSignal(fund) {
+  const trend = fund.trend;
+  const sma = fund.sma_200;
+  const nav = fund.current_nav || 0;
+  const rsi = fund.rsi;
+  if (!trend || !sma || !nav || rsi == null) return null;
+  const above = nav > sma;
+  const ob = rsi > 70, os = rsi < 30;
+  if (trend === 'uptrend' && above && ob) return 1;
+  if (trend === 'uptrend' && above && !ob && !os) return 2;
+  if (trend === 'uptrend' && above && os) return 3;
+  if (trend === 'uptrend' && !above && ob) return 4;
+  if (trend === 'uptrend' && !above && !ob && !os) return 5;
+  if (trend === 'uptrend' && !above && os) return 6;
+  if (trend === 'sideways' && above && ob) return 7;
+  if (trend === 'sideways' && above && !ob && !os) return 8;
+  if (trend === 'sideways' && above && os) return 9;
+  if (trend === 'sideways' && !above && ob) return 10;
+  if (trend === 'sideways' && !above && !ob && !os) return 11;
+  if (trend === 'sideways' && !above && os) return 12;
+  if (trend === 'downtrend' && above && ob) return 13;
+  if (trend === 'downtrend' && above && !ob && !os) return 14;
+  if (trend === 'downtrend' && above && os) return 15;
+  if (trend === 'downtrend' && !above && ob) return 16;
+  if (trend === 'downtrend' && !above && !ob && !os) return 17;
+  if (trend === 'downtrend' && !above && os) return 18;
+  return null;
+}
+
+function getMFSignalGroup(ruleNum) {
+  if (!ruleNum) return null;
+  for (const [key, def] of Object.entries(SIGNAL_DEFS)) {
+    if (def.rules.includes(ruleNum)) return key;
+  }
+  return null;
+}
+
+const SIGNAL_RULES_TOOLTIP = `Signal Rules (Trend + vs SMA + RSI)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n# │ Trend      │ vs SMA │ RSI        │ Signal\n──┼────────────┼────────┼────────────┼────────\n1 │ ↑ Uptrend  │ Above  │ Overbought │ HOLD\n2 │ ↑ Uptrend  │ Above  │ Neutral    │ HOLD\n3 │ ↑ Uptrend  │ Above  │ Oversold   │ BUY\n4 │ ↑ Uptrend  │ Below  │ Overbought │ WATCH\n5 │ ↑ Uptrend  │ Below  │ Neutral    │ BUY\n6 │ ↑ Uptrend  │ Below  │ Oversold   │ BUY\n7 │ → Sideways │ Above  │ Overbought │ SELL\n8 │ → Sideways │ Above  │ Neutral    │ HOLD\n9 │ → Sideways │ Above  │ Oversold   │ WATCH\n10│ → Sideways │ Below  │ Overbought │ WATCH\n11│ → Sideways │ Below  │ Neutral    │ WAIT\n12│ → Sideways │ Below  │ Oversold   │ WATCH\n13│ ↓ Downtrend│ Above  │ Overbought │ SELL\n14│ ↓ Downtrend│ Above  │ Neutral    │ SELL\n15│ ↓ Downtrend│ Above  │ Oversold   │ AVOID\n16│ ↓ Downtrend│ Below  │ Overbought │ SELL\n17│ ↓ Downtrend│ Below  │ Neutral    │ AVOID\n18│ ↓ Downtrend│ Below  │ Oversold   │ AVOID\n\n🟢 BUY: #3,#5,#6  📊 HOLD: #1,#2,#8  ⚠️ WATCH: #4,#9,#10,#12\n🔴 SELL: #7,#13,#14,#16  🚫 AVOID: #15,#17,#18  ⏸️ WAIT: #11`;
+
 /* ── Main table column definitions ────────────────────── */
 const COL_DEFS = [
   { id: 'units',        label: 'Units' },
@@ -814,6 +863,13 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const searchRef = useRef(null);
   const [heldOnly, setHeldOnly] = useState(true);
   const [trendFilter, setTrendFilter] = useState('all');
+  const [activeSignals, setActiveSignals] = useState(new Set());
+  const toggleSignal = (sig) => setActiveSignals(prev => {
+    const next = new Set(prev);
+    if (next.has(sig)) next.delete(sig); else next.add(sig);
+    return next;
+  });
+  const clearSignals = () => setActiveSignals(new Set());
 
   // ── Lot-level selection for bulk redeem ──
   const [selectedLots, setSelectedLots] = useState(new Set());
@@ -922,6 +978,11 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       if (!f.name.toLowerCase().includes(q) && !f.fund_code.toLowerCase().includes(q)) return false;
     }
     if (trendFilter !== 'all' && f.trend !== trendFilter) return false;
+    if (activeSignals.size > 0) {
+      const rule = classifyMFSignal(f);
+      const group = getMFSignalGroup(rule);
+      if (!group || !activeSignals.has(group)) return false;
+    }
     return true;
   });
 
@@ -1181,7 +1242,24 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           <option value="downtrend">↓ Downtrend</option>
           <option value="sideways">→ Sideways</option>
         </select>
-        {(q || heldOnly || trendFilter !== 'all') && (
+        <div style={{ display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {Object.entries(SIGNAL_DEFS).map(([key, def]) => (
+            <button
+              key={key}
+              onClick={() => toggleSignal(key)}
+              style={{
+                padding: '2px 7px', fontSize: '10px', fontWeight: 600,
+                background: activeSignals.has(key) ? 'var(--blue)' : 'var(--bg-input)',
+                color: activeSignals.has(key) ? '#fff' : 'var(--text-muted)',
+                border: '1px solid var(--border)', borderRadius: '10px', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: '16px',
+              }}
+              title={`${def.icon} ${def.label}: ${def.desc} (Rules: #${def.rules.join(', #')})`}
+            >{def.icon} {def.label}</button>
+          ))}
+          {activeSignals.size > 0 && <span onClick={clearSignals} style={{ fontSize: '10px', color: 'var(--blue)', cursor: 'pointer', textDecoration: 'underline' }}>Clear</span>}
+          <span title={SIGNAL_RULES_TOOLTIP} style={{ fontSize: '13px', cursor: 'help', opacity: 0.5, marginLeft: '2px' }}>📋</span>
+        </div>
+        {(q || heldOnly || trendFilter !== 'all' || activeSignals.size > 0) && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             {filtered.length} of {(funds || []).length} funds
           </span>
