@@ -91,6 +91,7 @@ class StockLiveData(BaseModel):
     is_manual: bool = False
     sma_50: Optional[float] = None
     sma_200: Optional[float] = None
+    sma_period: Optional[str] = None     # e.g. "50d/200d", "20d/50d", "10d/20d"
     trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
     rsi: Optional[float] = None          # RSI (14-day), 0-100
 
@@ -230,6 +231,7 @@ class MFSummaryItem(BaseModel):
     is_above_avg_nav: bool = False
     sma_50: Optional[float] = None
     sma_200: Optional[float] = None
+    sma_period: Optional[str] = None     # e.g. "50d/200d", "20d/50d", "10d/20d"
     trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
     rsi: Optional[float] = None          # RSI (14-day), 0-100
 

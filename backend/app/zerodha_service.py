@@ -658,27 +658,35 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         if close_30d > 0:
             month_change_pct = round((latest_close - close_30d) / close_30d * 100, 2)
 
-    # SMA & trend calculation
+    # Adaptive SMA & trend calculation
     closes = [c[4] for c in candles if len(c) >= 5]
-    sma_50 = round(sum(closes[-50:]) / 50, 2) if len(closes) >= 50 else None
-    sma_200 = round(sum(closes[-200:]) / 200, 2) if len(closes) >= 200 else None
+    n = len(closes)
 
-    # For stocks with <200 days, compute SMA from all available data as fallback
-    if sma_200 is None and len(closes) >= 50:
-        sma_200 = round(sum(closes) / len(closes), 2)
+    # Pick SMA pair based on available history
+    if n >= 200:
+        short_n, long_n = 50, 200
+    elif n >= 50:
+        short_n, long_n = 20, 50
+    elif n >= 20:
+        short_n, long_n = 10, 20
+    else:
+        short_n, long_n = 0, 0  # too new
+
+    sma_short = round(sum(closes[-short_n:]) / short_n, 2) if short_n > 0 else None
+    sma_long = round(sum(closes[-long_n:]) / long_n, 2) if long_n > 0 else None
 
     trend = None
-    if sma_50 is not None and sma_200 is not None and latest_close > 0:
-        if latest_close > sma_200 and sma_50 > sma_200:
+    if sma_short is not None and sma_long is not None and latest_close > 0:
+        if latest_close > sma_long and sma_short > sma_long:
             trend = "uptrend"
-        elif latest_close < sma_200 and sma_50 < sma_200:
+        elif latest_close < sma_long and sma_short < sma_long:
             trend = "downtrend"
         else:
             trend = "sideways"
 
     # RSI (14-day) calculation
     rsi = None
-    if len(closes) >= 15:
+    if n >= 15:
         changes = [closes[i] - closes[i-1] for i in range(-14, 0)]
         gains = [c for c in changes if c > 0]
         losses = [-c for c in changes if c < 0]
@@ -695,8 +703,9 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         "week_52_low": min(lows),
         "week_change_pct": week_change_pct,
         "month_change_pct": month_change_pct,
-        "sma_50": sma_50,
-        "sma_200": sma_200,
+        "sma_50": sma_short,
+        "sma_200": sma_long,
+        "sma_period": f"{short_n}d/{long_n}d" if long_n > 0 else None,
         "trend": trend,
         "rsi": rsi,
     }
@@ -731,11 +740,12 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "month_change_pct": cached.get("month_change_pct", 0.0),
                 "sma_50": cached.get("sma_50"),
                 "sma_200": cached.get("sma_200"),
+                "sma_period": cached.get("sma_period"),
                 "trend": cached.get("trend"),
                 "rsi": cached.get("rsi"),
             }
-            # Queue re-fetch if missing SMA/trend data
-            if "sma_50" not in cached or (cached.get("sma_50") and not cached.get("sma_200")):
+            # Queue re-fetch if missing adaptive SMA data
+            if "sma_period" not in cached:
                 token = _get_instrument_token(sym, exch)
                 if token:
                     need_fetch.append((sym, exch, token))
@@ -785,6 +795,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "month_change_pct": result.get("month_change_pct", 0.0),
                     "sma_50": result.get("sma_50"),
                     "sma_200": result.get("sma_200"),
+                    "sma_period": result.get("sma_period"),
                     "trend": result.get("trend"),
                     "rsi": result.get("rsi"),
                     "fetched_at": now,
@@ -798,6 +809,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "month_change_pct": entry["month_change_pct"],
                     "sma_50": entry["sma_50"],
                     "sma_200": entry["sma_200"],
+                    "sma_period": entry["sma_period"],
                     "trend": entry["trend"],
                     "rsi": entry["rsi"],
                 }

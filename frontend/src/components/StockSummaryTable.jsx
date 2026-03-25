@@ -1793,7 +1793,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               </th>}
               {col('trend') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('trend')} style={{ cursor: 'pointer' }}>
                 Trend<SortIcon field="trend" />
-                <span title={"↑ Uptrend: Price > 200-SMA AND 50-SMA > 200-SMA\n↓ Downtrend: Price < 200-SMA AND 50-SMA < 200-SMA\n→ Sideways: Mixed signals"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+                <span title={"Adaptive SMA trend detection:\n• 200+ days: 50-SMA vs 200-SMA\n• 50-199 days: 20-SMA vs 50-SMA\n• 20-49 days: 10-SMA vs 20-SMA\n\n↑ Uptrend: Price > long-SMA AND short-SMA > long-SMA\n↓ Downtrend: Price < long-SMA AND short-SMA < long-SMA\n→ Sideways: Mixed signals"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
               {col('vsSma200') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('sma_200')} style={{ cursor: 'pointer' }}>
                 vs 200-SMA<SortIcon field="sma_200" />
@@ -2286,15 +2286,17 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     {col('vsSma200') && <td>
                       {(() => {
                         const sma = live?.sma_200;
+                        const period = live?.sma_period;
                         if (!sma || !currentPrice) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
                         const pct = ((currentPrice - sma) / sma * 100);
+                        const longD = period ? period.split('/')[1] : '200d';
                         return (
                           <div>
                             <div style={{ fontSize: '13px', color: pct >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
                               {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
                             </div>
                             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                              SMA: {formatINR(sma)}
+                              {formatINR(sma)} ({longD})
                             </div>
                           </div>
                         );
