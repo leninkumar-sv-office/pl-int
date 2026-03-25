@@ -1742,7 +1742,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
       {/* Search bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-        <div style={{ position: 'relative', flex: '0 1 25%', minWidth: '150px' }}>
+        <div style={{ position: 'relative', flex: '1 1 auto', minWidth: '150px' }}>
           <input
             ref={searchRef}
             type="text"
