@@ -925,7 +925,14 @@ function SignalRulesPopup() {
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
-  const ts = { padding: '3px 6px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
+  const ts = { padding: '2px 5px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', fontSize: '9px' };
+
+  useEffect(() => {
+    if (!show) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShow(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [show]);
 
   const onMouseDown = (e) => {
     dragging.current = true;
@@ -945,19 +952,19 @@ function SignalRulesPopup() {
           <div style={{
             position: 'fixed', top: `calc(50% + ${pos.y}px)`, left: `calc(50% + ${pos.x}px)`, transform: 'translate(-50%, -50%)', zIndex: 100,
             background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
-            borderRadius: '8px', maxWidth: '720px', width: 'max-content',
-            maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.6)', fontSize: '10px', lineHeight: 1.4,
+            borderRadius: '6px', maxWidth: '560px', width: 'max-content',
+            maxHeight: '70vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)', fontSize: '9px', lineHeight: 1.3,
           }}>
             <div onMouseDown={onMouseDown} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '8px 12px', borderBottom: '1px solid var(--border)',
+              padding: '5px 10px', borderBottom: '1px solid var(--border)',
               cursor: 'grab', userSelect: 'none',
             }}>
-              <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text)' }}>Signal Rules — 18 Combinations</span>
-              <span onClick={() => setShow(false)} style={{ cursor: 'pointer', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1 }}>&times;</span>
+              <span style={{ fontWeight: 700, fontSize: '10px', color: 'var(--text)' }}>Signal Rules — 18 Combinations</span>
+              <span onClick={() => setShow(false)} style={{ cursor: 'pointer', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1 }}>&times;</span>
             </div>
-            <div style={{ overflowY: 'auto', padding: '8px 10px' }}>
+            <div style={{ overflowY: 'auto', padding: '4px 6px' }}>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                 <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card, #1e1e2e)' }}>
                   <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -971,7 +978,7 @@ function SignalRulesPopup() {
                 </thead>
                 <tbody>
                   {SIGNAL_RULES_TABLE.map((r, i) => r.n === 0 ? (
-                    <tr key={i}><td colSpan={6} style={{ padding: '4px 6px', fontWeight: 700, fontSize: '11px', color: 'var(--text)', background: 'rgba(255,255,255,0.03)' }}>{r.header}</td></tr>
+                    <tr key={i}><td colSpan={6} style={{ padding: '3px 5px', fontWeight: 700, fontSize: '9px', color: 'var(--text)', background: 'rgba(255,255,255,0.03)' }}>{r.header}</td></tr>
                   ) : (
                     <tr key={r.n}>
                       <td style={ts}>{r.n}</td>
@@ -979,12 +986,12 @@ function SignalRulesPopup() {
                       <td style={ts}>{r.sma}</td>
                       <td style={ts}>{r.rsi}</td>
                       <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
-                      <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '220px' }}>{r.action}</td>
+                      <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '180px' }}>{r.action}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ marginTop: '4px', fontSize: '8px', color: 'var(--text-muted)', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <span><b style={{ color: '#22c55e' }}>🟢 BUY</b> #3,5,6</span>
                 <span><b style={{ color: '#60a5fa' }}>📊 HOLD</b> #1,2,8</span>
                 <span><b style={{ color: '#f0ad4e' }}>⚠️ WATCH</b> #4,9,10,12</span>
@@ -1814,8 +1821,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               key={key}
               onClick={() => toggleSignal(key)}
               style={{
-                padding: '4px 10px',
-                fontSize: '11px',
+                padding: '2px 6px',
+                fontSize: '10px',
                 fontWeight: 600,
                 flex: 1,
                 textAlign: 'center',
