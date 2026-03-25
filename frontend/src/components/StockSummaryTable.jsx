@@ -892,17 +892,32 @@ function getSignalGroup(ruleNum) {
   return null;
 }
 
-const SIGNAL_RULES_GROUPED = [
-  { icon: '🟢', label: 'BUY', rules: '#3 Uptrend+Above+Oversold (rare golden buy) · #5 Uptrend+Below+Neutral (accumulate) · #6 Uptrend+Below+Oversold (strong buy)', color: '#22c55e' },
-  { icon: '📊', label: 'HOLD', rules: '#1 Uptrend+Above+Overbought (don\'t buy more) · #2 Uptrend+Above+Neutral (best position) · #8 Sideways+Above+Neutral (wait for clarity)', color: '#60a5fa' },
-  { icon: '⚠️', label: 'WATCH', rules: '#4 Uptrend+Below+Overbought (recovering?) · #9 Sideways+Above+Oversold (breaking down?) · #10 Sideways+Below+Overbought (dead cat bounce?) · #12 Sideways+Below+Oversold (bottoming?)', color: '#f0ad4e' },
-  { icon: '🔴', label: 'SELL', rules: '#7 Sideways+Above+Overbought (topping out) · #13 Downtrend+Above+Overbought (last exit) · #14 Downtrend+Above+Neutral (reduce) · #16 Downtrend+Below+Overbought (sell bounce)', color: '#ef4444' },
-  { icon: '🚫', label: 'AVOID', rules: '#15 Downtrend+Above+Oversold (chaotic) · #17 Downtrend+Below+Neutral (falling knife) · #18 Downtrend+Below+Oversold (value trap)', color: '#9ca3af' },
-  { icon: '⏸️', label: 'WAIT', rules: '#11 Sideways+Below+Neutral (no signal)', color: '#6b7280' },
+const SIGNAL_RULES_TABLE = [
+  { n: 1,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'HOLD',  action: 'Hold, don\'t buy more — wait for pullback', color: '#60a5fa' },
+  { n: 2,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Best position to be in — hold and ride', color: '#60a5fa' },
+  { n: 3,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Buy the dip — rare golden buy', color: '#22c55e' },
+  { n: 4,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Watch — could be trend resuming', color: '#f0ad4e' },
+  { n: 5,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'BUY',   action: 'Accumulate — healthy retest', color: '#22c55e' },
+  { n: 6,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Strong buy — if fundamentals intact', color: '#22c55e' },
+  { n: 0 },
+  { n: 7,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Reduce — uptrend may be ending', color: '#ef4444' },
+  { n: 8,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Hold — wait for trend to clarify', color: '#60a5fa' },
+  { n: 9,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'WATCH', action: 'Caution — trend might break down', color: '#f0ad4e' },
+  { n: 10, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Don\'t chase — dead cat bounce?', color: '#f0ad4e' },
+  { n: 11, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'WAIT',  action: 'Wait — no clear signal', color: '#6b7280' },
+  { n: 12, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'WATCH', action: 'Watchlist — bottoming out?', color: '#f0ad4e' },
+  { n: 0 },
+  { n: 13, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Sell/Exit — last chance out', color: '#ef4444' },
+  { n: 14, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'SELL',  action: 'Reduce — trend just turned', color: '#ef4444' },
+  { n: 15, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Wait — too chaotic, let it settle', color: '#9ca3af' },
+  { n: 16, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Sell into the bounce — temporary', color: '#ef4444' },
+  { n: 17, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'AVOID', action: 'Avoid — falling knife', color: '#9ca3af' },
+  { n: 18, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Avoid — value trap, can stay months', color: '#9ca3af' },
 ];
 
 function SignalRulesPopup() {
   const [show, setShow] = useState(false);
+  const ts = { padding: '3px 6px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
   return (
     <span style={{ position: 'relative', display: 'inline-block' }}
       onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
@@ -911,22 +926,45 @@ function SignalRulesPopup() {
         <div style={{
           position: 'absolute', bottom: '24px', right: 0, zIndex: 100,
           background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
-          borderRadius: '8px', padding: '12px 14px', width: '380px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)', fontSize: '11px', lineHeight: 1.5,
+          borderRadius: '8px', padding: '10px', maxWidth: '700px', width: 'max-content',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)', fontSize: '10px', lineHeight: 1.4,
         }}>
-          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '8px', color: 'var(--text)' }}>
-            Signal Rules (Trend + vs SMA + RSI)
+          <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '6px', color: 'var(--text)' }}>
+            Signal Rules — All 18 Combinations
           </div>
-          {SIGNAL_RULES_GROUPED.map(g => (
-            <div key={g.label} style={{ marginBottom: '6px' }}>
-              <div style={{ fontWeight: 700, color: g.color }}>{g.icon} {g.label}</div>
-              <div style={{ color: 'var(--text-muted)', paddingLeft: '20px' }}>
-                {g.rules.split(' · ').map((r, i) => <div key={i}>{r}</div>)}
-              </div>
-            </div>
-          ))}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '6px', color: 'var(--text-muted)' }}>
-            <strong style={{ color: 'var(--text)' }}>Key:</strong> #3 = Rare golden buy · #2 = Ideal hold · #18 = Value trap
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <th style={{ ...ts, fontWeight: 700 }}>#</th>
+                <th style={{ ...ts, fontWeight: 700 }}>Trend</th>
+                <th style={{ ...ts, fontWeight: 700 }}>vs SMA</th>
+                <th style={{ ...ts, fontWeight: 700 }}>RSI</th>
+                <th style={{ ...ts, fontWeight: 700 }}>Signal</th>
+                <th style={{ ...ts, fontWeight: 700 }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SIGNAL_RULES_TABLE.map((r, i) => r.n === 0 ? (
+                <tr key={i}><td colSpan={6} style={{ height: '4px' }} /></tr>
+              ) : (
+                <tr key={r.n}>
+                  <td style={ts}>{r.n}</td>
+                  <td style={ts}>{r.trend}</td>
+                  <td style={ts}>{r.sma}</td>
+                  <td style={ts}>{r.rsi}</td>
+                  <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
+                  <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '200px' }}>{r.action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <span><b style={{ color: '#22c55e' }}>🟢 BUY</b> #3,5,6</span>
+            <span><b style={{ color: '#60a5fa' }}>📊 HOLD</b> #1,2,8</span>
+            <span><b style={{ color: '#f0ad4e' }}>⚠️ WATCH</b> #4,9,10,12</span>
+            <span><b style={{ color: '#ef4444' }}>🔴 SELL</b> #7,13,14,16</span>
+            <span><b style={{ color: '#9ca3af' }}>🚫 AVOID</b> #15,17,18</span>
+            <span><b style={{ color: '#6b7280' }}>⏸️ WAIT</b> #11</span>
           </div>
         </div>
       )}
