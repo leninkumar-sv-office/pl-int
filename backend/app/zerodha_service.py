@@ -719,6 +719,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
         with _52w_cache_lock:
             cached = _52w_cache.get(key)
         if cached and (now - cached.get("fetched_at", 0)) < _52W_CACHE_TTL:
+            # Serve existing data immediately
             results[key] = {
                 "week_52_high": cached["week_52_high"],
                 "week_52_low": cached["week_52_low"],
@@ -729,6 +730,11 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "trend": cached.get("trend"),
                 "rsi": cached.get("rsi"),
             }
+            # Also queue re-fetch if missing SMA data (one-time migration)
+            if "sma_50" not in cached:
+                token = _get_instrument_token(sym, exch)
+                if token:
+                    need_fetch.append((sym, exch, token))
             continue
 
         # Need to fetch — look up instrument token
