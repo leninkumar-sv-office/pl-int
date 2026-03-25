@@ -663,6 +663,10 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
     sma_50 = round(sum(closes[-50:]) / 50, 2) if len(closes) >= 50 else None
     sma_200 = round(sum(closes[-200:]) / 200, 2) if len(closes) >= 200 else None
 
+    # For stocks with <200 days, compute SMA from all available data as fallback
+    if sma_200 is None and len(closes) >= 50:
+        sma_200 = round(sum(closes) / len(closes), 2)
+
     trend = None
     if sma_50 is not None and sma_200 is not None and latest_close > 0:
         if latest_close > sma_200 and sma_50 > sma_200:
@@ -730,8 +734,8 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "trend": cached.get("trend"),
                 "rsi": cached.get("rsi"),
             }
-            # Also queue re-fetch if missing SMA data (one-time migration)
-            if "sma_50" not in cached:
+            # Queue re-fetch if missing SMA/trend data
+            if "sma_50" not in cached or (cached.get("sma_50") and not cached.get("sma_200")):
                 token = _get_instrument_token(sym, exch)
                 if token:
                     need_fetch.append((sym, exch, token))

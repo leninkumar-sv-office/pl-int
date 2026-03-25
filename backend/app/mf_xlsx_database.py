@@ -238,7 +238,7 @@ def _search_mfapi_scheme(fund_name: str) -> Optional[int]:
         try:
             resp = _requests.get(
                 f"https://api.mfapi.in/mf/search?q={search_q}",
-                timeout=10,
+                timeout=30,
             )
             if resp.status_code == 200:
                 results = resp.json()
@@ -385,6 +385,9 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         result["sma_50"] = round(sum(all_navs[:50]) / 50, 4)
     if len(all_navs) >= 200:
         result["sma_200"] = round(sum(all_navs[:200]) / 200, 4)
+    elif len(all_navs) >= 50:
+        # Fallback: use all available data as long-term average
+        result["sma_200"] = round(sum(all_navs) / len(all_navs), 4)
 
     if result["sma_50"] is not None and result["sma_200"] is not None and current_nav > 0:
         if current_nav > result["sma_200"] and result["sma_50"] > result["sma_200"]:
