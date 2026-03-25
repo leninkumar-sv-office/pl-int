@@ -1004,15 +1004,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const showOverlay = loading && (funds || []).length > 0;
 
   return (
-    <div className="section" style={{ position: 'relative' }}>
-      {showOverlay && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', fontSize: '14px' }}>
-            <div className="spinner" style={{ width: '20px', height: '20px' }} />
-            Refreshing NAVs...
-          </div>
-        </div>
-      )}
+    <div className="section">
       <div className="section-header" style={{ position: 'relative' }}>
         <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
           <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
@@ -1264,7 +1256,15 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       </div>
 
       {/* ── Main Table ───────────────────────────────── */}
-      <div className="table-container">
+      <div className="table-container" style={{ position: 'relative' }}>
+        {showOverlay && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', fontSize: '14px', background: 'rgba(0,0,0,0.6)', padding: '10px 20px', borderRadius: '8px' }}>
+              <div className="spinner" style={{ width: '18px', height: '18px' }} />
+              Refreshing NAVs...
+            </div>
+          </div>
+        )}
         <table>
           <thead>
             <tr>

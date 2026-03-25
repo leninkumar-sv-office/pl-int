@@ -1430,15 +1430,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const selectedPLPa = selectedDays > 0 && selectedCost > 0 ? (Math.pow(1 + selectedPL / selectedCost, 365 / selectedDays) - 1) * 100 : null;
 
   return (
-    <div className="section" style={{ position: 'relative' }}>
-      {showOverlay && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', fontSize: '14px' }}>
-            <div className="spinner" style={{ width: '20px', height: '20px' }} />
-            Refreshing prices...
-          </div>
-        </div>
-      )}
+    <div className="section">
       <div className="section-header" style={{ position: 'relative' }}>
         <div className="section-title" onClick={toggleSummary} style={{ cursor: 'pointer', userSelect: 'none' }}>
           <span style={{ display: 'inline-block', width: '16px', fontSize: '10px', color: 'var(--text-muted)' }}>{summaryCollapsed ? '▶' : '▼'}</span>
@@ -1764,7 +1756,15 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         </div>
       </div>
 
-      <div className="table-container">
+      <div className="table-container" style={{ position: 'relative' }}>
+        {showOverlay && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fff', fontSize: '14px', background: 'rgba(0,0,0,0.6)', padding: '10px 20px', borderRadius: '8px' }}>
+              <div className="spinner" style={{ width: '18px', height: '18px' }} />
+              Refreshing prices...
+            </div>
+          </div>
+        )}
         <table>
           <thead>
             {/* Row 1: grouped headers */}
