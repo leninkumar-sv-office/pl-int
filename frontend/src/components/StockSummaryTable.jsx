@@ -1257,8 +1257,7 @@ function RenameStockModal({ stock, onSave, onClose }) {
 
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
-  const [sortField, setSortField] = useState('symbol');
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortKeys, setSortKeys] = useState([{ field: 'symbol', dir: 'asc' }]);
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideZeroHeld, setHideZeroHeld] = useState(true);
@@ -1379,12 +1378,26 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     );
   }
 
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+  const handleSort = (field, e) => {
+    if (e?.shiftKey) {
+      // Shift+click: add or toggle secondary sort
+      setSortKeys(prev => {
+        const idx = prev.findIndex(k => k.field === field);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { field, dir: next[idx].dir === 'asc' ? 'desc' : 'asc' };
+          return next;
+        }
+        return [...prev, { field, dir: 'desc' }];
+      });
     } else {
-      setSortField(field);
-      setSortDir('desc');
+      // Regular click: single sort
+      setSortKeys(prev => {
+        if (prev.length === 1 && prev[0].field === field) {
+          return [{ field, dir: prev[0].dir === 'asc' ? 'desc' : 'asc' }];
+        }
+        return [{ field, dir: 'desc' }];
+      });
     }
   };
 
@@ -1453,86 +1466,48 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     return true;
   });
 
+  const getSortVal = (s, field) => {
+    if (sortMode === 'pa' && PL_SORT_FIELDS.has(field)) return sortPaVal(s, field);
+    if (sortMode === 'pct' && PL_SORT_FIELDS.has(field)) return sortPctVal(s, field);
+    switch (field) {
+      case 'symbol': return s.symbol;
+      case 'total_held_qty': return s.total_held_qty;
+      case 'total_sold_qty': return s.total_sold_qty;
+      case 'total_invested': return s.total_invested;
+      case 'current_value': return s.current_value;
+      case 'day_change_pct': return s.live?.day_change_pct || 0;
+      case 'unrealized_profit': return s.unrealized_profit || 0;
+      case 'ltcg_unrealized_profit': return s.ltcg_unrealized_profit || 0;
+      case 'stcg_unrealized_profit': return s.stcg_unrealized_profit || 0;
+      case 'unrealized_loss': return s.unrealized_loss || 0;
+      case 'ltcg_unrealized_loss': return s.ltcg_unrealized_loss || 0;
+      case 'stcg_unrealized_loss': return s.stcg_unrealized_loss || 0;
+      case 'unrealized_pl': return (s.unrealized_profit || 0) + (s.unrealized_loss || 0);
+      case 'ltcg_unrealized_pl': return (s.ltcg_unrealized_profit || 0) + (s.ltcg_unrealized_loss || 0);
+      case 'stcg_unrealized_pl': return (s.stcg_unrealized_profit || 0) + (s.stcg_unrealized_loss || 0);
+      case 'total_dividend': return s.total_dividend || 0;
+      case 'realized_pl': return s.realized_pl || 0;
+      case 'ltcg_realized_pl': return s.ltcg_realized_pl || 0;
+      case 'stcg_realized_pl': return s.stcg_realized_pl || 0;
+      case 'week_52_low': { const cp = s.live?.current_price || 0, low = s.live?.week_52_low || 0; return low > 0 && cp > 0 ? ((cp - low) / low * 100) : 9999; }
+      case 'week_52_high': { const cp = s.live?.current_price || 0, high = s.live?.week_52_high || 0; return high > 0 && cp > 0 ? ((high - cp) / high * 100) : 9999; }
+      case 'trend': { const order = { uptrend: 1, sideways: 2, downtrend: 3 }; return order[s.live?.trend] || 99; }
+      case 'sma_200': { const sma = s.live?.sma_200, cp = s.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : -9999; }
+      case 'rsi': return s.live?.rsi ?? -1;
+      default: return s.unrealized_profit || 0;
+    }
+  };
+
   const sorted = [...filtered].sort((a, b) => {
-    let aVal, bVal;
-    if (sortMode === 'pa' && PL_SORT_FIELDS.has(sortField)) {
-      aVal = sortPaVal(a, sortField);
-      bVal = sortPaVal(b, sortField);
-    } else if (sortMode === 'pct' && PL_SORT_FIELDS.has(sortField)) {
-      aVal = sortPctVal(a, sortField);
-      bVal = sortPctVal(b, sortField);
-    } else switch (sortField) {
-      case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
-      case 'total_held_qty': aVal = a.total_held_qty; bVal = b.total_held_qty; break;
-      case 'total_sold_qty': aVal = a.total_sold_qty; bVal = b.total_sold_qty; break;
-      case 'total_invested': aVal = a.total_invested; bVal = b.total_invested; break;
-      case 'current_value': aVal = a.current_value; bVal = b.current_value; break;
-      case 'day_change_pct':
-        aVal = a.live?.day_change_pct || 0; bVal = b.live?.day_change_pct || 0; break;
-      case 'unrealized_profit':
-        aVal = a.unrealized_profit || 0; bVal = b.unrealized_profit || 0; break;
-      case 'ltcg_unrealized_profit':
-        aVal = a.ltcg_unrealized_profit || 0; bVal = b.ltcg_unrealized_profit || 0; break;
-      case 'stcg_unrealized_profit':
-        aVal = a.stcg_unrealized_profit || 0; bVal = b.stcg_unrealized_profit || 0; break;
-      case 'unrealized_loss':
-        aVal = a.unrealized_loss || 0; bVal = b.unrealized_loss || 0; break;
-      case 'ltcg_unrealized_loss':
-        aVal = a.ltcg_unrealized_loss || 0; bVal = b.ltcg_unrealized_loss || 0; break;
-      case 'stcg_unrealized_loss':
-        aVal = a.stcg_unrealized_loss || 0; bVal = b.stcg_unrealized_loss || 0; break;
-      case 'unrealized_pl':
-        aVal = (a.unrealized_profit || 0) + (a.unrealized_loss || 0);
-        bVal = (b.unrealized_profit || 0) + (b.unrealized_loss || 0); break;
-      case 'ltcg_unrealized_pl':
-        aVal = (a.ltcg_unrealized_profit || 0) + (a.ltcg_unrealized_loss || 0);
-        bVal = (b.ltcg_unrealized_profit || 0) + (b.ltcg_unrealized_loss || 0); break;
-      case 'stcg_unrealized_pl':
-        aVal = (a.stcg_unrealized_profit || 0) + (a.stcg_unrealized_loss || 0);
-        bVal = (b.stcg_unrealized_profit || 0) + (b.stcg_unrealized_loss || 0); break;
-      case 'total_dividend':
-        aVal = a.total_dividend || 0; bVal = b.total_dividend || 0; break;
-      case 'realized_pl':
-        aVal = a.realized_pl || 0; bVal = b.realized_pl || 0; break;
-      case 'ltcg_realized_pl':
-        aVal = a.ltcg_realized_pl || 0; bVal = b.ltcg_realized_pl || 0; break;
-      case 'stcg_realized_pl':
-        aVal = a.stcg_realized_pl || 0; bVal = b.stcg_realized_pl || 0; break;
-      case 'week_52_low': {
-        const aCP = a.live?.current_price || 0, aLow = a.live?.week_52_low || 0;
-        const bCP = b.live?.current_price || 0, bLow = b.live?.week_52_low || 0;
-        aVal = aLow > 0 && aCP > 0 ? ((aCP - aLow) / aLow * 100) : 9999;
-        bVal = bLow > 0 && bCP > 0 ? ((bCP - bLow) / bLow * 100) : 9999;
-        break;
-      }
-      case 'week_52_high': {
-        const aCP2 = a.live?.current_price || 0, aHigh = a.live?.week_52_high || 0;
-        const bCP2 = b.live?.current_price || 0, bHigh = b.live?.week_52_high || 0;
-        aVal = aHigh > 0 && aCP2 > 0 ? ((aHigh - aCP2) / aHigh * 100) : 9999;
-        bVal = bHigh > 0 && bCP2 > 0 ? ((bHigh - bCP2) / bHigh * 100) : 9999;
-        break;
-      }
-      case 'trend': {
-        const order = { uptrend: 1, sideways: 2, downtrend: 3 };
-        aVal = order[a.live?.trend] || 99;
-        bVal = order[b.live?.trend] || 99;
-        break;
-      }
-      case 'sma_200': {
-        const aS = a.live?.sma_200, aP = a.live?.current_price || 0;
-        const bS = b.live?.sma_200, bP = b.live?.current_price || 0;
-        aVal = aS > 0 && aP > 0 ? ((aP - aS) / aS * 100) : -9999;
-        bVal = bS > 0 && bP > 0 ? ((bP - bS) / bS * 100) : -9999;
-        break;
-      }
-      case 'rsi':
-        aVal = a.live?.rsi ?? -1; bVal = b.live?.rsi ?? -1; break;
-      default: aVal = a.unrealized_profit; bVal = b.unrealized_profit;
+    for (const { field, dir } of sortKeys) {
+      const aVal = getSortVal(a, field);
+      const bVal = getSortVal(b, field);
+      let cmp = 0;
+      if (typeof aVal === 'string') cmp = aVal.localeCompare(bVal);
+      else cmp = aVal - bVal;
+      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
     }
-    if (typeof aVal === 'string') {
-      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    }
-    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    return 0;
   });
 
   const stocksWithHeld = stocks.filter(s => s.total_held_qty > 0);
@@ -1541,8 +1516,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   const inLoss = stocksWithHeld.filter(s => !s.is_above_avg_buy && s.live).length;
 
   const SortIcon = ({ field }) => {
-    if (sortField !== field) return <span style={{ opacity: 0.3, fontSize: '10px' }}> ↕</span>;
-    return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '↑' : '↓'}</span>;
+    const idx = sortKeys.findIndex(k => k.field === field);
+    if (idx < 0) return <span style={{ opacity: 0.3, fontSize: '10px' }}> ↕</span>;
+    const arrow = sortKeys[idx].dir === 'asc' ? '↑' : '↓';
+    const num = sortKeys.length > 1 ? `${idx + 1}` : '';
+    return <span style={{ fontSize: '10px' }}> {arrow}{num && <sup style={{ fontSize: '7px' }}>{num}</sup>}</span>;
   };
 
   // Dynamic column count: 2 always-on (expand + stock) + visible regular cols + visible grouped cols × 3
@@ -1977,39 +1955,39 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             {/* Row 1: grouped headers */}
             <tr>
               <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ width: '28px' }}></th>
-              <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('symbol')} style={{ cursor: 'pointer' }}>
+              <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('symbol', e)} style={{ cursor: 'pointer' }}>
                 Stock<SortIcon field="symbol" />
               </th>
-              {col('held') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_held_qty')} style={{ cursor: 'pointer' }}>
+              {col('held') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('total_held_qty', e)} style={{ cursor: 'pointer' }}>
                 Held<SortIcon field="total_held_qty" />
               </th>}
-              {col('sold') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_sold_qty')} style={{ cursor: 'pointer' }}>
+              {col('sold') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('total_sold_qty', e)} style={{ cursor: 'pointer' }}>
                 Sold<SortIcon field="total_sold_qty" />
               </th>}
               {col('price') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Price</th>}
               {col('buyPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Buy Price</th>}
               {col('totalCost') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined}>Total Cost</th>}
-              {col('w52Low') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_low')} style={{ cursor: 'pointer' }}>
+              {col('w52Low') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('week_52_low', e)} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="week_52_low" />
               </th>}
-              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('day_change_pct')} style={{ cursor: 'pointer' }}>
+              {col('currentPrice') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('day_change_pct', e)} style={{ cursor: 'pointer' }}>
                 Current Price<SortIcon field="day_change_pct" />
               </th>}
-              {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('week_52_high')} style={{ cursor: 'pointer' }}>
+              {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('week_52_high', e)} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
               </th>}
-              {col('trend') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('trend')} style={{ cursor: 'pointer' }}>
+              {col('trend') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('trend', e)} style={{ cursor: 'pointer' }}>
                 Trend<SortIcon field="trend" />
                 <span title={"Adaptive SMA trend detection:\n• 200+ days: 50-SMA vs 200-SMA\n• 50-199 days: 20-SMA vs 50-SMA\n• 20-49 days: 10-SMA vs 20-SMA\n\n↑ Uptrend: Price > long-SMA AND short-SMA > long-SMA\n↓ Downtrend: Price < long-SMA AND short-SMA < long-SMA\n→ Sideways: Mixed signals"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
-              {col('vsSma200') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('sma_200')} style={{ cursor: 'pointer' }}>
+              {col('vsSma200') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('sma_200', e)} style={{ cursor: 'pointer' }}>
                 vs 200-SMA<SortIcon field="sma_200" />
               </th>}
-              {col('rsi') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('rsi')} style={{ cursor: 'pointer' }}>
+              {col('rsi') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('rsi', e)} style={{ cursor: 'pointer' }}>
                 RSI<SortIcon field="rsi" />
                 <span title={"RSI (14-day Relative Strength Index)\n< 30: Oversold (beaten down)\n30-70: Neutral\n> 70: Overbought (run up fast)"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
-              {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              {col('unrealizedPF') && <th colSpan={3} onClick={(e) => handleSort('unrealized_profit', e)} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
                 <span
                   onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
@@ -2018,7 +1996,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                 >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
               {col('status') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} style={{ minWidth: '120px' }}>Status</th>}
-              {col('unrealizedLoss') && <th colSpan={3} onClick={() => handleSort('unrealized_loss')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              {col('unrealizedLoss') && <th colSpan={3} onClick={(e) => handleSort('unrealized_loss', e)} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized Loss<SortIcon field="unrealized_loss" />
                 <span
                   onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
@@ -2026,7 +2004,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                   title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
                 >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
-              {col('unrealizedPL') && <th colSpan={3} onClick={() => handleSort('unrealized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              {col('unrealizedPL') && <th colSpan={3} onClick={(e) => handleSort('unrealized_pl', e)} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized P/L<SortIcon field="unrealized_pl" />
                 <span
                   onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
@@ -2034,7 +2012,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                   title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
                 >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
-              {col('realizedPL') && <th colSpan={3} onClick={() => handleSort('realized_pl')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              {col('realizedPL') && <th colSpan={3} onClick={(e) => handleSort('realized_pl', e)} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Realized P&L<SortIcon field="realized_pl" />
                 <span
                   onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
@@ -2042,7 +2020,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                   title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
                 >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
-              {col('dividends') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('total_dividend')} style={{ cursor: 'pointer' }}>
+              {col('dividends') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('total_dividend', e)} style={{ cursor: 'pointer' }}>
                 Dividends<SortIcon field="total_dividend" />
               </th>}
             </tr>
@@ -2060,7 +2038,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     { label: 'LTCG',  field: group.ltcg },
                     { label: 'STCG',  field: group.stcg },
                   ].map(c => (
-                    <th key={c.field} onClick={() => handleSort(c.field)}
+                    <th key={c.field} onClick={(e) => handleSort(c.field)}
                         style={{ fontSize: '10px', fontWeight: 500, padding: '2px 6px', opacity: 0.85, cursor: 'pointer', whiteSpace: 'nowrap', top: '36px' }}>
                       {c.label}<SortIcon field={c.field} />
                     </th>
