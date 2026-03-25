@@ -1707,7 +1707,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
 
       {/* Search bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-        <div style={{ position: 'relative', flex: '1' }}>
+        <div style={{ position: 'relative', flex: '0 1 35%', minWidth: '150px' }}>
           <input
             ref={searchRef}
             type="text"
@@ -1780,14 +1780,14 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           </span>
         )}
         {/* Signal filter buttons */}
-        <div style={{ display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
           {Object.entries(SIGNAL_DEFS).map(([key, def]) => (
             <button
               key={key}
               onClick={() => toggleSignal(key)}
               style={{
-                padding: '2px 7px',
-                fontSize: '10px',
+                padding: '4px 10px',
+                fontSize: '11px',
                 fontWeight: 600,
                 background: activeSignals.has(key) ? 'var(--blue)' : 'var(--bg-input)',
                 color: activeSignals.has(key) ? '#fff' : 'var(--text-muted)',

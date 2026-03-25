@@ -271,13 +271,15 @@ export default function App() {
   // Fire ALL groups concurrently — each updates state independently as it resolves
   const loadData = useCallback(async () => {
     try {
-      await Promise.allSettled([
-        loadStocks(), loadGlobal(), loadMutualFunds(),
-        loadFD(), loadRD(), loadInsurance(), loadPPF(), loadNPS(), loadSI(),
-      ]);
+      // Load stocks first (default tab) — show page immediately
+      await Promise.allSettled([loadStocks(), loadGlobal()]);
+      setLoading(false);
+      // Load remaining tabs in background (MF can be slow due to mfapi.in)
+      Promise.allSettled([
+        loadMutualFunds(), loadFD(), loadRD(), loadInsurance(), loadPPF(), loadNPS(), loadSI(),
+      ]).catch(err => console.error('Background load error:', err));
     } catch (err) {
       console.error('Failed to load data:', err);
-    } finally {
       setLoading(false);
     }
   }, [loadStocks, loadGlobal, loadMutualFunds, loadFD, loadRD, loadInsurance, loadPPF, loadNPS, loadSI]);

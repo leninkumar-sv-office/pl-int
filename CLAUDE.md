@@ -83,6 +83,14 @@ npm run test:report
 - All MF funds are Direct Growth plans, names in Title Case
 - **Feature parity: StockSummaryTable ↔ MutualFundTable** — any feature added to one (sorting modes, filtering, display options, columns) MUST also be added to the other. They should have the same UX capabilities.
 
+## Manual Verification with Playwright
+
+**After every UI or backend change**, verify the fix using the Playwright MCP browser:
+1. Navigate to `https://pl.thirumagal.com` (or login if needed)
+2. Visually confirm the change works — take a snapshot, check columns have data, filters work
+3. Check the browser console for errors
+4. Do NOT skip this step — the user should not have to ask for manual verification
+
 ## Test Strategy
 
 Tests validate **data correctness**, not just UI rendering:
