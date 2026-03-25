@@ -147,31 +147,30 @@ function getMFSignalGroup(ruleNum) {
   return null;
 }
 
-const SIGNAL_RULES_TABLE = [
-  { n: 0, header: '🟢 BUY — Uptrend + dip opportunities' },
-  { n: 3,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Rare golden buy — strong stock on sale', color: '#22c55e' },
-  { n: 5,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'BUY',   action: 'Accumulate — healthy retest of support', color: '#22c55e' },
-  { n: 6,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Strong buy — if fundamentals intact', color: '#22c55e' },
-  { n: 0, header: '📊 HOLD — Good position, stay' },
-  { n: 1,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'HOLD',  action: 'Hold, don\'t buy more — wait for pullback', color: '#60a5fa' },
-  { n: 2,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Best position — hold and ride', color: '#60a5fa' },
-  { n: 8,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Hold — wait for trend to clarify', color: '#60a5fa' },
-  { n: 0, header: '⚠️ WATCH — Unclear, need more data' },
-  { n: 4,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Could be trend resuming', color: '#f0ad4e' },
-  { n: 9,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'WATCH', action: 'Caution — trend might break down', color: '#f0ad4e' },
-  { n: 10, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Don\'t chase — dead cat bounce?', color: '#f0ad4e' },
-  { n: 12, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'WATCH', action: 'Watchlist — bottoming out?', color: '#f0ad4e' },
-  { n: 0, header: '🔴 SELL — Weakening or reversing' },
-  { n: 7,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Reduce — uptrend may be ending', color: '#ef4444' },
-  { n: 13, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Sell/Exit — last chance out', color: '#ef4444' },
-  { n: 14, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'SELL',  action: 'Reduce — trend just turned', color: '#ef4444' },
-  { n: 16, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Sell into the bounce — temporary', color: '#ef4444' },
-  { n: 0, header: '🚫 AVOID — Downtrend, stay away' },
-  { n: 15, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Too chaotic — let it settle', color: '#9ca3af' },
-  { n: 17, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'AVOID', action: 'Falling knife — stay away', color: '#9ca3af' },
-  { n: 18, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Value trap — can stay here months', color: '#9ca3af' },
-  { n: 0, header: '⏸️ WAIT — No signal' },
-  { n: 11, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'WAIT',  action: 'No clear signal either way', color: '#6b7280' },
+const SIGNAL_RULES_SECTIONS = [
+  { title: 'Pullback Entry (Aggressive)', rows: [
+    { signal: 'BUY',     sma: '50 > 200', price: '> both SMAs', rsi: 'Dips to 30-40, turns up', meaning: 'Catching a dip in an uptrend', color: '#22c55e' },
+    { signal: 'SELL',    sma: '50 < 200', price: '< both SMAs', rsi: 'Rises to 60-70, turns down', meaning: 'Fading a bounce in a downtrend', color: '#ef4444' },
+    { signal: 'HOLD',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI 40-70 (mid-range)', meaning: 'Trend intact, no pullback yet', color: '#60a5fa' },
+    { signal: 'CAUTION', sma: '50 > 200', price: 'Between SMAs', rsi: 'RSI falling below 50', meaning: 'Trend weakening — tighten stop', color: '#f0ad4e' },
+  ]},
+  { title: 'Midline Crossover (RSI 50)', rows: [
+    { signal: 'BUY',     sma: '50 > 200', price: '> both SMAs', rsi: 'RSI crosses above 50', meaning: 'Momentum confirmed bullish', color: '#22c55e' },
+    { signal: 'SELL',    sma: '50 < 200', price: '< both SMAs', rsi: 'RSI crosses below 50', meaning: 'Momentum confirmed bearish', color: '#ef4444' },
+    { signal: 'HOLD',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI hovering near 50', meaning: 'Indecisive — wait for clear cross', color: '#60a5fa' },
+    { signal: 'CAUTION', sma: '50 ≈ 200 (converging)', price: 'Near both SMAs', rsi: 'RSI oscillating ~50', meaning: 'Possible reversal — reduce size', color: '#f0ad4e' },
+  ]},
+  { title: 'Classic Overbought/Oversold (30/70)', rows: [
+    { signal: 'BUY',     sma: '50 > 200', price: '> both SMAs', rsi: 'RSI crosses back above 30', meaning: 'Oversold bounce in uptrend', color: '#22c55e' },
+    { signal: 'SELL',    sma: '50 < 200', price: '< both SMAs', rsi: 'RSI crosses back below 70', meaning: 'Overbought rejection in downtrend', color: '#ef4444' },
+    { signal: 'HOLD',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI 40-65', meaning: 'Healthy trend, let winners run', color: '#60a5fa' },
+    { signal: 'EXIT',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI > 70 and turning down', meaning: 'Overbought — take profit, don\'t add', color: '#a78bfa' },
+  ]},
+  { title: 'Trend-Neutral / No-Trade', rows: [
+    { signal: 'WAIT',      sma: '50 ≈ 200 (flat)', price: 'Choppy around SMAs', rsi: '40-60', meaning: 'No trend — avoid whipsaws', color: '#6b7280' },
+    { signal: 'DIVERGENCE', sma: '50 > 200', price: 'Making new highs', rsi: 'RSI making lower highs', meaning: 'Bearish divergence — tighten stops', color: '#a78bfa' },
+    { signal: 'DIVERGENCE', sma: '50 < 200', price: 'Making new lows', rsi: 'RSI making higher lows', meaning: 'Bullish divergence — watch for reversal', color: '#a78bfa' },
+  ]},
 ];
 
 function SignalRulesPopup() {
@@ -215,43 +214,39 @@ function SignalRulesPopup() {
               padding: '8px 12px', borderBottom: '1px solid var(--border)',
               cursor: 'grab', userSelect: 'none',
             }}>
-              <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text)' }}>Signal Rules — 18 Combinations</span>
+              <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text)' }}>Signal Rules — SMA + RSI Strategies</span>
               <span onClick={() => setShow(false)} style={{ cursor: 'pointer', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1 }}>&times;</span>
             </div>
             <div style={{ overflowY: 'auto', padding: '8px 10px' }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card, #1e1e2e)' }}>
-                  <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <th style={{ ...ts, fontWeight: 700 }}>#</th>
-                    <th style={{ ...ts, fontWeight: 700 }}>Trend</th>
-                    <th style={{ ...ts, fontWeight: 700 }}>vs SMA</th>
-                    <th style={{ ...ts, fontWeight: 700 }}>RSI</th>
-                    <th style={{ ...ts, fontWeight: 700 }}>Signal</th>
-                    <th style={{ ...ts, fontWeight: 700 }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SIGNAL_RULES_TABLE.map((r, i) => r.n === 0 ? (
-                    <tr key={i}><td colSpan={6} style={{ padding: '5px 6px', fontWeight: 700, fontSize: '10px', color: 'var(--text)', background: 'rgba(255,255,255,0.03)' }}>{r.header}</td></tr>
-                  ) : (
-                    <tr key={r.n}>
-                      <td style={ts}>{r.n}</td>
-                      <td style={ts}>{r.trend}</td>
-                      <td style={ts}>{r.sma}</td>
-                      <td style={ts}>{r.rsi}</td>
-                      <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
-                      <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '200px' }}>{r.action}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: '6px', fontSize: '9px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <span><b style={{ color: '#22c55e' }}>🟢 BUY</b> #3,5,6</span>
-                <span><b style={{ color: '#60a5fa' }}>📊 HOLD</b> #1,2,8</span>
-                <span><b style={{ color: '#f0ad4e' }}>⚠️ WATCH</b> #4,9,10,12</span>
-                <span><b style={{ color: '#ef4444' }}>🔴 SELL</b> #7,13,14,16</span>
-                <span><b style={{ color: '#9ca3af' }}>🚫 AVOID</b> #15,17,18</span>
-                <span><b style={{ color: '#6b7280' }}>⏸️ WAIT</b> #11</span>
+              {SIGNAL_RULES_SECTIONS.map((section, si) => (
+                <div key={si} style={{ marginBottom: '12px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text)', marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px solid var(--border)' }}>{section.title}</div>
+                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <th style={{ ...ts, fontWeight: 700 }}>Signal</th>
+                        <th style={{ ...ts, fontWeight: 700 }}>50 vs 200 SMA</th>
+                        <th style={{ ...ts, fontWeight: 700 }}>Price Position</th>
+                        <th style={{ ...ts, fontWeight: 700 }}>RSI Condition</th>
+                        <th style={{ ...ts, fontWeight: 700 }}>Meaning</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.rows.map((r, ri) => (
+                        <tr key={ri}>
+                          <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
+                          <td style={ts}>{r.sma}</td>
+                          <td style={ts}>{r.price}</td>
+                          <td style={ts}>{r.rsi}</td>
+                          <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '200px' }}>{r.meaning}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+              <div style={{ fontSize: '9px', color: 'var(--text-muted)', lineHeight: 1.5, padding: '6px 0', borderTop: '1px solid var(--border)' }}>
+                <b style={{ color: 'var(--text)' }}>Key:</b> SMA crossover filters trend direction. RSI times the entry. Pullback = aggressive, Midline (RSI 50) = balanced, 30/70 = conservative.
               </div>
             </div>
           </div>
@@ -959,8 +954,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
 /* ── Main Table ───────────────────────────────────────── */
 export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS }) {
   const [expandedFund, setExpandedFund] = useState(null);
-  const [sortKey, setSortKey] = useState('name');
-  const [sortDir, setSortDir] = useState('asc');
+  const [sortKeys, setSortKeys] = useState([{ field: 'name', dir: 'asc' }]);
   const [renamingFund, setRenamingFund] = useState(null); // { fund_code, name }
   const casFileInputRef = useRef(null);
   const [casImporting, setCasImporting] = useState(false);
@@ -1052,9 +1046,26 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const [sortMode, setSortMode] = useState('inr');
   const cycleSortMode = () => setSortMode(prev => SORT_MODES[(SORT_MODES.indexOf(prev) + 1) % SORT_MODES.length]);
 
-  const handleSort = (key) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('asc'); }
+  const handleSort = (field, e) => {
+    if (e) e.preventDefault();
+    if (e?.metaKey || e?.ctrlKey) {
+      setSortKeys(prev => {
+        const idx = prev.findIndex(k => k.field === field);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { field, dir: next[idx].dir === 'asc' ? 'desc' : 'asc' };
+          return next;
+        }
+        return [...prev, { field, dir: 'desc' }];
+      });
+    } else {
+      setSortKeys(prev => {
+        if (prev.length === 1 && prev[0].field === field) {
+          return [{ field, dir: prev[0].dir === 'asc' ? 'desc' : 'asc' }];
+        }
+        return [{ field, dir: 'desc' }];
+      });
+    }
   };
 
   const mfPctVal = (f, field) => {
@@ -1078,8 +1089,11 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   };
 
   const SortIcon = ({ field }) => {
-    if (sortKey !== field) return <span style={{ opacity: 0.3, fontSize: '10px' }}> &updownarrow;</span>;
-    return <span style={{ fontSize: '10px' }}> {sortDir === 'asc' ? '\u2191' : '\u2193'}</span>;
+    const idx = sortKeys.findIndex(k => k.field === field);
+    if (idx < 0) return <span style={{ opacity: 0.3, fontSize: '10px' }}> ↕</span>;
+    const arrow = sortKeys[idx].dir === 'asc' ? '↑' : '↓';
+    const num = sortKeys.length > 1 ? `${idx + 1}` : '';
+    return <span style={{ fontSize: '10px' }}> {arrow}{num && <sup style={{ fontSize: '7px' }}>{num}</sup>}</span>;
   };
 
   // Filter + sort
@@ -1098,41 +1112,41 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
     return true;
   });
 
-  filtered.sort((a, b) => {
-    let va, vb;
-    switch (sortKey) {
-      case 'name':         va = a.name; vb = b.name; break;
-      case 'units':        va = a.total_held_units; vb = b.total_held_units; break;
-      case 'avgNav':       va = a.avg_nav; vb = b.avg_nav; break;
-      case 'invested':     va = a.total_invested; vb = b.total_invested; break;
-      case 'currentNav':   va = a.current_nav; vb = b.current_nav; break;
-      case 'w52Low':       va = a.week_52_low || 0; vb = b.week_52_low || 0; break;
-      case 'w52High':      va = a.week_52_high || 0; vb = b.week_52_high || 0; break;
-      case 'trend': {
-        const order = { uptrend: 1, sideways: 2, downtrend: 3 };
-        va = order[a.trend] || 99; vb = order[b.trend] || 99; break;
-      }
-      case 'vsSma200': {
-        va = a.sma_200 > 0 && a.current_nav > 0 ? ((a.current_nav - a.sma_200) / a.sma_200 * 100) : -9999;
-        vb = b.sma_200 > 0 && b.current_nav > 0 ? ((b.current_nav - b.sma_200) / b.sma_200 * 100) : -9999;
-        break;
-      }
-      case 'rsi': va = a.rsi ?? -1; vb = b.rsi ?? -1; break;
-      case 'currentValue': va = a.current_value; vb = b.current_value; break;
+  const getMFSortVal = (f, field) => {
+    switch (field) {
+      case 'name': return f.name;
+      case 'units': return f.total_held_units;
+      case 'avgNav': return f.avg_nav;
+      case 'invested': return f.total_invested;
+      case 'currentNav': return f.current_nav;
+      case 'w52Low': return f.week_52_low || 0;
+      case 'w52High': return f.week_52_high || 0;
+      case 'trend': { const order = { uptrend: 1, sideways: 2, downtrend: 3 }; return order[f.trend] || 99; }
+      case 'vsSma200': return f.sma_200 > 0 && f.current_nav > 0 ? ((f.current_nav - f.sma_200) / f.sma_200 * 100) : -9999;
+      case 'rsi': return f.rsi ?? -1;
+      case 'currentValue': return f.current_value;
       case 'unrealizedPL':
-        if (sortMode === 'pa') { va = mfPaVal(a, 'unrealizedPL'); vb = mfPaVal(b, 'unrealizedPL'); }
-        else if (sortMode === 'pct') { va = mfPctVal(a, 'unrealizedPL'); vb = mfPctVal(b, 'unrealizedPL'); }
-        else { va = a.unrealized_pl; vb = b.unrealized_pl; }
-        break;
+        if (sortMode === 'pa') return mfPaVal(f, 'unrealizedPL');
+        if (sortMode === 'pct') return mfPctVal(f, 'unrealizedPL');
+        return f.unrealized_pl;
       case 'realizedPL':
-        if (sortMode === 'pa') { va = mfPaVal(a, 'realizedPL'); vb = mfPaVal(b, 'realizedPL'); }
-        else if (sortMode === 'pct') { va = mfPctVal(a, 'realizedPL'); vb = mfPctVal(b, 'realizedPL'); }
-        else { va = a.realized_pl; vb = b.realized_pl; }
-        break;
-      default:             va = a.name; vb = b.name;
+        if (sortMode === 'pa') return mfPaVal(f, 'realizedPL');
+        if (sortMode === 'pct') return mfPctVal(f, 'realizedPL');
+        return f.realized_pl;
+      default: return f.name;
     }
-    if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-    return sortDir === 'asc' ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+  };
+
+  filtered.sort((a, b) => {
+    for (const { field, dir } of sortKeys) {
+      const va = getMFSortVal(a, field);
+      const vb = getMFSortVal(b, field);
+      let cmp = 0;
+      if (typeof va === 'string') cmp = va.localeCompare(vb);
+      else cmp = (va || 0) - (vb || 0);
+      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+    }
+    return 0;
   });
 
   // Group by AMC for visual rendering (preserving sort order)
@@ -1459,42 +1473,42 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           <thead>
             <tr>
               <th style={{ width: '28px' }}></th>
-              <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+              <th onClick={(e) => handleSort('name', e)} style={{ cursor: 'pointer' }}>
                 Fund<SortIcon field="name" />
               </th>
-              {col('units') && <th onClick={() => handleSort('units')} style={{ cursor: 'pointer' }}>
+              {col('units') && <th onClick={(e) => handleSort('units', e)} style={{ cursor: 'pointer' }}>
                 Units<SortIcon field="units" />
               </th>}
-              {col('avgNav') && <th onClick={() => handleSort('avgNav')} style={{ cursor: 'pointer' }}>
+              {col('avgNav') && <th onClick={(e) => handleSort('avgNav', e)} style={{ cursor: 'pointer' }}>
                 Avg NAV<SortIcon field="avgNav" />
               </th>}
-              {col('currentNav') && <th onClick={() => handleSort('currentNav')} style={{ cursor: 'pointer' }}>
+              {col('currentNav') && <th onClick={(e) => handleSort('currentNav', e)} style={{ cursor: 'pointer' }}>
                 Current NAV<SortIcon field="currentNav" />
               </th>}
-              {col('w52Low') && <th onClick={() => handleSort('w52Low')} style={{ cursor: 'pointer' }}>
+              {col('w52Low') && <th onClick={(e) => handleSort('w52Low', e)} style={{ cursor: 'pointer' }}>
                 52W Low<SortIcon field="w52Low" />
               </th>}
-              {col('w52High') && <th onClick={() => handleSort('w52High')} style={{ cursor: 'pointer' }}>
+              {col('w52High') && <th onClick={(e) => handleSort('w52High', e)} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="w52High" />
               </th>}
-              {col('trend') && <th onClick={() => handleSort('trend')} style={{ cursor: 'pointer' }}>
+              {col('trend') && <th onClick={(e) => handleSort('trend', e)} style={{ cursor: 'pointer' }}>
                 Trend<SortIcon field="trend" />
-                <span title={"Adaptive SMA trend detection:\n• 200+ days: 50-SMA vs 200-SMA\n• 50-199 days: 20-SMA vs 50-SMA\n• 20-49 days: 10-SMA vs 20-SMA\n\n↑ Uptrend: NAV > long-SMA AND short-SMA > long-SMA\n↓ Downtrend: NAV < long-SMA AND short-SMA < long-SMA\n→ Sideways: Mixed signals"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+                <span title={"Trend (Golden Cross / Death Cross):\n↑ Uptrend: 50-SMA > 200-SMA AND NAV > both SMAs\n↓ Downtrend: 50-SMA < 200-SMA AND NAV < both SMAs\n→ Sideways: Mixed signals (SMAs converging)\n\nAdaptive: 200+d → 50/200, 50-199d → 20/50, 20-49d → 10/20"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
-              {col('vsSma200') && <th onClick={() => handleSort('vsSma200')} style={{ cursor: 'pointer' }}>
+              {col('vsSma200') && <th onClick={(e) => handleSort('vsSma200', e)} style={{ cursor: 'pointer' }}>
                 vs 200-SMA<SortIcon field="vsSma200" />
               </th>}
-              {col('rsi') && <th onClick={() => handleSort('rsi')} style={{ cursor: 'pointer' }}>
+              {col('rsi') && <th onClick={(e) => handleSort('rsi', e)} style={{ cursor: 'pointer' }}>
                 RSI<SortIcon field="rsi" />
                 <span title={"RSI (14-day Relative Strength Index)\n< 30: Oversold (beaten down)\n30-70: Neutral\n> 70: Overbought (run up fast)"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
-              {col('currentValue') && <th onClick={() => handleSort('currentValue')} style={{ cursor: 'pointer' }}>
+              {col('currentValue') && <th onClick={(e) => handleSort('currentValue', e)} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="currentValue" />
               </th>}
-              {col('invested') && <th onClick={() => handleSort('invested')} style={{ cursor: 'pointer' }}>
+              {col('invested') && <th onClick={(e) => handleSort('invested', e)} style={{ cursor: 'pointer' }}>
                 Invested<SortIcon field="invested" />
               </th>}
-              {col('unrealizedPL') && <th onClick={() => handleSort('unrealizedPL')} style={{ cursor: 'pointer' }}>
+              {col('unrealizedPL') && <th onClick={(e) => handleSort('unrealizedPL', e)} style={{ cursor: 'pointer' }}>
                 Unrealized P&L<SortIcon field="unrealizedPL" />
                 <span
                   onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
@@ -1502,7 +1516,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                   title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
                 >{SORT_MODE_LABELS[sortMode]}</span>
               </th>}
-              {col('realizedPL') && <th onClick={() => handleSort('realizedPL')} style={{ cursor: 'pointer' }}>
+              {col('realizedPL') && <th onClick={(e) => handleSort('realizedPL', e)} style={{ cursor: 'pointer' }}>
                 Realized P&L<SortIcon field="realizedPL" />
                 <span
                   onClick={(e) => { e.stopPropagation(); cycleSortMode(); }}
