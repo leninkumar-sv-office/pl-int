@@ -728,6 +728,7 @@ const COL_DEFS = [
   { id: 'w52High',        label: '52W High',        grouped: false },
   { id: 'trend',          label: 'Trend',           grouped: false },
   { id: 'vsSma200',       label: 'vs 200-SMA',      grouped: false },
+  { id: 'rsi',            label: 'RSI',             grouped: false },
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
   { id: 'status',         label: 'Status',          grouped: false },
   { id: 'unrealizedLoss', label: 'Unrealized Loss', grouped: true },
@@ -776,6 +777,7 @@ function getFilterValue(stock, colId) {
     case 'w52Low': return pctFromLow(stock);
     case 'w52High': return pctFromHigh(stock);
     case 'vsSma200': return pctVsSma200(stock);
+    case 'rsi': return stock.live?.rsi ?? null;
     case 'unrealizedPF': return stock.unrealized_profit || 0;
     case 'unrealizedLoss': return Math.abs(stock.unrealized_loss || 0);
     case 'dividends': return stock.total_dividend || 0;
@@ -813,6 +815,14 @@ function matchesPreset(stock, colId, preset) {
       if (preset === 'uptrend') return t === 'uptrend';
       if (preset === 'downtrend') return t === 'downtrend';
       if (preset === 'sideways') return t === 'sideways';
+      return true;
+    }
+    case 'rsi': {
+      const r = stock.live?.rsi;
+      if (r == null) return preset === 'all';
+      if (preset === 'oversold') return r < 30;
+      if (preset === 'neutral') return r >= 30 && r <= 70;
+      if (preset === 'overbought') return r > 70;
       return true;
     }
     case 'unrealizedPF': {
@@ -1335,6 +1345,8 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         bVal = bS > 0 && bP > 0 ? ((bP - bS) / bS * 100) : -9999;
         break;
       }
+      case 'rsi':
+        aVal = a.live?.rsi ?? -1; bVal = b.live?.rsi ?? -1; break;
       default: aVal = a.unrealized_profit; bVal = b.unrealized_profit;
     }
     if (typeof aVal === 'string') {
@@ -1776,6 +1788,10 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('vsSma200') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('sma_200')} style={{ cursor: 'pointer' }}>
                 vs 200-SMA<SortIcon field="sma_200" />
               </th>}
+              {col('rsi') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={() => handleSort('rsi')} style={{ cursor: 'pointer' }}>
+                RSI<SortIcon field="rsi" />
+                <span title={"RSI (14-day Relative Strength Index)\n< 30: Oversold (beaten down)\n30-70: Neutral\n> 70: Overbought (run up fast)"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+              </th>}
               {col('unrealizedPF') && <th colSpan={3} onClick={() => handleSort('unrealized_profit')} style={{ cursor: 'pointer', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
                 Unrealized PF<SortIcon field="unrealized_profit" />
                 <span
@@ -1900,6 +1916,14 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <input type="number" placeholder="min %" value={columnFilters.vsSma200?.min ?? ''} onChange={e => updateFilter('vsSma200', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
                     <input type="number" placeholder="max %" value={columnFilters.vsSma200?.max ?? ''} onChange={e => updateFilter('vsSma200', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
                   </div>
+                </th>}
+                {col('rsi') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.rsi?.preset || 'all'} onChange={e => updateFilter('rsi', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                    <option value="all">All</option>
+                    <option value="oversold">Oversold (&lt;30)</option>
+                    <option value="neutral">Neutral (30-70)</option>
+                    <option value="overbought">Overbought (&gt;70)</option>
+                  </select>
                 </th>}
                 {col('unrealizedPF') && <th colSpan={3} style={{ padding: '4px 6px' }}>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2262,6 +2286,21 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                               SMA: {formatINR(sma)}
                             </div>
+                          </div>
+                        );
+                      })()}
+                    </td>}
+
+                    {col('rsi') && <td>
+                      {(() => {
+                        const r = live?.rsi;
+                        if (r == null) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const color = r < 30 ? 'var(--red)' : r > 70 ? 'var(--green)' : 'var(--text)';
+                        const label = r < 30 ? 'Oversold' : r > 70 ? 'Overbought' : '';
+                        return (
+                          <div>
+                            <div style={{ fontSize: '13px', color, fontWeight: 600 }}>{r.toFixed(1)}</div>
+                            {label && <div style={{ fontSize: '10px', color }}>{label}</div>}
                           </div>
                         );
                       })()}

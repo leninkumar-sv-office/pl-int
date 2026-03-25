@@ -586,6 +586,12 @@ _52w_cache_lock = threading.Lock()
 _52W_CACHE_TTL = 6 * 3600  # Refresh 52-week data every 6 hours
 
 
+def clear_52w_cache():
+    """Clear the 52-week/SMA cache so next fetch recomputes from scratch."""
+    with _52w_cache_lock:
+        _52w_cache.clear()
+
+
 def _get_instrument_token(symbol: str, exchange: str) -> Optional[int]:
     """Look up Kite instrument_token for a symbol. Loads instruments if needed."""
     if not _instrument_tokens_loaded:
@@ -666,6 +672,20 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         else:
             trend = "sideways"
 
+    # RSI (14-day) calculation
+    rsi = None
+    if len(closes) >= 15:
+        changes = [closes[i] - closes[i-1] for i in range(-14, 0)]
+        gains = [c for c in changes if c > 0]
+        losses = [-c for c in changes if c < 0]
+        avg_gain = sum(gains) / 14 if gains else 0
+        avg_loss = sum(losses) / 14 if losses else 0
+        if avg_loss > 0:
+            rs = avg_gain / avg_loss
+            rsi = round(100 - (100 / (1 + rs)), 1)
+        elif avg_gain > 0:
+            rsi = 100.0
+
     return {
         "week_52_high": max(highs),
         "week_52_low": min(lows),
@@ -674,6 +694,7 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         "sma_50": sma_50,
         "sma_200": sma_200,
         "trend": trend,
+        "rsi": rsi,
     }
 
 
@@ -706,6 +727,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "sma_50": cached.get("sma_50"),
                 "sma_200": cached.get("sma_200"),
                 "trend": cached.get("trend"),
+                "rsi": cached.get("rsi"),
             }
             continue
 
@@ -754,6 +776,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "sma_50": result.get("sma_50"),
                     "sma_200": result.get("sma_200"),
                     "trend": result.get("trend"),
+                    "rsi": result.get("rsi"),
                     "fetched_at": now,
                 }
                 with _52w_cache_lock:
@@ -766,6 +789,7 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "sma_50": entry["sma_50"],
                     "sma_200": entry["sma_200"],
                     "trend": entry["trend"],
+                    "rsi": entry["rsi"],
                 }
                 fetched += 1
             else:

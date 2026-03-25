@@ -1754,6 +1754,7 @@ def _do_price_refresh():
         db.reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
+        zerodha_service.clear_52w_cache()
         holdings, sold, _ = db.get_all_data()
         held_syms = {h.symbol for h in holdings}
         sold_syms = {s.symbol for s in sold}
@@ -1781,6 +1782,7 @@ def trigger_price_refresh():
         reindex_result = db.reindex()
         stock_service.clear_cache()
         stock_service._reset_circuit()
+        zerodha_service.clear_52w_cache()
         holdings, sold, _ = db.get_all_data()
         held_syms = {h.symbol for h in holdings}
         sold_syms = {s.symbol for s in sold}

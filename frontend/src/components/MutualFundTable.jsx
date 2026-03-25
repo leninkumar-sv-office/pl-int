@@ -109,6 +109,7 @@ const COL_DEFS = [
   { id: 'w52High',      label: '52W High' },
   { id: 'trend',        label: 'Trend' },
   { id: 'vsSma200',     label: 'vs 200-SMA' },
+  { id: 'rsi',          label: 'RSI' },
   { id: 'currentValue', label: 'Current Value' },
   { id: 'invested',     label: 'Invested' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
@@ -943,6 +944,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
         vb = b.sma_200 > 0 && b.current_nav > 0 ? ((b.current_nav - b.sma_200) / b.sma_200 * 100) : -9999;
         break;
       }
+      case 'rsi': va = a.rsi ?? -1; vb = b.rsi ?? -1; break;
       case 'currentValue': va = a.current_value; vb = b.current_value; break;
       case 'unrealizedPL':
         if (sortMode === 'pa') { va = mfPaVal(a, 'unrealizedPL'); vb = mfPaVal(b, 'unrealizedPL'); }
@@ -1282,6 +1284,10 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               {col('vsSma200') && <th onClick={() => handleSort('vsSma200')} style={{ cursor: 'pointer' }}>
                 vs 200-SMA<SortIcon field="vsSma200" />
               </th>}
+              {col('rsi') && <th onClick={() => handleSort('rsi')} style={{ cursor: 'pointer' }}>
+                RSI<SortIcon field="rsi" />
+                <span title={"RSI (14-day Relative Strength Index)\n< 30: Oversold (beaten down)\n30-70: Neutral\n> 70: Overbought (run up fast)"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+              </th>}
               {col('currentValue') && <th onClick={() => handleSort('currentValue')} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="currentValue" />
               </th>}
@@ -1514,6 +1520,21 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                               SMA: {formatINR(sma)}
                             </div>
+                          </div>
+                        );
+                      })()}
+                    </td>}
+
+                    {col('rsi') && <td>
+                      {(() => {
+                        const r = f.rsi;
+                        if (r == null) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const color = r < 30 ? 'var(--red)' : r > 70 ? 'var(--green)' : 'var(--text)';
+                        const label = r < 30 ? 'Oversold' : r > 70 ? 'Overbought' : '';
+                        return (
+                          <div>
+                            <div style={{ fontSize: '13px', color, fontWeight: 600 }}>{r.toFixed(1)}</div>
+                            {label && <div style={{ fontSize: '10px', color }}>{label}</div>}
                           </div>
                         );
                       })()}

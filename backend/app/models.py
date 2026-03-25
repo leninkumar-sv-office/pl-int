@@ -92,6 +92,7 @@ class StockLiveData(BaseModel):
     sma_50: Optional[float] = None
     sma_200: Optional[float] = None
     trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
+    rsi: Optional[float] = None          # RSI (14-day), 0-100
 
 
 class PortfolioSummary(BaseModel):
@@ -230,6 +231,7 @@ class MFSummaryItem(BaseModel):
     sma_50: Optional[float] = None
     sma_200: Optional[float] = None
     trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
+    rsi: Optional[float] = None          # RSI (14-day), 0-100
 
 
 # ── MF Request Models ──────────────────────────────────

@@ -279,7 +279,7 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
 def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
     """Compute 1D, 7D and 30D NAV change % using mfapi.in historical data.
     Returns {day_change_pct, week_change_pct, month_change_pct}."""
-    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_50": None, "sma_200": None, "trend": None}
+    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_50": None, "sma_200": None, "trend": None, "rsi": None}
     if current_nav <= 0:
         return result
 
@@ -298,6 +298,7 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
                 "sma_50": cached.get("sma_50"),
                 "sma_200": cached.get("sma_200"),
                 "trend": cached.get("trend"),
+                "rsi": cached.get("rsi"),
             }
 
     # Look up AMFI scheme code (cached on disk)
@@ -393,6 +394,19 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         else:
             result["trend"] = "sideways"
 
+    # RSI (14-day) calculation — all_navs is most-recent-first
+    if len(all_navs) >= 15:
+        changes = [all_navs[i-1] - all_navs[i] for i in range(1, 15)]
+        gains = [c for c in changes if c > 0]
+        losses = [-c for c in changes if c < 0]
+        avg_gain = sum(gains) / 14 if gains else 0
+        avg_loss = sum(losses) / 14 if losses else 0
+        if avg_loss > 0:
+            rs = avg_gain / avg_loss
+            result["rsi"] = round(100 - (100 / (1 + rs)), 1)
+        elif avg_gain > 0:
+            result["rsi"] = 100.0
+
     # Cache result
     with _nav_change_cache_lock:
         _nav_change_cache[fund_code] = {
@@ -405,6 +419,7 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             "sma_50": result["sma_50"],
             "sma_200": result["sma_200"],
             "trend": result["trend"],
+            "rsi": result["rsi"],
             "fetched_at": now,
         }
 
@@ -1037,6 +1052,7 @@ class MFXlsxPortfolio:
                 "sma_50": nav_changes.get("sma_50"),
                 "sma_200": nav_changes.get("sma_200"),
                 "trend": nav_changes.get("trend"),
+                "rsi": nav_changes.get("rsi"),
                 # Include held lots and sold lots for detail view
                 "held_lots": [
                     {
