@@ -893,26 +893,31 @@ function getSignalGroup(ruleNum) {
 }
 
 const SIGNAL_RULES_TABLE = [
-  { n: 1,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'HOLD',  action: 'Hold, don\'t buy more — wait for pullback', color: '#60a5fa' },
-  { n: 2,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Best position to be in — hold and ride', color: '#60a5fa' },
-  { n: 3,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Buy the dip — rare golden buy', color: '#22c55e' },
-  { n: 4,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Watch — could be trend resuming', color: '#f0ad4e' },
-  { n: 5,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'BUY',   action: 'Accumulate — healthy retest', color: '#22c55e' },
+  // Grouped by signal type (BUY → HOLD → WATCH → SELL → AVOID → WAIT)
+  { n: 0, header: '🟢 BUY — Uptrend + dip opportunities' },
+  { n: 3,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Rare golden buy — strong stock on sale', color: '#22c55e' },
+  { n: 5,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'BUY',   action: 'Accumulate — healthy retest of support', color: '#22c55e' },
   { n: 6,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'BUY',   action: 'Strong buy — if fundamentals intact', color: '#22c55e' },
-  { n: 0 },
-  { n: 7,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Reduce — uptrend may be ending', color: '#ef4444' },
+  { n: 0, header: '📊 HOLD — Good position, stay' },
+  { n: 1,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'HOLD',  action: 'Hold, don\'t buy more — wait for pullback', color: '#60a5fa' },
+  { n: 2,  trend: '↑ Uptrend',   sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Best position — hold and ride', color: '#60a5fa' },
   { n: 8,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'HOLD',  action: 'Hold — wait for trend to clarify', color: '#60a5fa' },
+  { n: 0, header: '⚠️ WATCH — Unclear, need more data' },
+  { n: 4,  trend: '↑ Uptrend',   sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Could be trend resuming', color: '#f0ad4e' },
   { n: 9,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'WATCH', action: 'Caution — trend might break down', color: '#f0ad4e' },
   { n: 10, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'WATCH', action: 'Don\'t chase — dead cat bounce?', color: '#f0ad4e' },
-  { n: 11, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'WAIT',  action: 'Wait — no clear signal', color: '#6b7280' },
   { n: 12, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'WATCH', action: 'Watchlist — bottoming out?', color: '#f0ad4e' },
-  { n: 0 },
+  { n: 0, header: '🔴 SELL — Weakening or reversing' },
+  { n: 7,  trend: '→ Sideways',  sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Reduce — uptrend may be ending', color: '#ef4444' },
   { n: 13, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Sell/Exit — last chance out', color: '#ef4444' },
   { n: 14, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Neutral (30-70)',   signal: 'SELL',  action: 'Reduce — trend just turned', color: '#ef4444' },
-  { n: 15, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Wait — too chaotic, let it settle', color: '#9ca3af' },
   { n: 16, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Overbought (>70)', signal: 'SELL',  action: 'Sell into the bounce — temporary', color: '#ef4444' },
-  { n: 17, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'AVOID', action: 'Avoid — falling knife', color: '#9ca3af' },
-  { n: 18, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Avoid — value trap, can stay months', color: '#9ca3af' },
+  { n: 0, header: '🚫 AVOID — Downtrend, stay away' },
+  { n: 15, trend: '↓ Downtrend', sma: 'Above (+)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Too chaotic — let it settle', color: '#9ca3af' },
+  { n: 17, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'AVOID', action: 'Falling knife — stay away', color: '#9ca3af' },
+  { n: 18, trend: '↓ Downtrend', sma: 'Below (-)', rsi: 'Oversold (<30)',    signal: 'AVOID', action: 'Value trap — can stay here months', color: '#9ca3af' },
+  { n: 0, header: '⏸️ WAIT — No signal' },
+  { n: 11, trend: '→ Sideways',  sma: 'Below (-)', rsi: 'Neutral (30-70)',   signal: 'WAIT',  action: 'No clear signal either way', color: '#6b7280' },
 ];
 
 function SignalRulesPopup() {
@@ -926,14 +931,15 @@ function SignalRulesPopup() {
         <div style={{
           position: 'absolute', bottom: '24px', right: 0, zIndex: 100,
           background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
-          borderRadius: '8px', padding: '10px', maxWidth: '700px', width: 'max-content',
+          borderRadius: '8px', padding: '10px', maxWidth: '720px', width: 'max-content',
+          maxHeight: '70vh', overflowY: 'auto',
           boxShadow: '0 8px 24px rgba(0,0,0,0.5)', fontSize: '10px', lineHeight: 1.4,
         }}>
           <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '6px', color: 'var(--text)' }}>
-            Signal Rules — All 18 Combinations
+            Signal Rules — All 18 Combinations (grouped by signal)
           </div>
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card, #1e1e2e)' }}>
               <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <th style={{ ...ts, fontWeight: 700 }}>#</th>
                 <th style={{ ...ts, fontWeight: 700 }}>Trend</th>
@@ -945,7 +951,7 @@ function SignalRulesPopup() {
             </thead>
             <tbody>
               {SIGNAL_RULES_TABLE.map((r, i) => r.n === 0 ? (
-                <tr key={i}><td colSpan={6} style={{ height: '4px' }} /></tr>
+                <tr key={i}><td colSpan={6} style={{ padding: '4px 6px', fontWeight: 700, fontSize: '11px', color: 'var(--text)', background: 'rgba(255,255,255,0.03)' }}>{r.header}</td></tr>
               ) : (
                 <tr key={r.n}>
                   <td style={ts}>{r.n}</td>
@@ -953,7 +959,7 @@ function SignalRulesPopup() {
                   <td style={ts}>{r.sma}</td>
                   <td style={ts}>{r.rsi}</td>
                   <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
-                  <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '200px' }}>{r.action}</td>
+                  <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '220px' }}>{r.action}</td>
                 </tr>
               ))}
             </tbody>
