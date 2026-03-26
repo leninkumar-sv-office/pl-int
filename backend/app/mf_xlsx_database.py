@@ -387,10 +387,12 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         result["sma_200"] = round(sum(all_navs[:sma_n]) / sma_n, 4)
 
     # Count consecutive days NAV has been below SMA (most-recent-first)
+    # Use shorter SMA (50d) for the "below" streak to get longer lookback
+    below_sma_n = min(50, sma_n) if sma_n > 0 else 0
     days_below = 0
-    if sma_n > 0 and n >= sma_n:
-        for i in range(n - sma_n + 1):
-            sma_at_i = sum(all_navs[i:i + sma_n]) / sma_n
+    if below_sma_n > 0 and n >= below_sma_n:
+        for i in range(n - below_sma_n + 1):
+            sma_at_i = sum(all_navs[i:i + below_sma_n]) / below_sma_n
             if all_navs[i] < sma_at_i:
                 days_below += 1
             else:

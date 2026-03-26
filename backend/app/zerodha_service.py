@@ -675,13 +675,12 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
     sma_long = round(sum(closes[-sma_n:]) / sma_n, 2) if sma_n > 0 else None
 
     # Count consecutive days price has been below SMA (walking backwards)
+    # Use shorter SMA (50d) for the "below" streak to get longer lookback
+    below_sma_n = min(50, sma_n) if sma_n > 0 else 0
     days_below_sma = 0
-    if sma_n > 0 and n >= sma_n:
-        for i in range(n - 1, sma_n - 2, -1):
-            window = closes[max(0, i - sma_n + 1):i + 1]
-            if len(window) < sma_n:
-                break
-            sma_at_i = sum(window) / len(window)
+    if below_sma_n > 0 and n >= below_sma_n:
+        for i in range(n - 1, below_sma_n - 2, -1):
+            sma_at_i = sum(closes[i - below_sma_n + 1:i + 1]) / below_sma_n
             if closes[i] < sma_at_i:
                 days_below_sma += 1
             else:

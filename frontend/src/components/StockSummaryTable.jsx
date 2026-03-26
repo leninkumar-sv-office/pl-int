@@ -1187,6 +1187,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   }
 
   const showOverlay = loading && stocks.length > 0;
+  const smaStillLoading = !loading && stocks.length > 0 && stocks.some(s => s.total_held_qty > 0 && s.live?.current_price > 0 && s.live?.rsi == null);
 
   if (stocks.length === 0) {
     return (
@@ -1734,6 +1735,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               <div className="spinner" style={{ width: '18px', height: '18px' }} />
               Refreshing prices...
             </div>
+          </div>
+        )}
+        {smaStillLoading && (
+          <div style={{ padding: '6px 12px', background: 'rgba(59,130,246,0.1)', borderRadius: '6px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--blue)' }}>
+            <div className="spinner" style={{ width: '12px', height: '12px' }} />
+            Below SMA & RSI loading — computing from historical data. Click "Clear Cache" to force refresh.
           </div>
         )}
         <table>
