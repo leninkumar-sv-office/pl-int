@@ -245,6 +245,11 @@ export async function triggerPriceRefresh() {
   return data;
 }
 
+export async function clearPriceCache() {
+  const { data } = await api.post('/prices/clear-cache');
+  return data;
+}
+
 export async function triggerTickerRefresh() {
   const { data } = await api.post('/market-ticker/refresh');
   return data;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, clearPriceCache, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -1008,6 +1008,18 @@ export default function App() {
     toast.success('Prices refreshed from live sources');
   };
 
+  const handleClearCache = async () => {
+    try {
+      toast.loading('Clearing cache & recomputing SMA/RSI...', { id: 'clear-cache' });
+      await clearPriceCache();
+      setLoading(true);
+      await liveRefresh();
+      toast.success('Cache cleared — SMA, RSI, Below SMA will recompute', { id: 'clear-cache' });
+    } catch (e) {
+      toast.error('Failed to clear cache', { id: 'clear-cache' });
+    }
+  };
+
   const handleIntervalChange = async () => {
     // No-op: price refresh is fixed at 60s (backend controls this)
   };
@@ -1296,8 +1308,11 @@ export default function App() {
               </span>
             )}
           </div>
-          <button className="btn btn-ghost" onClick={handleRefresh} disabled={loading}>
+          <button className="btn btn-ghost" onClick={handleRefresh} disabled={loading} title="Refresh current prices from Zerodha (fast, ~2s)">
             {loading ? '⟳ Loading...' : '⟳ Refresh'}
+          </button>
+          <button className="btn btn-ghost" onClick={handleClearCache} disabled={loading} title="Clear 52W cache & recompute SMA, RSI, Below SMA from historical data (~30s)" style={{ fontSize: '11px' }}>
+            🗑 Clear Cache
           </button>
           {activeTab === 'mutualfunds' ? (
             <button className="btn btn-primary" onClick={() => setAddMFModalData({})}>

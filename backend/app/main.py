@@ -1813,6 +1813,14 @@ def trigger_price_refresh():
         }
 
 
+@app.post("/api/prices/clear-cache")
+def clear_52w_cache_endpoint():
+    """Clear the 52-week/SMA/RSI cache so next fetch recomputes from historical data."""
+    zerodha_service.clear_52w_cache()
+    clear_mf_nav_cache()
+    return {"message": "52-week cache cleared. SMA, RSI, Below SMA will recompute on next load."}
+
+
 @app.post("/api/prices/bulk-update")
 def bulk_update_prices(req: BulkPriceUpdate):
     """Push prices from external source (useful when Yahoo is down)."""
