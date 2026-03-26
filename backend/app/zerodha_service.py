@@ -658,31 +658,34 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         if close_30d > 0:
             month_change_pct = round((latest_close - close_30d) / close_30d * 100, 2)
 
-    # Adaptive SMA & trend calculation
+    # SMA & days below SMA calculation
     closes = [c[4] for c in candles if len(c) >= 5]
     n = len(closes)
 
-    # Pick SMA pair based on available history
+    # Pick SMA period based on available history
     if n >= 200:
-        short_n, long_n = 50, 200
+        sma_n = 200
     elif n >= 50:
-        short_n, long_n = 20, 50
+        sma_n = 50
     elif n >= 20:
-        short_n, long_n = 10, 20
+        sma_n = 20
     else:
-        short_n, long_n = 0, 0  # too new
+        sma_n = 0
 
-    sma_short = round(sum(closes[-short_n:]) / short_n, 2) if short_n > 0 else None
-    sma_long = round(sum(closes[-long_n:]) / long_n, 2) if long_n > 0 else None
+    sma_long = round(sum(closes[-sma_n:]) / sma_n, 2) if sma_n > 0 else None
 
-    trend = None
-    if sma_short is not None and sma_long is not None and latest_close > 0:
-        if latest_close > sma_long and sma_short > sma_long:
-            trend = "uptrend"
-        elif latest_close < sma_long and sma_short < sma_long:
-            trend = "downtrend"
-        else:
-            trend = "sideways"
+    # Count consecutive days price has been below SMA (walking backwards)
+    days_below_sma = 0
+    if sma_n > 0 and n >= sma_n:
+        for i in range(n - 1, sma_n - 2, -1):
+            window = closes[max(0, i - sma_n + 1):i + 1]
+            if len(window) < sma_n:
+                break
+            sma_at_i = sum(window) / len(window)
+            if closes[i] < sma_at_i:
+                days_below_sma += 1
+            else:
+                break
 
     # RSI (14-day) calculation
     rsi = None
@@ -703,10 +706,8 @@ def _fetch_historical_52w(instrument_token: int) -> Optional[dict]:
         "week_52_low": min(lows),
         "week_change_pct": week_change_pct,
         "month_change_pct": month_change_pct,
-        "sma_50": sma_short,
         "sma_200": sma_long,
-        "sma_period": f"{short_n}d/{long_n}d" if long_n > 0 else None,
-        "trend": trend,
+        "days_below_sma": days_below_sma,
         "rsi": rsi,
     }
 
@@ -738,10 +739,8 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                 "week_52_low": cached["week_52_low"],
                 "week_change_pct": cached.get("week_change_pct", 0.0),
                 "month_change_pct": cached.get("month_change_pct", 0.0),
-                "sma_50": cached.get("sma_50"),
                 "sma_200": cached.get("sma_200"),
-                "sma_period": cached.get("sma_period"),
-                "trend": cached.get("trend"),
+                "days_below_sma": cached.get("days_below_sma", 0),
                 "rsi": cached.get("rsi"),
             }
             continue
@@ -788,10 +787,8 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "week_52_low": round(result["week_52_low"], 2),
                     "week_change_pct": result.get("week_change_pct", 0.0),
                     "month_change_pct": result.get("month_change_pct", 0.0),
-                    "sma_50": result.get("sma_50"),
                     "sma_200": result.get("sma_200"),
-                    "sma_period": result.get("sma_period"),
-                    "trend": result.get("trend"),
+                    "days_below_sma": result.get("days_below_sma", 0),
                     "rsi": result.get("rsi"),
                     "fetched_at": now,
                 }
@@ -802,10 +799,8 @@ def fetch_52_week_range(symbols: List[Tuple[str, str]]) -> Dict[str, dict]:
                     "week_52_low": entry["week_52_low"],
                     "week_change_pct": entry["week_change_pct"],
                     "month_change_pct": entry["month_change_pct"],
-                    "sma_50": entry["sma_50"],
                     "sma_200": entry["sma_200"],
-                    "sma_period": entry["sma_period"],
-                    "trend": entry["trend"],
+                    "days_below_sma": entry["days_below_sma"],
                     "rsi": entry["rsi"],
                 }
                 fetched += 1

@@ -726,8 +726,7 @@ const COL_DEFS = [
   { id: 'w52Low',         label: '52W Low',         grouped: false },
   { id: 'currentPrice',   label: 'Current Price',   grouped: false },
   { id: 'w52High',        label: '52W High',        grouped: false },
-  { id: 'trend',          label: 'Trend',           grouped: false },
-  { id: 'vsSma200',       label: 'vs 200-SMA',      grouped: false },
+  { id: 'belowSma',       label: 'Below SMA',       grouped: false },
   { id: 'rsi',            label: 'RSI',             grouped: false },
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
   { id: 'status',         label: 'Status',          grouped: false },
@@ -761,12 +760,6 @@ function pctFromHigh(stock) {
   return (high > 0 && cp > 0) ? ((high - cp) / high * 100) : 9999;
 }
 
-function pctVsSma200(stock) {
-  const cp = stock.live?.current_price || 0;
-  const sma = stock.live?.sma_200;
-  return (sma > 0 && cp > 0) ? ((cp - sma) / sma * 100) : null;
-}
-
 function getFilterValue(stock, colId) {
   switch (colId) {
     case 'held': return stock.total_held_qty;
@@ -776,7 +769,7 @@ function getFilterValue(stock, colId) {
     case 'currentPrice': return stock.live?.current_price || 0;
     case 'w52Low': return pctFromLow(stock);
     case 'w52High': return pctFromHigh(stock);
-    case 'vsSma200': return pctVsSma200(stock);
+    case 'belowSma': return stock.live?.days_below_sma || 0;
     case 'rsi': return stock.live?.rsi ?? null;
     case 'unrealizedPF': return stock.unrealized_profit || 0;
     case 'unrealizedLoss': return Math.abs(stock.unrealized_loss || 0);
@@ -810,11 +803,10 @@ function matchesPreset(stock, colId, preset) {
       if (preset === 'stcg') return (stock.stcg_profitable_qty > 0) || (stock.stcg_loss_qty > 0);
       return true;
     }
-    case 'trend': {
-      const t = stock.live?.trend;
-      if (preset === 'uptrend') return t === 'uptrend';
-      if (preset === 'downtrend') return t === 'downtrend';
-      if (preset === 'sideways') return t === 'sideways';
+    case 'belowSma': {
+      const days = stock.live?.days_below_sma || 0;
+      if (preset === '>3m') return days > 65;
+      if (preset === '>6m') return days > 130;
       return true;
     }
     case 'rsi': {
@@ -844,162 +836,6 @@ function matchesPreset(stock, colId, preset) {
   }
 }
 
-/* ── Signal classification (Trend + vs SMA + RSI) ────── */
-const SIGNAL_DEFS = {
-  BUY:   { label: 'BUY',   icon: '🟢', rules: [3, 5, 6],          desc: 'Uptrend + dip' },
-  HOLD:  { label: 'HOLD',  icon: '📊', rules: [1, 2, 8],          desc: 'Good position, stay' },
-  WATCH: { label: 'WATCH', icon: '⚠️', rules: [4, 9, 10, 12],     desc: 'Unclear, need more data' },
-  SELL:  { label: 'SELL',  icon: '🔴', rules: [7, 13, 14, 16],    desc: 'Weakening or reversing' },
-  AVOID: { label: 'AVOID', icon: '🚫', rules: [15, 17, 18],       desc: 'Downtrend, stay away' },
-  WAIT:  { label: 'WAIT',  icon: '⏸️', rules: [11],                desc: 'No signal' },
-};
-
-function classifySignal(stock) {
-  const trend = stock.live?.trend;
-  const sma = stock.live?.sma_200;
-  const cp = stock.live?.current_price || 0;
-  const rsi = stock.live?.rsi;
-  if (!trend || !sma || !cp || rsi == null) return null;
-  const above = cp > sma;
-  const ob = rsi > 70, os = rsi < 30; // overbought / oversold
-  // Map to rule number
-  if (trend === 'uptrend' && above && ob) return 1;
-  if (trend === 'uptrend' && above && !ob && !os) return 2;
-  if (trend === 'uptrend' && above && os) return 3;
-  if (trend === 'uptrend' && !above && ob) return 4;
-  if (trend === 'uptrend' && !above && !ob && !os) return 5;
-  if (trend === 'uptrend' && !above && os) return 6;
-  if (trend === 'sideways' && above && ob) return 7;
-  if (trend === 'sideways' && above && !ob && !os) return 8;
-  if (trend === 'sideways' && above && os) return 9;
-  if (trend === 'sideways' && !above && ob) return 10;
-  if (trend === 'sideways' && !above && !ob && !os) return 11;
-  if (trend === 'sideways' && !above && os) return 12;
-  if (trend === 'downtrend' && above && ob) return 13;
-  if (trend === 'downtrend' && above && !ob && !os) return 14;
-  if (trend === 'downtrend' && above && os) return 15;
-  if (trend === 'downtrend' && !above && ob) return 16;
-  if (trend === 'downtrend' && !above && !ob && !os) return 17;
-  if (trend === 'downtrend' && !above && os) return 18;
-  return null;
-}
-
-function getSignalGroup(ruleNum) {
-  if (!ruleNum) return null;
-  for (const [key, def] of Object.entries(SIGNAL_DEFS)) {
-    if (def.rules.includes(ruleNum)) return key;
-  }
-  return null;
-}
-
-const SIGNAL_RULES_SECTIONS = [
-  { title: 'Pullback Entry (Aggressive)', rows: [
-    { signal: 'BUY',     sma: '50 > 200', price: '> both SMAs', rsi: 'Dips to 30-40, turns up', meaning: 'Catching a dip in an uptrend', color: '#22c55e' },
-    { signal: 'SELL',    sma: '50 < 200', price: '< both SMAs', rsi: 'Rises to 60-70, turns down', meaning: 'Fading a bounce in a downtrend', color: '#ef4444' },
-    { signal: 'HOLD',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI 40-70 (mid-range)', meaning: 'Trend intact, no pullback yet', color: '#60a5fa' },
-    { signal: 'CAUTION', sma: '50 > 200', price: 'Between SMAs', rsi: 'RSI falling below 50', meaning: 'Trend weakening — tighten stop', color: '#f0ad4e' },
-  ]},
-  { title: 'Midline Crossover (RSI 50)', rows: [
-    { signal: 'BUY',     sma: '50 > 200', price: '> both SMAs', rsi: 'RSI crosses above 50', meaning: 'Momentum confirmed bullish', color: '#22c55e' },
-    { signal: 'SELL',    sma: '50 < 200', price: '< both SMAs', rsi: 'RSI crosses below 50', meaning: 'Momentum confirmed bearish', color: '#ef4444' },
-    { signal: 'HOLD',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI hovering near 50', meaning: 'Indecisive — wait for clear cross', color: '#60a5fa' },
-    { signal: 'CAUTION', sma: '50 ≈ 200 (converging)', price: 'Near both SMAs', rsi: 'RSI oscillating ~50', meaning: 'Possible reversal — reduce size', color: '#f0ad4e' },
-  ]},
-  { title: 'Classic Overbought/Oversold (30/70)', rows: [
-    { signal: 'BUY',     sma: '50 > 200', price: '> both SMAs', rsi: 'RSI crosses back above 30', meaning: 'Oversold bounce in uptrend', color: '#22c55e' },
-    { signal: 'SELL',    sma: '50 < 200', price: '< both SMAs', rsi: 'RSI crosses back below 70', meaning: 'Overbought rejection in downtrend', color: '#ef4444' },
-    { signal: 'HOLD',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI 40-65', meaning: 'Healthy trend, let winners run', color: '#60a5fa' },
-    { signal: 'EXIT',    sma: '50 > 200', price: '> both SMAs', rsi: 'RSI > 70 and turning down', meaning: 'Overbought — take profit, don\'t add', color: '#a78bfa' },
-  ]},
-  { title: 'Trend-Neutral / No-Trade', rows: [
-    { signal: 'WAIT',      sma: '50 ≈ 200 (flat)', price: 'Choppy around SMAs', rsi: '40-60', meaning: 'No trend — avoid whipsaws', color: '#6b7280' },
-    { signal: 'DIVERGENCE', sma: '50 > 200', price: 'Making new highs', rsi: 'RSI making lower highs', meaning: 'Bearish divergence — tighten stops', color: '#a78bfa' },
-    { signal: 'DIVERGENCE', sma: '50 < 200', price: 'Making new lows', rsi: 'RSI making higher lows', meaning: 'Bullish divergence — watch for reversal', color: '#a78bfa' },
-  ]},
-];
-
-function SignalRulesPopup() {
-  const [show, setShow] = useState(false);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const dragging = useRef(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const ts = { padding: '3px 6px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', fontSize: '10px' };
-
-  useEffect(() => {
-    if (!show) return;
-    const onKey = (e) => { if (e.key === 'Escape') setShow(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [show]);
-
-  const onMouseDown = (e) => {
-    dragging.current = true;
-    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
-    const onMove = (e2) => { if (dragging.current) setPos({ x: e2.clientX - dragOffset.current.x, y: e2.clientY - dragOffset.current.y }); };
-    const onUp = () => { dragging.current = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  };
-
-  return (
-    <>
-      <span onClick={() => setShow(s => !s)} style={{ fontSize: '13px', cursor: 'pointer', opacity: 0.6 }} title="Signal Rules">📋</span>
-      {show && (
-        <>
-          <div onClick={() => setShow(false)} style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'rgba(0,0,0,0.3)' }} />
-          <div style={{
-            position: 'fixed', top: `calc(50% + ${pos.y}px)`, left: `calc(50% + ${pos.x}px)`, transform: 'translate(-50%, -50%)', zIndex: 100,
-            background: 'var(--bg-card, #1e1e2e)', border: '1px solid var(--border)',
-            borderRadius: '8px', maxWidth: '680px', width: 'max-content',
-            maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.6)', fontSize: '10px', lineHeight: 1.4,
-          }}>
-            <div onMouseDown={onMouseDown} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '8px 12px', borderBottom: '1px solid var(--border)',
-              cursor: 'grab', userSelect: 'none',
-            }}>
-              <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text)' }}>Signal Rules — SMA + RSI Strategies</span>
-              <span onClick={() => setShow(false)} style={{ cursor: 'pointer', fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1 }}>&times;</span>
-            </div>
-            <div style={{ overflowY: 'auto', padding: '8px 10px' }}>
-              {SIGNAL_RULES_SECTIONS.map((section, si) => (
-                <div key={si} style={{ marginBottom: '12px' }}>
-                  <div style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text)', marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px solid var(--border)' }}>{section.title}</div>
-                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-                        <th style={{ ...ts, fontWeight: 700 }}>Signal</th>
-                        <th style={{ ...ts, fontWeight: 700 }}>50 vs 200 SMA</th>
-                        <th style={{ ...ts, fontWeight: 700 }}>Price Position</th>
-                        <th style={{ ...ts, fontWeight: 700 }}>RSI Condition</th>
-                        <th style={{ ...ts, fontWeight: 700 }}>Meaning</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {section.rows.map((r, ri) => (
-                        <tr key={ri}>
-                          <td style={{ ...ts, fontWeight: 700, color: r.color }}>{r.signal}</td>
-                          <td style={ts}>{r.sma}</td>
-                          <td style={ts}>{r.price}</td>
-                          <td style={ts}>{r.rsi}</td>
-                          <td style={{ ...ts, color: 'var(--text-muted)', whiteSpace: 'normal', maxWidth: '200px' }}>{r.meaning}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-              <div style={{ fontSize: '9px', color: 'var(--text-muted)', lineHeight: 1.5, padding: '6px 0', borderTop: '1px solid var(--border)' }}>
-                <b style={{ color: 'var(--text)' }}>Key:</b> SMA crossover filters trend direction. RSI times the entry. Pullback = aggressive, Midline (RSI 50) = balanced, 30/70 = conservative.
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </>
-  );
-}
 
 /* ── Sort by ₹ / % total / % p.a. support ─────────────── */
 const PL_SORT_FIELDS = new Set([
@@ -1285,15 +1121,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
     try { const s = localStorage.getItem('stockColumnFilters'); return s ? JSON.parse(s) : {}; } catch { return {}; }
   });
 
-  // ── Signal filter (BUY/HOLD/WATCH/SELL/AVOID/WAIT) ──
-  const [activeSignals, setActiveSignals] = useState(new Set());
-  const toggleSignal = (sig) => setActiveSignals(prev => {
-    const next = new Set(prev);
-    if (next.has(sig)) next.delete(sig); else next.add(sig);
-    return next;
-  });
-  const clearSignals = () => setActiveSignals(new Set());
-
   // ── Sort mode toggle: inr → pct → pa ──
   const [sortMode, setSortMode] = useState('inr');
   const cycleSortMode = () => setSortMode(prev => SORT_MODES[(SORT_MODES.indexOf(prev) + 1) % SORT_MODES.length]);
@@ -1452,12 +1279,6 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         if (f.max !== undefined && f.max !== '' && val > Number(f.max)) return false;
       }
     }
-    // Signal filters
-    if (activeSignals.size > 0) {
-      const rule = classifySignal(s);
-      const group = getSignalGroup(rule);
-      if (!group || !activeSignals.has(group)) return false;
-    }
     return true;
   });
 
@@ -1486,8 +1307,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'stcg_realized_pl': return s.stcg_realized_pl || 0;
       case 'week_52_low': { const cp = s.live?.current_price || 0, low = s.live?.week_52_low || 0; return low > 0 && cp > 0 ? ((cp - low) / low * 100) : 9999; }
       case 'week_52_high': { const cp = s.live?.current_price || 0, high = s.live?.week_52_high || 0; return high > 0 && cp > 0 ? ((high - cp) / high * 100) : 9999; }
-      case 'trend': { const order = { uptrend: 1, sideways: 2, downtrend: 3 }; return order[s.live?.trend] || 99; }
-      case 'sma_200': { const sma = s.live?.sma_200, cp = s.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : -9999; }
+      case 'days_below_sma': return s.live?.days_below_sma || 0;
       case 'rsi': return s.live?.rsi ?? -1;
       default: return s.unrealized_profit || 0;
     }
@@ -1782,40 +1602,11 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           />
           Held only
         </label>
-        {(q || hideZeroHeld || activeSignals.size > 0) && (
+        {(q || hideZeroHeld) && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             {filtered.length} of {stocks.length} stocks
           </span>
         )}
-        {/* Signal filter buttons */}
-        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-          {Object.entries(SIGNAL_DEFS).map(([key, def]) => (
-            <button
-              key={key}
-              onClick={() => toggleSignal(key)}
-              style={{
-                padding: '1px 6px',
-                fontSize: '9px',
-                fontWeight: 600,
-                textAlign: 'center',
-                background: activeSignals.has(key) ? 'var(--blue)' : 'var(--bg-input)',
-                color: activeSignals.has(key) ? '#fff' : 'var(--text-muted)',
-                border: '1px solid var(--border)',
-                borderRadius: '10px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                lineHeight: '16px',
-              }}
-              title={`${def.icon} ${def.label}: ${def.desc} (Rules: #${def.rules.join(', #')})`}
-            >
-              {def.icon} {def.label}
-            </button>
-          ))}
-          {activeSignals.size > 0 && (
-            <span onClick={clearSignals} style={{ fontSize: '10px', color: 'var(--blue)', cursor: 'pointer', textDecoration: 'underline' }}>Clear</span>
-          )}
-          <SignalRulesPopup />
-        </div>
         {/* Filters toggle */}
         <button
           onClick={() => setFiltersVisible(v => !v)}
@@ -1971,12 +1762,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('week_52_high', e)} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
               </th>}
-              {col('trend') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('trend', e)} style={{ cursor: 'pointer' }}>
-                Trend<SortIcon field="trend" />
-                <span title={"Trend (Golden Cross / Death Cross):\n↑ Uptrend: 50-SMA > 200-SMA AND Price > both SMAs\n↓ Downtrend: 50-SMA < 200-SMA AND Price < both SMAs\n→ Sideways: Mixed signals (SMAs converging)\n\nAdaptive: 200+d → 50/200, 50-199d → 20/50, 20-49d → 10/20"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
-              </th>}
-              {col('vsSma200') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('sma_200', e)} style={{ cursor: 'pointer' }}>
-                vs 200-SMA<SortIcon field="sma_200" />
+              {col('belowSma') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('days_below_sma', e)} style={{ cursor: 'pointer' }}>
+                Below SMA<SortIcon field="days_below_sma" />
+                <span title={"Consecutive trading days price has been below SMA\n>130d (6m) = Long decline\n>65d (3m) = Declining"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
               {col('rsi') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('rsi', e)} style={{ cursor: 'pointer' }}>
                 RSI<SortIcon field="rsi" />
@@ -2093,19 +1881,12 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <option value="near20">&lt;20% from High</option>
                   </select>
                 </th>}
-                {col('trend') && <th style={{ padding: '4px 6px' }}>
-                  <select value={columnFilters.trend?.preset || 'all'} onChange={e => updateFilter('trend', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                {col('belowSma') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.belowSma?.preset || 'all'} onChange={e => updateFilter('belowSma', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
                     <option value="all">All</option>
-                    <option value="uptrend">↑ Uptrend</option>
-                    <option value="downtrend">↓ Downtrend</option>
-                    <option value="sideways">→ Sideways</option>
+                    <option value=">3m">&gt;3 months</option>
+                    <option value=">6m">&gt;6 months</option>
                   </select>
-                </th>}
-                {col('vsSma200') && <th style={{ padding: '4px 6px' }}>
-                  <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                    <input type="number" placeholder="min %" value={columnFilters.vsSma200?.min ?? ''} onChange={e => updateFilter('vsSma200', 'min', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
-                    <input type="number" placeholder="max %" value={columnFilters.vsSma200?.max ?? ''} onChange={e => updateFilter('vsSma200', 'max', e.target.value)} style={FILTER_INPUT_STYLE} onClick={e => e.stopPropagation()} />
-                  </div>
                 </th>}
                 {col('rsi') && <th style={{ padding: '4px 6px' }}>
                   <select value={columnFilters.rsi?.preset || 'all'} onChange={e => updateFilter('rsi', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
@@ -2453,33 +2234,14 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       )}
                     </td>}
 
-                    {col('trend') && <td>
+                    {col('belowSma') && <td>
                       {(() => {
-                        const t = live?.trend;
-                        if (!t) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
-                        const cfg = { uptrend: { icon: '↑', label: 'Uptrend', color: 'var(--green)' }, downtrend: { icon: '↓', label: 'Downtrend', color: 'var(--red)' }, sideways: { icon: '→', label: 'Sideways', color: 'var(--yellow, #f0ad4e)' } };
-                        const c = cfg[t] || cfg.sideways;
-                        return <span style={{ color: c.color, fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{c.icon} {c.label}</span>;
-                      })()}
-                    </td>}
-
-                    {col('vsSma200') && <td>
-                      {(() => {
-                        const sma = live?.sma_200;
-                        const period = live?.sma_period;
-                        if (!sma || !currentPrice) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
-                        const pct = ((currentPrice - sma) / sma * 100);
-                        const longD = period ? period.split('/')[1] : '200d';
-                        return (
-                          <div>
-                            <div style={{ fontSize: '13px', color: pct >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-                              {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
-                            </div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                              {formatINR(sma)} ({longD})
-                            </div>
-                          </div>
-                        );
+                        const days = live?.days_below_sma || 0;
+                        if (days === 0) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        if (days <= 65) return <span style={{ fontSize: '12px' }}>{days}d</span>;
+                        const months = Math.round(days / 30 * 10) / 10;
+                        if (days <= 130) return <span style={{ fontSize: '12px', color: 'var(--yellow, #f0ad4e)' }}>~{months.toFixed(0)}m</span>;
+                        return <span style={{ fontSize: '12px', color: 'var(--red)' }}>~{months.toFixed(0)}m 🔴</span>;
                       })()}
                     </td>}
 

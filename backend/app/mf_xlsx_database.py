@@ -279,7 +279,7 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
 def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
     """Compute 1D, 7D and 30D NAV change % using mfapi.in historical data.
     Returns {day_change_pct, week_change_pct, month_change_pct}."""
-    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_50": None, "sma_200": None, "sma_period": None, "trend": None, "rsi": None}
+    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_200": None, "days_below_sma": 0, "rsi": None}
     if current_nav <= 0:
         return result
 
@@ -295,10 +295,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
                 "month_change_pct": cached["month_change_pct"],
                 "week_52_high": cached.get("week_52_high", 0.0),
                 "week_52_low": cached.get("week_52_low", 0.0),
-                "sma_50": cached.get("sma_50"),
                 "sma_200": cached.get("sma_200"),
-                "sma_period": cached.get("sma_period"),
-                "trend": cached.get("trend"),
+                "days_below_sma": cached.get("days_below_sma", 0),
                 "rsi": cached.get("rsi"),
             }
 
@@ -380,31 +378,24 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         result["week_52_high"] = round(max(navs_52w), 4)
         result["week_52_low"] = round(min(navs_52w), 4)
 
-    # Adaptive SMA & trend calculation (all_navs is most-recent-first from dated_navs)
+    # SMA & days below SMA calculation (all_navs is most-recent-first)
     all_navs = [nav for _, nav in dated_navs if nav > 0]
     n = len(all_navs)
-    if n >= 200:
-        short_n, long_n = 50, 200
-    elif n >= 50:
-        short_n, long_n = 20, 50
-    elif n >= 20:
-        short_n, long_n = 10, 20
-    else:
-        short_n, long_n = 0, 0
+    sma_n = 200 if n >= 200 else (50 if n >= 50 else (20 if n >= 20 else 0))
 
-    if short_n > 0:
-        result["sma_50"] = round(sum(all_navs[:short_n]) / short_n, 4)
-    if long_n > 0:
-        result["sma_200"] = round(sum(all_navs[:long_n]) / long_n, 4)
-    result["sma_period"] = f"{short_n}d/{long_n}d" if long_n > 0 else None
+    if sma_n > 0:
+        result["sma_200"] = round(sum(all_navs[:sma_n]) / sma_n, 4)
 
-    if result["sma_50"] is not None and result["sma_200"] is not None and current_nav > 0:
-        if current_nav > result["sma_200"] and result["sma_50"] > result["sma_200"]:
-            result["trend"] = "uptrend"
-        elif current_nav < result["sma_200"] and result["sma_50"] < result["sma_200"]:
-            result["trend"] = "downtrend"
-        else:
-            result["trend"] = "sideways"
+    # Count consecutive days NAV has been below SMA (most-recent-first)
+    days_below = 0
+    if sma_n > 0 and n >= sma_n:
+        for i in range(n - sma_n + 1):
+            sma_at_i = sum(all_navs[i:i + sma_n]) / sma_n
+            if all_navs[i] < sma_at_i:
+                days_below += 1
+            else:
+                break
+    result["days_below_sma"] = days_below
 
     # RSI (14-day) calculation — all_navs is most-recent-first
     if len(all_navs) >= 15:
@@ -428,10 +419,8 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             "month_change_pct": result["month_change_pct"],
             "week_52_high": result["week_52_high"],
             "week_52_low": result["week_52_low"],
-            "sma_50": result["sma_50"],
             "sma_200": result["sma_200"],
-            "sma_period": result["sma_period"],
-            "trend": result["trend"],
+            "days_below_sma": result["days_below_sma"],
             "rsi": result["rsi"],
             "fetched_at": now,
         }
@@ -1062,10 +1051,8 @@ class MFXlsxPortfolio:
                 "week_change_pct": nav_changes["week_change_pct"],
                 "month_change_pct": nav_changes["month_change_pct"],
                 "is_above_avg_nav": current_nav > avg_nav if current_nav > 0 and avg_nav > 0 else False,
-                "sma_50": nav_changes.get("sma_50"),
                 "sma_200": nav_changes.get("sma_200"),
-                "sma_period": nav_changes.get("sma_period"),
-                "trend": nav_changes.get("trend"),
+                "days_below_sma": nav_changes.get("days_below_sma", 0),
                 "rsi": nav_changes.get("rsi"),
                 # Include held lots and sold lots for detail view
                 "held_lots": [

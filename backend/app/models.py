@@ -89,11 +89,9 @@ class StockLiveData(BaseModel):
     volume: int = 0
     previous_close: float = 0.0
     is_manual: bool = False
-    sma_50: Optional[float] = None
     sma_200: Optional[float] = None
-    sma_period: Optional[str] = None     # e.g. "50d/200d", "20d/50d", "10d/20d"
-    trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
-    rsi: Optional[float] = None          # RSI (14-day), 0-100
+    days_below_sma: int = 0
+    rsi: Optional[float] = None
 
 
 class PortfolioSummary(BaseModel):
@@ -229,11 +227,9 @@ class MFSummaryItem(BaseModel):
     week_52_high: float = 0.0
     week_52_low: float = 0.0
     is_above_avg_nav: bool = False
-    sma_50: Optional[float] = None
     sma_200: Optional[float] = None
-    sma_period: Optional[str] = None     # e.g. "50d/200d", "20d/50d", "10d/20d"
-    trend: Optional[str] = None          # "uptrend", "downtrend", "sideways", or None
-    rsi: Optional[float] = None          # RSI (14-day), 0-100
+    days_below_sma: int = 0
+    rsi: Optional[float] = None
 
 
 # ── MF Request Models ──────────────────────────────────
