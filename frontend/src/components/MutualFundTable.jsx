@@ -1519,7 +1519,8 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         const sma = f.sma_200;
                         const nav = f.current_nav;
                         const isBelow = sma && nav && nav < sma;
-                        if (days === 0 && !isBelow) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        if (!sma) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>Above</span>;
                         if (days === 0 && isBelow) return <span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>Below</span>;
                         if (days <= 65) return <span style={{ fontSize: '12px' }}>{days}d</span>;
                         const months = Math.round(days / 30 * 10) / 10;
