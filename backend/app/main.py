@@ -1750,6 +1750,14 @@ def get_price_status():
 def _do_price_refresh():
     """Worker: reindex xlsx files then fetch live prices (including watchlist)."""
     try:
+        # Auto-login if session expired
+        if zerodha_service.is_configured() and not zerodha_service.validate_session():
+            if zerodha_service.can_auto_login():
+                logger.info("[PriceRefresh] Session expired — attempting auto-login...")
+                if zerodha_service.auto_login():
+                    logger.info("[PriceRefresh] Auto-login successful — clearing 52W cache")
+                    zerodha_service.clear_52w_cache()
+
         db = udb()
         db.reindex()
         stock_service.clear_cache()
@@ -1777,6 +1785,12 @@ def trigger_price_refresh():
     Re-scans dumps/ for new xlsx files, then fetches live prices synchronously."""
     t0 = time.time()
     try:
+        # Auto-login if session expired
+        if zerodha_service.is_configured() and not zerodha_service.validate_session():
+            if zerodha_service.can_auto_login():
+                if zerodha_service.auto_login():
+                    zerodha_service.clear_52w_cache()
+
         db = udb()
         reindex_result = db.reindex()
         stock_service.clear_cache()
@@ -1954,10 +1968,12 @@ def set_zerodha_token(body: dict):
     # Validate
     valid = zerodha_service.validate_session()
     if valid:
+        # Clear 52W cache so historical data re-fetches with new token
+        zerodha_service.clear_52w_cache()
         # Trigger background refresh with the new valid token
         threading.Thread(target=_do_price_refresh, daemon=True).start()
     return {
-        "message": "Token set" + (" and validated — refreshing prices" if valid else " (validation pending)"),
+        "message": "Token set" + (" and validated — refreshing prices + SMA/RSI" if valid else " (validation pending)"),
         "valid": valid,
     }
 
