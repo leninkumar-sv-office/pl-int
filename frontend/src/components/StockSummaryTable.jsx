@@ -1089,10 +1089,10 @@ function RenameStockModal({ stock, onSave, onClose }) {
 
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
-  const [sortKeys, setSortKeys] = useState([{ field: 'symbol', dir: 'asc' }]);
+  const [sortKeys, setSortKeys] = useState([{ field: 'unrealized_profit', dir: 'desc' }]);
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hideZeroHeld, setHideZeroHeld] = useState(true);
+  const [hideZeroHeld, setHideZeroHeld] = useState(false);
   const [renamingStock, setRenamingStock] = useState(null); // { symbol, name }
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);

@@ -798,7 +798,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
 /* ── Main Table ───────────────────────────────────────── */
 export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS }) {
   const [expandedFund, setExpandedFund] = useState(null);
-  const [sortKeys, setSortKeys] = useState([{ field: 'name', dir: 'asc' }]);
+  const [sortKeys, setSortKeys] = useState([{ field: 'unrealizedPL', dir: 'desc' }]);
   const [renamingFund, setRenamingFund] = useState(null); // { fund_code, name }
   const casFileInputRef = useRef(null);
   const [casImporting, setCasImporting] = useState(false);
@@ -811,7 +811,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
-  const [heldOnly, setHeldOnly] = useState(true);
+  const [heldOnly, setHeldOnly] = useState(false);
 
   // ── Lot-level selection for bulk redeem ──
   const [selectedLots, setSelectedLots] = useState(new Set());
