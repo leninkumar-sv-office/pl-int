@@ -21,6 +21,7 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
 
   // Debounced search: when symbol changes, search after 200ms pause
   useEffect(() => {
+    if (justSelectedRef.current) { justSelectedRef.current = false; return; }
     const sym = form.symbol.trim();
     if (!sym || sym.length < 2) {
       setSuggestions([]);
@@ -58,7 +59,9 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
   // Reset highlight when suggestions change
   useEffect(() => { setHighlightIdx(-1); }, [suggestions]);
 
+  const justSelectedRef = useRef(false);
   const selectSuggestion = (s) => {
+    justSelectedRef.current = true;
     setForm(prev => ({ ...prev, symbol: s.symbol, name: s.name, exchange: s.exchange || prev.exchange }));
     setSuggestions([]);
     setShowSuggestions(false);
@@ -76,9 +79,17 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightIdx(prev => (prev - 1 + suggestions.length) % suggestions.length);
-    } else if (e.key === 'Enter' && highlightIdx >= 0) {
-      e.preventDefault();
-      selectSuggestion(suggestions[highlightIdx]);
+    } else if (e.key === 'Enter') {
+      if (highlightIdx >= 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectSuggestion(suggestions[highlightIdx]);
+      } else if (suggestions.length > 0) {
+        // Select first suggestion if none highlighted
+        e.preventDefault();
+        e.stopPropagation();
+        selectSuggestion(suggestions[0]);
+      }
     } else if (e.key === 'Escape') {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -96,13 +107,13 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.symbol || !form.quantity || !form.buy_price || !form.buy_date) return;
+    if (!form.symbol) return;
     setSubmitting(true);
     await onAdd({
       ...form,
       symbol: form.symbol.toUpperCase(),
-      quantity: parseInt(form.quantity),
-      buy_price: parseFloat(form.buy_price),
+      quantity: form.quantity ? parseInt(form.quantity) : 0,
+      buy_price: form.buy_price ? parseFloat(form.buy_price) : 0,
     });
     setSubmitting(false);
   };
@@ -183,28 +194,26 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Quantity *</label>
+              <label>Quantity</label>
               <input
                 name="quantity"
                 type="number"
-                min="1"
+                min="0"
                 value={form.quantity}
                 onChange={handleChange}
-                placeholder="Number of shares"
-                required
+                placeholder="0 to just track"
               />
             </div>
             <div className="form-group">
-              <label>Buy Price (₹) *</label>
+              <label>Buy Price (₹)</label>
               <input
                 name="buy_price"
                 type="number"
                 step="0.01"
-                min="0.01"
+                min="0"
                 value={form.buy_price}
                 onChange={handleChange}
-                placeholder="Price per share"
-                required
+                placeholder="0 to just track"
               />
             </div>
           </div>
