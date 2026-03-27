@@ -548,13 +548,13 @@ export default function TradePlanner() {
                 <React.Fragment key={`${row.symbol}-${row.exchange}`}>
                 <tr
                   onClick={() => handleRowClick(row)}
-                  style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--border)', opacity: hasQty ? 1 : 0.5, transition: 'opacity 0.2s', cursor: 'pointer' }}>
+                  style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--border)', background: hasQty ? 'rgba(34,197,94,0.08)' : 'transparent', cursor: 'pointer' }}>
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '10px', color: 'var(--text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>&#9654;</span>
                       <div>
                         <div style={{ fontWeight: 600 }}>{row.symbol}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{row.name} · {row.exchange}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim, #aaa)' }}>{row.name} · {row.exchange}</div>
                       </div>
                     </div>
                   </td>
@@ -999,8 +999,8 @@ export default function TradePlanner() {
   );
 }
 
-const thStyle = { padding: '8px 6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' };
-const tdStyle = { padding: '8px 6px' };
+const thStyle = { padding: '8px 6px', fontSize: '12px', fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.5px' };
+const tdStyle = { padding: '8px 6px', color: 'var(--text)', fontSize: '13px' };
 const qtyInputStyle = { width: '70px', padding: '4px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text)', textAlign: 'right', fontSize: '13px' };
 const capThStyle = { padding: '8px 6px', fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' };
 const capTdStyle = { padding: '8px 6px', fontVariantNumeric: 'tabular-nums' };
