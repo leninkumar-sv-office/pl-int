@@ -492,13 +492,15 @@ class XlsxPortfolio:
             return {"total": len(new_symbols), "added": list(added), "removed": list(removed)}
 
     def _find_file_for_symbol(self, symbol: str) -> Optional[Path]:
-        """Find xlsx file for a given stock symbol."""
+        """Find xlsx file for a given stock symbol (exact match only)."""
         symbol = symbol.upper()
         if symbol in self._file_map:
             return self._file_map[symbol]
-        # Try glob fallback
+        # Try glob fallback — exact symbol match in filename, not substring
+        sym_lower = symbol.lower()
         for fp in self.stocks_dir.glob("*.xlsx"):
-            if symbol.lower() in fp.stem.lower():
+            stem = fp.stem.lower().replace(" ", "").replace("-", "").replace("_", "")
+            if stem == sym_lower or stem.startswith(sym_lower + ".") or stem.startswith(sym_lower + "("):
                 return fp
         return None
 
