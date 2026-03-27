@@ -96,6 +96,28 @@ npm run test:report
 **If you skip this step, the user WILL find bugs and ask you to test. Do it proactively.**
 **Every time you think "this is a small change, no need to test" — TEST IT ANYWAY.**
 
+### Authentication for Playwright/Chrome DevTools
+
+**DO NOT ask the user to log in. Log in yourself.** Generate a JWT token using `app/auth.py` and inject it:
+
+```python
+# Generate token from Docker container
+docker exec pl-dashboard python3 -c "
+from app.auth import create_session_token
+print(create_session_token('leninkumar.sv.ai@gmail.com', 'Lenin'))
+"
+```
+
+Then inject into the browser via JavaScript (using `browser_evaluate` or `evaluate_script`):
+```javascript
+localStorage.setItem('sessionToken', '<TOKEN>');
+localStorage.setItem('authUser', JSON.stringify({email:'leninkumar.sv.ai@gmail.com',name:'Lenin'}));
+localStorage.setItem('selectedUserId', 'lenin');
+location.reload();
+```
+
+**THIS IS A STRICT REQUIREMENT. NEVER ask the user to log in. NEVER say "please log in". NEVER wait for the user. Generate the token and inject it yourself. If you cannot, fall back to API verification with auth headers. There is NO scenario where you should ask the user to authenticate for testing.**
+
 ## Test Strategy
 
 Tests validate **data correctness**, not just UI rendering:
