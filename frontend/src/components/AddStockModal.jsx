@@ -220,13 +220,12 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Buy Date *</label>
+              <label>Buy Date</label>
               <input
                 name="buy_date"
                 type="date"
                 value={form.buy_date}
                 onChange={handleChange}
-                required
               />
             </div>
             <div className="form-group">

@@ -678,9 +678,9 @@ def add_stock(req: AddStockRequest):
         symbol=req.symbol.upper().replace(".NS", "").replace(".BO", ""),
         exchange=req.exchange.upper(),
         name=name,
-        quantity=req.quantity,
-        buy_price=req.buy_price,
-        buy_date=req.buy_date,
+        quantity=req.quantity or 0,
+        buy_price=req.buy_price or 0,
+        buy_date=req.buy_date or date.today().isoformat(),
         notes=req.notes,
     )
 

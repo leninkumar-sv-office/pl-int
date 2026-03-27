@@ -8,9 +8,9 @@ class AddStockRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol e.g. RELIANCE, TCS")
     exchange: str = Field(default="NSE", description="Exchange: NSE or BSE")
     name: str = Field(default="", description="Company name (auto-fetched if empty)")
-    quantity: int = Field(..., gt=0, description="Number of shares")
-    buy_price: float = Field(..., gt=0, description="Purchase price per share")
-    buy_date: str = Field(..., description="Purchase date YYYY-MM-DD")
+    quantity: int = Field(default=0, ge=0, description="Number of shares (0 to just track)")
+    buy_price: float = Field(default=0, ge=0, description="Purchase price per share (0 to just track)")
+    buy_date: str = Field(default="", description="Purchase date YYYY-MM-DD")
     notes: str = ""
 
 
