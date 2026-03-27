@@ -142,6 +142,18 @@ export default function TradePlanner() {
     }
   }, [stocks]);
 
+  // Update SMA/RSI from stocks data when available (may arrive after initial load)
+  useEffect(() => {
+    if (!stocks || stocks.length === 0 || rows.length === 0) return;
+    const liveMap = {};
+    stocks.forEach(s => { if (s.live) liveMap[`${s.symbol}.${s.exchange}`] = s.live; });
+    setRows(prev => prev.map(r => {
+      const live = liveMap[`${r.symbol}.${r.exchange}`];
+      if (!live || (r.sma200 && r.rsi != null)) return r; // already has data
+      return { ...r, sma200: live.sma_200 || 0, daysBelowSma: live.days_below_sma || 0, rsi: live.rsi };
+    }));
+  }, [stocks]);
+
   // Persist to localStorage
   useEffect(() => {
     if (initializedRef.current && rows.length > 0) savePlan(rows);
