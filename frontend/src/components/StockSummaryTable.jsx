@@ -769,7 +769,7 @@ function getFilterValue(stock, colId) {
     case 'currentPrice': return stock.live?.current_price || 0;
     case 'w52Low': return pctFromLow(stock);
     case 'w52High': return pctFromHigh(stock);
-    case 'belowSma': return stock.live?.days_below_sma || 0;
+    case 'belowSma': { const sma = stock.live?.sma_200, cp = stock.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : null; }
     case 'rsi': return stock.live?.rsi ?? null;
     case 'unrealizedPF': return stock.unrealized_profit || 0;
     case 'unrealizedLoss': return Math.abs(stock.unrealized_loss || 0);
@@ -1308,7 +1308,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'stcg_realized_pl': return s.stcg_realized_pl || 0;
       case 'week_52_low': { const cp = s.live?.current_price || 0, low = s.live?.week_52_low || 0; return low > 0 && cp > 0 ? ((cp - low) / low * 100) : 9999; }
       case 'week_52_high': { const cp = s.live?.current_price || 0, high = s.live?.week_52_high || 0; return high > 0 && cp > 0 ? ((high - cp) / high * 100) : 9999; }
-      case 'days_below_sma': return s.live?.days_below_sma || 0;
+      case 'days_below_sma': { const sma = s.live?.sma_200, cp = s.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : -9999; }
       case 'rsi': return s.live?.rsi ?? -1;
       default: return s.unrealized_profit || 0;
     }

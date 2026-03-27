@@ -951,7 +951,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'currentNav': return f.current_nav;
       case 'w52Low': return f.week_52_low || 0;
       case 'w52High': return f.week_52_high || 0;
-      case 'days_below_sma': return f.days_below_sma || 0;
+      case 'days_below_sma': { const sma = f.sma_200, nav = f.current_nav || 0; return sma > 0 && nav > 0 ? ((nav - sma) / sma * 100) : -9999; }
       case 'rsi': return f.rsi ?? -1;
       case 'currentValue': return f.current_value;
       case 'unrealizedPL':
