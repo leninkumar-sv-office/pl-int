@@ -104,6 +104,7 @@ export default function TradePlanner() {
         totalInvested: s.total_invested || 0, ltcgInvested: s.ltcg_invested || 0, stcgInvested: s.stcg_invested || 0,
         ltcgEarliestDate: s.ltcg_earliest_date || '', stcgEarliestDate: s.stcg_earliest_date || '',
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
+        sma200: s.live?.sma_200 || 0, daysBelowSma: s.live?.days_below_sma || 0, rsi: s.live?.rsi,
         dayChange: s.live?.day_change || 0, dayChangePct: s.live?.day_change_pct || 0,
         weekChangePct: s.live?.week_change_pct || 0, monthChangePct: s.live?.month_change_pct || 0,
         buyQty: sv?.buyQty || '', sellQty: sv?.sellQty || '', ltSellQty: sv?.ltSellQty || '', stSellQty: sv?.stSellQty || '',
@@ -129,6 +130,7 @@ export default function TradePlanner() {
           setRows(prev => prev.map(r =>
             r.symbol === s.symbol && r.exchange === s.exchange
               ? { ...r, name: price.name || s.symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
+                  sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi,
                   dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
                   weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0 }
               : r
@@ -180,6 +182,12 @@ export default function TradePlanner() {
         bv = b.current > 0 && b.high > 0 ? ((b.high - b.current) / b.high * 100) : 9999;
         break;
       }
+      case 'below_sma': {
+        av = a.sma200 > 0 && a.current > 0 ? ((a.current - a.sma200) / a.sma200 * 100) : -9999;
+        bv = b.sma200 > 0 && b.current > 0 ? ((b.current - b.sma200) / b.sma200 * 100) : -9999;
+        break;
+      }
+      case 'rsi': av = a.rsi ?? -1; bv = b.rsi ?? -1; break;
       default: av = a.symbol; bv = b.symbol;
     }
     if (typeof av === 'string') {
@@ -221,6 +229,7 @@ export default function TradePlanner() {
       const price = await fetchStockPrice(result.symbol, result.exchange);
       setRows(prev => [{ symbol: result.symbol, exchange: result.exchange, name: price.name || result.name,
         onHand: 0, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
+        sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi,
         dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
         weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0,
         buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
@@ -387,6 +396,7 @@ export default function TradePlanner() {
           const price = await fetchStockPrice(symbol, exchange);
           newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: false,
             name: price.name || symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
+            sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi,
             dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
             weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0 });
         } catch {
@@ -500,6 +510,8 @@ export default function TradePlanner() {
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_low')}>52W Low<SortIcon field="week_52_low" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('day_change_pct')}>CMP<SortIcon field="day_change_pct" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_high')}>52W High<SortIcon field="week_52_high" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('below_sma')} title="% distance from SMA. Negative = below average.">Below SMA<SortIcon field="below_sma" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('rsi')} title="RSI (14-day): <30 Oversold, 30-70 Neutral, >70 Overbought">RSI<SortIcon field="rsi" /></th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Buy Qty</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Sell Qty</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>LT</th>
@@ -617,6 +629,30 @@ export default function TradePlanner() {
                         </div>
                       );
                     })() : '--'}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {(() => {
+                      const sma = row.sma200, cp = row.current, days = row.daysBelowSma || 0;
+                      if (!sma || !cp) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                      const pct = ((cp - sma) / sma * 100);
+                      const isBelow = cp < sma;
+                      if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>+{pct.toFixed(1)}%</span>;
+                      if (days === 0 && isBelow) return <span style={{ color: 'var(--yellow, #f0ad4e)', fontSize: '11px' }}>{pct.toFixed(1)}%</span>;
+                      const pctStr = `${pct.toFixed(1)}%`;
+                      if (days <= 65) return <div><span style={{ fontSize: '11px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{days}d</div></div>;
+                      const months = Math.round(days / 30);
+                      if (days <= 130) return <div><span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--yellow, #f0ad4e)' }}>~{months}m</div></div>;
+                      return <div><span style={{ fontSize: '11px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--red)' }}>~{months}m 🔴</div></div>;
+                    })()}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {(() => {
+                      const r = row.rsi;
+                      if (r == null) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                      const color = r < 30 ? 'var(--red)' : r > 70 ? 'var(--green)' : 'var(--text)';
+                      const label = r < 30 ? 'Oversold' : r > 70 ? 'Overbought' : '';
+                      return <div><div style={{ fontSize: '12px', color, fontWeight: 600 }}>{r.toFixed(1)}</div>{label && <div style={{ fontSize: '9px', color }}>{label}</div>}</div>;
+                    })()}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     <input type="number" min="0" value={row.buyQty} onChange={(e) => updateQty(idx, 'buyQty', e.target.value)} placeholder="0" style={qtyInputStyle} />
