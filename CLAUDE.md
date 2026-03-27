@@ -83,13 +83,18 @@ npm run test:report
 - All MF funds are Direct Growth plans, names in Title Case
 - **Feature parity: StockSummaryTable ↔ MutualFundTable** — any feature added to one (sorting modes, filtering, display options, columns) MUST also be added to the other. They should have the same UX capabilities.
 
-## Manual Verification with Playwright
+## MANDATORY: Verify Every Deploy with Playwright
 
-**After every UI or backend change**, verify the fix using the Playwright MCP browser:
-1. Navigate to `https://pl.thirumagal.com` (or login if needed)
-2. Visually confirm the change works — take a snapshot, check columns have data, filters work
-3. Check the browser console for errors
-4. Do NOT skip this step — the user should not have to ask for manual verification
+**THIS IS NOT OPTIONAL. After EVERY deploy**, verify using the Playwright MCP browser:
+1. Navigate to `https://pl.thirumagal.com`
+2. Wait for data to load (wait for "ADANI" or similar stock name)
+3. Take a screenshot to visually confirm the change works
+4. Check columns have data, filters work, no empty values where data should be
+5. Check the browser console for errors
+6. If Playwright can't launch (Chrome session conflict), verify via API calls instead
+
+**If you skip this step, the user WILL find bugs and ask you to test. Do it proactively.**
+**Every time you think "this is a small change, no need to test" — TEST IT ANYWAY.**
 
 ## Test Strategy
 
