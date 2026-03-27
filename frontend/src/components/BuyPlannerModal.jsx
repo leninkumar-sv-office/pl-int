@@ -471,6 +471,7 @@ export default function TradePlanner() {
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: '12px' }}>
           <input ref={searchInputRef} type="text" value={searchQuery} onChange={handleSearchChange}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); clearSearch(); } }}
             placeholder="Search / filter stocks or add new..."
             style={{ width: '100%', padding: '8px 32px 8px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
               borderRadius: '6px', color: 'var(--text)', fontSize: '13px', boxSizing: 'border-box' }}
