@@ -951,7 +951,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'currentNav': return f.current_nav;
       case 'w52Low': return f.week_52_low || 0;
       case 'w52High': return f.week_52_high || 0;
-      case 'signal': { const sig = f.signal; const order = { strong_bull: 1, weak_bull: 2, weak_bear: 3, strong_bear: 4 }; return order[sig] || 5; }
+      case 'signal': { const sma = f.sma_200, nav = f.current_nav || 0; const pct = sma > 0 && nav > 0 ? ((nav - sma) / sma * 100) : -9999; const base = { strong_bull: 400, weak_bull: 200, weak_bear: -200, strong_bear: -400 }; return (base[f.signal] ?? -500) + pct; }
       case 'rsi': return f.rsi ?? -1;
       case 'currentValue': return f.current_value;
       case 'unrealizedPL':

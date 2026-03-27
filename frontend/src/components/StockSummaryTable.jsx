@@ -1310,7 +1310,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'stcg_realized_pl': return s.stcg_realized_pl || 0;
       case 'week_52_low': { const cp = s.live?.current_price || 0, low = s.live?.week_52_low || 0; return low > 0 && cp > 0 ? ((cp - low) / low * 100) : 9999; }
       case 'week_52_high': { const cp = s.live?.current_price || 0, high = s.live?.week_52_high || 0; return high > 0 && cp > 0 ? ((high - cp) / high * 100) : 9999; }
-      case 'signal': { const sig = s.live?.signal; const order = { strong_bull: 1, weak_bull: 2, weak_bear: 3, strong_bear: 4 }; return order[sig] || 5; }
+      case 'signal': { const sma = s.live?.sma_200, cp = s.live?.current_price || 0; const pct = sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : -9999; const base = { strong_bull: 400, weak_bull: 200, weak_bear: -200, strong_bear: -400 }; return (base[s.live?.signal] ?? -500) + pct; }
       case 'rsi': return s.live?.rsi ?? -1;
       default: return s.unrealized_profit || 0;
     }

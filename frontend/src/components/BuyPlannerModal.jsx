@@ -195,9 +195,11 @@ export default function TradePlanner() {
         break;
       }
       case 'signal': {
-        const order = { strong_bull: 1, weak_bull: 2, weak_bear: 3, strong_bear: 4 };
-        av = order[a.signal] || 5;
-        bv = order[b.signal] || 5;
+        const base = { strong_bull: 400, weak_bull: 200, weak_bear: -200, strong_bear: -400 };
+        const aPct = a.sma200 > 0 && a.current > 0 ? ((a.current - a.sma200) / a.sma200 * 100) : -9999;
+        const bPct = b.sma200 > 0 && b.current > 0 ? ((b.current - b.sma200) / b.sma200 * 100) : -9999;
+        av = (base[a.signal] ?? -500) + aPct;
+        bv = (base[b.signal] ?? -500) + bPct;
         break;
       }
       case 'rsi': av = a.rsi ?? -1; bv = b.rsi ?? -1; break;
