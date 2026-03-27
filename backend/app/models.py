@@ -40,8 +40,8 @@ class Transaction(BaseModel):
     date: str = Field(..., description="Transaction date YYYY-MM-DD")
     exchange: str = Field(default="NSE", description="NSE or BSE")
     action: str = Field(..., description="Buy or Sell")
-    quantity: int = Field(..., gt=0)
-    price: float = Field(..., gt=0)
+    quantity: int = Field(..., ge=0)
+    price: float = Field(..., ge=0)
     cost: float = 0.0
     remarks: str = "~"
     stt: float = 0.0
