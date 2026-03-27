@@ -148,7 +148,7 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder={lookingUp ? 'Fetching from Zerodha...' : 'Auto-populated from Zerodha'}
+              placeholder="Auto-populated from Zerodha"
               style={{
                 borderColor: form.name ? 'var(--green)' : undefined,
                 transition: 'border-color 0.2s',
