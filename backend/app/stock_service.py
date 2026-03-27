@@ -418,17 +418,20 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                         l = w52["week_52_low"]
                         wcp = w52.get("week_change_pct", 0.0)
                         mcp = w52.get("month_change_pct", 0.0)
+                        s50 = w52.get("sma_50")
                         s200 = w52.get("sma_200")
+                        sig = w52.get("signal")
                         dbs = w52.get("days_below_sma", 0)
                         rsi_val = w52.get("rsi")
                     else:
-                        # Fallback: use saved JSON or xlsx for 52-week
                         saved = saved_prices.get(key, {})
                         h = float(saved.get("week_52_high", 0) or 0)
                         l = float(saved.get("week_52_low", 0) or 0)
                         wcp = float(saved.get("week_change_pct", 0) or 0)
                         mcp = float(saved.get("month_change_pct", 0) or 0)
+                        s50 = saved.get("sma_50")
                         s200 = saved.get("sma_200")
+                        sig = saved.get("signal")
                         dbs = saved.get("days_below_sma", 0)
                         rsi_val = saved.get("rsi")
                         if h <= 0:
@@ -440,7 +443,9 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                         results[key].week_52_low = l
                         results[key].week_change_pct = wcp
                         results[key].month_change_pct = mcp
+                        results[key].sma_50 = s50
                         results[key].sma_200 = s200
+                        results[key].signal = sig
                         results[key].days_below_sma = dbs
                         results[key].rsi = rsi_val
                         if key in to_save:
@@ -448,7 +453,9 @@ def fetch_multiple(symbols: List[Tuple[str, str]]) -> Dict[str, StockLiveData]:
                             to_save[key]["week_52_low"] = l
                             to_save[key]["week_change_pct"] = wcp
                             to_save[key]["month_change_pct"] = mcp
+                            to_save[key]["sma_50"] = s50
                             to_save[key]["sma_200"] = s200
+                            to_save[key]["signal"] = sig
                             to_save[key]["days_below_sma"] = dbs
                             to_save[key]["rsi"] = rsi_val
                 # Re-save with updated 52-week data

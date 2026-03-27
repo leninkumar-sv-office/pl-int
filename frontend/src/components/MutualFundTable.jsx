@@ -108,7 +108,7 @@ const COL_DEFS = [
   { id: 'currentNav',   label: 'Current NAV' },
   { id: 'w52Low',       label: '52W Low' },
   { id: 'w52High',      label: '52W High' },
-  { id: 'belowSma',     label: 'Below SMA' },
+  { id: 'signal',       label: 'Signal' },
   { id: 'rsi',          label: 'RSI' },
   { id: 'currentValue', label: 'Current Value' },
   { id: 'invested',     label: 'Invested' },
@@ -951,7 +951,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'currentNav': return f.current_nav;
       case 'w52Low': return f.week_52_low || 0;
       case 'w52High': return f.week_52_high || 0;
-      case 'days_below_sma': { const sma = f.sma_200, nav = f.current_nav || 0; return sma > 0 && nav > 0 ? ((nav - sma) / sma * 100) : -9999; }
+      case 'signal': { const sig = f.signal; const order = { strong_bull: 1, weak_bull: 2, weak_bear: 3, strong_bear: 4 }; return order[sig] || 5; }
       case 'rsi': return f.rsi ?? -1;
       case 'currentValue': return f.current_value;
       case 'unrealizedPL':
@@ -1297,9 +1297,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               {col('w52High') && <th onClick={(e) => handleSort('w52High', e)} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="w52High" />
               </th>}
-              {col('belowSma') && <th onClick={(e) => handleSort('days_below_sma', e)} style={{ cursor: 'pointer' }}>
-                Below SMA<SortIcon field="days_below_sma" />
-                <span title={"Consecutive trading days price has been below SMA\n>130d (6m) = Long decline\n>65d (3m) = Declining"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+              {col('signal') && <th onClick={(e) => handleSort('signal', e)} style={{ cursor: 'pointer' }}>
+                Signal<SortIcon field="signal" />
+                <span title={"Signal (SMA-based trend)\n🟢 Strong Bull: Price well above SMA\n🟡 Weak Bull: Price slightly above SMA\n🟡 Weak Bear: Price slightly below SMA\n🔴 Strong Bear: Price well below SMA"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
               {col('rsi') && <th onClick={(e) => handleSort('rsi', e)} style={{ cursor: 'pointer' }}>
                 RSI<SortIcon field="rsi" />
@@ -1513,21 +1513,18 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       )}
                     </td>}
 
-                    {col('belowSma') && <td>
+                    {col('signal') && <td>
                       {(() => {
-                        const days = f.days_below_sma || 0;
+                        const sig = f.signal;
                         const sma = f.sma_200;
                         const nav = f.current_nav;
-                        const isBelow = sma && nav && nav < sma;
-                        if (!sma) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
-                        const pct = ((nav - sma) / sma * 100);
-                        if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>+{pct.toFixed(1)}%</span>;
-                        if (days === 0 && isBelow) return <span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>{pct.toFixed(1)}%</span>;
-                        const pctStr = `${pct.toFixed(1)}%`;
-                        if (days <= 65) return <div><span style={{ fontSize: '12px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{days}d below</div></div>;
-                        const months = Math.round(days / 30 * 10) / 10;
-                        if (days <= 130) return <div><span style={{ fontSize: '12px', color: 'var(--yellow, #f0ad4e)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--yellow, #f0ad4e)' }}>~{months.toFixed(0)}m below</div></div>;
-                        return <div><span style={{ fontSize: '12px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--red)' }}>~{months.toFixed(0)}m below 🔴</div></div>;
+                        if (!sig) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const pct = sma && nav && sma > 0 ? ((nav - sma) / sma * 100) : null;
+                        const pctStr = pct != null ? (pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`) : '';
+                        const cfg = { strong_bull: { icon: '\u{1F7E2}', label: 'Strong Bull', color: 'var(--green)' }, weak_bull: { icon: '\u{1F7E1}', label: 'Weak Bull', color: 'var(--yellow, #f0ad4e)' }, weak_bear: { icon: '\u{1F7E1}', label: 'Weak Bear', color: 'var(--yellow, #f0ad4e)' }, strong_bear: { icon: '\u{1F534}', label: 'Strong Bear', color: 'var(--red)' } };
+                        const c = cfg[sig];
+                        if (!c) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        return <div><div style={{ fontSize: '11px', color: c.color, fontWeight: 600 }}>{c.icon} {c.label}</div>{pctStr && <div style={{ fontSize: '10px', color: c.color }}>{pctStr}</div>}</div>;
                       })()}
                     </td>}
 

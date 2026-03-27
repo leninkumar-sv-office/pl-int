@@ -726,7 +726,7 @@ const COL_DEFS = [
   { id: 'w52Low',         label: '52W Low',         grouped: false },
   { id: 'currentPrice',   label: 'Current Price',   grouped: false },
   { id: 'w52High',        label: '52W High',        grouped: false },
-  { id: 'belowSma',       label: 'Below SMA',       grouped: false },
+  { id: 'signal',          label: 'Signal',           grouped: false },
   { id: 'rsi',            label: 'RSI',             grouped: false },
   { id: 'unrealizedPF',   label: 'Unrealized PF',   grouped: true },
   { id: 'status',         label: 'Status',          grouped: false },
@@ -769,7 +769,7 @@ function getFilterValue(stock, colId) {
     case 'currentPrice': return stock.live?.current_price || 0;
     case 'w52Low': return pctFromLow(stock);
     case 'w52High': return pctFromHigh(stock);
-    case 'belowSma': { const sma = stock.live?.sma_200, cp = stock.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : null; }
+    case 'signal': { const sma = stock.live?.sma_200, cp = stock.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : null; }
     case 'rsi': return stock.live?.rsi ?? null;
     case 'unrealizedPF': return stock.unrealized_profit || 0;
     case 'unrealizedLoss': return Math.abs(stock.unrealized_loss || 0);
@@ -803,10 +803,12 @@ function matchesPreset(stock, colId, preset) {
       if (preset === 'stcg') return (stock.stcg_profitable_qty > 0) || (stock.stcg_loss_qty > 0);
       return true;
     }
-    case 'belowSma': {
-      const days = stock.live?.days_below_sma || 0;
-      if (preset === '>3m') return days > 65;
-      if (preset === '>6m') return days > 130;
+    case 'signal': {
+      const sig = stock.live?.signal;
+      if (preset === 'strong_bull') return sig === 'strong_bull';
+      if (preset === 'weak_bull') return sig === 'weak_bull';
+      if (preset === 'weak_bear') return sig === 'weak_bear';
+      if (preset === 'strong_bear') return sig === 'strong_bear';
       return true;
     }
     case 'rsi': {
@@ -1308,7 +1310,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
       case 'stcg_realized_pl': return s.stcg_realized_pl || 0;
       case 'week_52_low': { const cp = s.live?.current_price || 0, low = s.live?.week_52_low || 0; return low > 0 && cp > 0 ? ((cp - low) / low * 100) : 9999; }
       case 'week_52_high': { const cp = s.live?.current_price || 0, high = s.live?.week_52_high || 0; return high > 0 && cp > 0 ? ((high - cp) / high * 100) : 9999; }
-      case 'days_below_sma': { const sma = s.live?.sma_200, cp = s.live?.current_price || 0; return sma > 0 && cp > 0 ? ((cp - sma) / sma * 100) : -9999; }
+      case 'signal': { const sig = s.live?.signal; const order = { strong_bull: 1, weak_bull: 2, weak_bear: 3, strong_bear: 4 }; return order[sig] || 5; }
       case 'rsi': return s.live?.rsi ?? -1;
       default: return s.unrealized_profit || 0;
     }
@@ -1741,7 +1743,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
         {smaStillLoading && (
           <div style={{ padding: '6px 12px', background: 'rgba(59,130,246,0.1)', borderRadius: '6px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--blue)' }}>
             <div className="spinner" style={{ width: '12px', height: '12px' }} />
-            Below SMA & RSI loading — computing from historical data. Click "Clear Cache" to force refresh.
+            Signal & RSI loading — computing from historical data. Click "Clear Cache" to force refresh.
           </div>
         )}
         <table>
@@ -1770,9 +1772,9 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
               {col('w52High') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('week_52_high', e)} style={{ cursor: 'pointer' }}>
                 52W High<SortIcon field="week_52_high" />
               </th>}
-              {col('belowSma') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('days_below_sma', e)} style={{ cursor: 'pointer' }}>
-                Below SMA<SortIcon field="days_below_sma" />
-                <span title={"Consecutive trading days price has been below SMA\n>130d (6m) = Long decline\n>65d (3m) = Declining"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
+              {col('signal') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('signal', e)} style={{ cursor: 'pointer' }}>
+                Signal<SortIcon field="signal" />
+                <span title={"Signal (SMA-based trend)\n🟢 Strong Bull: Price well above SMA\n🟡 Weak Bull: Price slightly above SMA\n🟡 Weak Bear: Price slightly below SMA\n🔴 Strong Bear: Price well below SMA"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
               {col('rsi') && <th rowSpan={hasAnyGroupedCol ? 2 : undefined} onClick={(e) => handleSort('rsi', e)} style={{ cursor: 'pointer' }}>
                 RSI<SortIcon field="rsi" />
@@ -1889,11 +1891,13 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                     <option value="near20">&lt;20% from High</option>
                   </select>
                 </th>}
-                {col('belowSma') && <th style={{ padding: '4px 6px' }}>
-                  <select value={columnFilters.belowSma?.preset || 'all'} onChange={e => updateFilter('belowSma', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
+                {col('signal') && <th style={{ padding: '4px 6px' }}>
+                  <select value={columnFilters.signal?.preset || 'all'} onChange={e => updateFilter('signal', 'preset', e.target.value)} style={FILTER_SELECT_STYLE} onClick={e => e.stopPropagation()}>
                     <option value="all">All</option>
-                    <option value=">3m">&gt;3 months</option>
-                    <option value=">6m">&gt;6 months</option>
+                    <option value="strong_bull">Strong Bull</option>
+                    <option value="weak_bull">Weak Bull</option>
+                    <option value="weak_bear">Weak Bear</option>
+                    <option value="strong_bear">Strong Bear</option>
                   </select>
                 </th>}
                 {col('rsi') && <th style={{ padding: '4px 6px' }}>
@@ -2242,20 +2246,17 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                       )}
                     </td>}
 
-                    {col('belowSma') && <td>
+                    {col('signal') && <td>
                       {(() => {
-                        const days = live?.days_below_sma || 0;
+                        const sig = live?.signal;
                         const sma = live?.sma_200;
-                        const isBelow = sma && currentPrice && currentPrice < sma;
-                        if (!sma) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
-                        const pct = ((currentPrice - sma) / sma * 100);
-                        if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>+{pct.toFixed(1)}%</span>;
-                        if (days === 0 && isBelow) return <span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>{pct.toFixed(1)}%</span>;
-                        const pctStr = `${pct.toFixed(1)}%`;
-                        if (days <= 65) return <div><span style={{ fontSize: '12px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{days}d below</div></div>;
-                        const months = Math.round(days / 30 * 10) / 10;
-                        if (days <= 130) return <div><span style={{ fontSize: '12px', color: 'var(--yellow, #f0ad4e)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--yellow, #f0ad4e)' }}>~{months.toFixed(0)}m below</div></div>;
-                        return <div><span style={{ fontSize: '12px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--red)' }}>~{months.toFixed(0)}m below 🔴</div></div>;
+                        if (!sig) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        const pct = sma && currentPrice && sma > 0 ? ((currentPrice - sma) / sma * 100) : null;
+                        const pctStr = pct != null ? (pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`) : '';
+                        const cfg = { strong_bull: { icon: '\u{1F7E2}', label: 'Strong Bull', color: 'var(--green)' }, weak_bull: { icon: '\u{1F7E1}', label: 'Weak Bull', color: 'var(--yellow, #f0ad4e)' }, weak_bear: { icon: '\u{1F7E1}', label: 'Weak Bear', color: 'var(--yellow, #f0ad4e)' }, strong_bear: { icon: '\u{1F534}', label: 'Strong Bear', color: 'var(--red)' } };
+                        const c = cfg[sig];
+                        if (!c) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                        return <div><div style={{ fontSize: '11px', color: c.color, fontWeight: 600 }}>{c.icon} {c.label}</div>{pctStr && <div style={{ fontSize: '10px', color: c.color }}>{pctStr}</div>}</div>;
                       })()}
                     </td>}
 

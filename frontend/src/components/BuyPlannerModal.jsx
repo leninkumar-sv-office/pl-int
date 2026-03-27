@@ -104,7 +104,7 @@ export default function TradePlanner() {
         totalInvested: s.total_invested || 0, ltcgInvested: s.ltcg_invested || 0, stcgInvested: s.stcg_invested || 0,
         ltcgEarliestDate: s.ltcg_earliest_date || '', stcgEarliestDate: s.stcg_earliest_date || '',
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
-        sma200: s.live?.sma_200 || 0, daysBelowSma: s.live?.days_below_sma || 0, rsi: s.live?.rsi,
+        sma200: s.live?.sma_200 || 0, daysBelowSma: s.live?.days_below_sma || 0, rsi: s.live?.rsi, signal: s.live?.signal,
         dayChange: s.live?.day_change || 0, dayChangePct: s.live?.day_change_pct || 0,
         weekChangePct: s.live?.week_change_pct || 0, monthChangePct: s.live?.month_change_pct || 0,
         buyQty: sv?.buyQty || '', sellQty: sv?.sellQty || '', ltSellQty: sv?.ltSellQty || '', stSellQty: sv?.stSellQty || '',
@@ -130,7 +130,7 @@ export default function TradePlanner() {
           setRows(prev => prev.map(r =>
             r.symbol === s.symbol && r.exchange === s.exchange
               ? { ...r, name: price.name || s.symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
-                  sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi,
+                  sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi, signal: price.signal,
                   dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
                   weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0 }
               : r
@@ -150,7 +150,7 @@ export default function TradePlanner() {
     setRows(prev => prev.map(r => {
       const live = liveMap[`${r.symbol}.${r.exchange}`];
       if (!live || (r.sma200 && r.rsi != null)) return r; // already has data
-      return { ...r, sma200: live.sma_200 || 0, daysBelowSma: live.days_below_sma || 0, rsi: live.rsi };
+      return { ...r, sma200: live.sma_200 || 0, daysBelowSma: live.days_below_sma || 0, rsi: live.rsi, signal: live.signal };
     }));
   }, [stocks]);
 
@@ -194,9 +194,10 @@ export default function TradePlanner() {
         bv = b.current > 0 && b.high > 0 ? ((b.high - b.current) / b.high * 100) : 9999;
         break;
       }
-      case 'below_sma': {
-        av = a.sma200 > 0 && a.current > 0 ? ((a.current - a.sma200) / a.sma200 * 100) : -9999;
-        bv = b.sma200 > 0 && b.current > 0 ? ((b.current - b.sma200) / b.sma200 * 100) : -9999;
+      case 'signal': {
+        const order = { strong_bull: 1, weak_bull: 2, weak_bear: 3, strong_bear: 4 };
+        av = order[a.signal] || 5;
+        bv = order[b.signal] || 5;
         break;
       }
       case 'rsi': av = a.rsi ?? -1; bv = b.rsi ?? -1; break;
@@ -241,7 +242,7 @@ export default function TradePlanner() {
       const price = await fetchStockPrice(result.symbol, result.exchange);
       setRows(prev => [{ symbol: result.symbol, exchange: result.exchange, name: price.name || result.name,
         onHand: 0, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
-        sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi,
+        sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi, signal: price.signal,
         dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
         weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0,
         buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '', ltAvail: 0, stAvail: 0 }, ...prev]);
@@ -408,7 +409,7 @@ export default function TradePlanner() {
           const price = await fetchStockPrice(symbol, exchange);
           newStocks.push({ symbol, exchange, buyQty: bq, sellQty: sq, existingOnly: false,
             name: price.name || symbol, low: price.week_52_low || 0, current: price.current_price || 0, high: price.week_52_high || 0,
-            sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi,
+            sma200: price.sma_200 || 0, daysBelowSma: price.days_below_sma || 0, rsi: price.rsi, signal: price.signal,
             dayChange: price.day_change || 0, dayChangePct: price.day_change_pct || 0,
             weekChangePct: price.week_change_pct || 0, monthChangePct: price.month_change_pct || 0 });
         } catch {
@@ -523,7 +524,7 @@ export default function TradePlanner() {
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_low')}>52W Low<SortIcon field="week_52_low" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('day_change_pct')}>CMP<SortIcon field="day_change_pct" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_high')}>52W High<SortIcon field="week_52_high" /></th>
-              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('below_sma')} title="% distance from SMA. Negative = below average.">Below SMA<SortIcon field="below_sma" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('signal')} title="Signal (SMA-based trend): Strong Bull, Weak Bull, Weak Bear, Strong Bear">Signal<SortIcon field="signal" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('rsi')} title="RSI (14-day): <30 Oversold, 30-70 Neutral, >70 Overbought">RSI<SortIcon field="rsi" /></th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Buy Qty</th>
               <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Sell Qty</th>
@@ -645,17 +646,15 @@ export default function TradePlanner() {
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {(() => {
-                      const sma = row.sma200, cp = row.current, days = row.daysBelowSma || 0;
-                      if (!sma || !cp) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
-                      const pct = ((cp - sma) / sma * 100);
-                      const isBelow = cp < sma;
-                      if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>+{pct.toFixed(1)}%</span>;
-                      if (days === 0 && isBelow) return <span style={{ color: 'var(--yellow, #f0ad4e)', fontSize: '11px' }}>{pct.toFixed(1)}%</span>;
-                      const pctStr = `${pct.toFixed(1)}%`;
-                      if (days <= 65) return <div><span style={{ fontSize: '11px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{days}d</div></div>;
-                      const months = Math.round(days / 30);
-                      if (days <= 130) return <div><span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--yellow, #f0ad4e)' }}>~{months}m</div></div>;
-                      return <div><span style={{ fontSize: '11px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--red)' }}>~{months}m 🔴</div></div>;
+                      const sig = row.signal;
+                      const sma = row.sma200, cp = row.current;
+                      if (!sig) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                      const pct = sma && cp && sma > 0 ? ((cp - sma) / sma * 100) : null;
+                      const pctStr = pct != null ? (pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`) : '';
+                      const cfg = { strong_bull: { icon: '\u{1F7E2}', label: 'Strong Bull', color: 'var(--green)' }, weak_bull: { icon: '\u{1F7E1}', label: 'Weak Bull', color: 'var(--yellow, #f0ad4e)' }, weak_bear: { icon: '\u{1F7E1}', label: 'Weak Bear', color: 'var(--yellow, #f0ad4e)' }, strong_bear: { icon: '\u{1F534}', label: 'Strong Bear', color: 'var(--red)' } };
+                      const c = cfg[sig];
+                      if (!c) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
+                      return <div><div style={{ fontSize: '11px', color: c.color, fontWeight: 600 }}>{c.icon} {c.label}</div>{pctStr && <div style={{ fontSize: '10px', color: c.color }}>{pctStr}</div>}</div>;
                     })()}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>

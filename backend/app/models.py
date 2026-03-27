@@ -89,7 +89,9 @@ class StockLiveData(BaseModel):
     volume: int = 0
     previous_close: float = 0.0
     is_manual: bool = False
+    sma_50: Optional[float] = None
     sma_200: Optional[float] = None
+    signal: Optional[str] = None         # strong_bull, weak_bull, weak_bear, strong_bear
     days_below_sma: int = 0
     rsi: Optional[float] = None
 
@@ -227,7 +229,9 @@ class MFSummaryItem(BaseModel):
     week_52_high: float = 0.0
     week_52_low: float = 0.0
     is_above_avg_nav: bool = False
+    sma_50: Optional[float] = None
     sma_200: Optional[float] = None
+    signal: Optional[str] = None
     days_below_sma: int = 0
     rsi: Optional[float] = None
 
