@@ -1543,6 +1543,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             placeholder="Search stocks by symbol or name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { setSearchQuery(''); } }}
             style={{
               width: '100%',
               padding: '8px 30px 8px 34px',
