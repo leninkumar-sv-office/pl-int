@@ -353,8 +353,9 @@ tr.highlight-profit:hover {
 .range-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-muted);
+  font-size: 11px;
+  color: var(--text-dim, var(--text));
+  font-weight: 500;
 }
 .range-legend {
   display: flex;

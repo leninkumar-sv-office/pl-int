@@ -275,7 +275,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
           flexWrap: 'wrap',
         }}>
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>52-Week Range</div>
+            <div style={{ fontSize: '12px', color: 'var(--text)', marginBottom: '4px', fontWeight: 500 }}>52-Week Range</div>
             <WeekRangeBar low={live.week_52_low} high={live.week_52_high} current={cp} buyPrice={stock.avg_buy_price} />
           </div>
           <div>

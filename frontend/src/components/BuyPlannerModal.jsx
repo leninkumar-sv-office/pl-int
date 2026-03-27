@@ -726,10 +726,10 @@ export default function TradePlanner() {
                         <div style={{ padding: '16px 20px', minWidth: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
                           <div style={{ fontSize: '24px', fontWeight: 700 }}>{row.current ? formatINR(row.current) : '--'}</div>
                           {row.low > 0 && row.high > 0 && (
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              <div style={{ marginBottom: '4px' }}>52W Range</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-dim, var(--text-muted))' }}>
+                              <div style={{ marginBottom: '4px', fontWeight: 500 }}>52W Range</div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>{formatINR(row.low)}</span>
+                                <span style={{ color: 'var(--text)' }}>{formatINR(row.low)}</span>
                                 <div style={{ flex: 1, height: '4px', background: 'var(--border)', borderRadius: '2px', position: 'relative', minWidth: '60px' }}>
                                   <div style={{
                                     position: 'absolute', top: '-2px',
@@ -738,7 +738,7 @@ export default function TradePlanner() {
                                     transform: 'translateX(-50%)',
                                   }} />
                                 </div>
-                                <span>{formatINR(row.high)}</span>
+                                <span style={{ color: 'var(--text)' }}>{formatINR(row.high)}</span>
                               </div>
                             </div>
                           )}
