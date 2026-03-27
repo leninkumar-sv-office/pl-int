@@ -16,6 +16,7 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
   const [submitting, setSubmitting] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
   const debounceRef = useRef(null);
 
   // Debounced search: when symbol changes, search after 200ms pause
@@ -54,10 +55,34 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [form.symbol, form.exchange]);
 
+  // Reset highlight when suggestions change
+  useEffect(() => { setHighlightIdx(-1); }, [suggestions]);
+
   const selectSuggestion = (s) => {
     setForm(prev => ({ ...prev, symbol: s.symbol, name: s.name, exchange: s.exchange || prev.exchange }));
     setSuggestions([]);
     setShowSuggestions(false);
+    setHighlightIdx(-1);
+  };
+
+  const handleSymbolKeyDown = (e) => {
+    if (!showSuggestions || suggestions.length === 0) {
+      if (e.key === 'Escape') { setSuggestions([]); setShowSuggestions(false); }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIdx(prev => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIdx(prev => (prev - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Enter' && highlightIdx >= 0) {
+      e.preventDefault();
+      selectSuggestion(suggestions[highlightIdx]);
+    } else if (e.key === 'Escape') {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -95,7 +120,7 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
                 value={form.symbol}
                 onChange={handleChange}
                 onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                onKeyDown={(e) => { if (e.key === 'Escape') { setSuggestions([]); setShowSuggestions(false); } }}
+                onKeyDown={handleSymbolKeyDown}
                 placeholder="Type to search (e.g. LG, TRIVE)"
                 required
                 autoFocus
@@ -111,13 +136,13 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
                   {suggestions.map((s, i) => (
                     <div key={i}
                       onClick={() => selectSuggestion(s)}
+                      onMouseEnter={() => setHighlightIdx(i)}
                       style={{
                         padding: '8px 12px', cursor: 'pointer', fontSize: '12px',
                         borderBottom: '1px solid var(--border)',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        background: i === highlightIdx ? 'rgba(59,130,246,0.15)' : 'transparent',
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     >
                       <span><strong>{s.symbol}</strong> <span style={{ color: 'var(--text-muted)' }}>{s.name}</span></span>
                       <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{s.exchange}</span>

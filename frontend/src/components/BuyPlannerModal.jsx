@@ -61,6 +61,7 @@ export default function TradePlanner() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [searchHighlight, setSearchHighlight] = useState(-1);
   const [searching, setSearching] = useState(false);
   const [fetchingPrice, setFetchingPrice] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -235,7 +236,9 @@ export default function TradePlanner() {
     }, 400);
   }, [rows]);
 
-  const clearSearch = () => { setSearchQuery(''); setSearchResults([]); };
+  const clearSearch = () => { setSearchQuery(''); setSearchResults([]); setSearchHighlight(-1); };
+
+  useEffect(() => { setSearchHighlight(-1); }, [searchResults]);
 
   const handleAddStock = async (result) => {
     setFetchingPrice(result.symbol);
@@ -486,7 +489,12 @@ export default function TradePlanner() {
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: '12px' }}>
           <input ref={searchInputRef} type="text" value={searchQuery} onChange={handleSearchChange}
-            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); clearSearch(); } }}
+            onKeyDown={e => {
+              if (e.key === 'Escape') { e.stopPropagation(); clearSearch(); }
+              else if (e.key === 'ArrowDown' && searchResults.length > 0) { e.preventDefault(); setSearchHighlight(prev => (prev + 1) % searchResults.length); }
+              else if (e.key === 'ArrowUp' && searchResults.length > 0) { e.preventDefault(); setSearchHighlight(prev => (prev - 1 + searchResults.length) % searchResults.length); }
+              else if (e.key === 'Enter' && searchHighlight >= 0 && searchResults[searchHighlight]) { e.preventDefault(); handleAddStock(searchResults[searchHighlight]); }
+            }}
             placeholder="Search / filter stocks or add new..."
             style={{ width: '100%', padding: '8px 32px 8px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
               borderRadius: '6px', color: 'var(--text)', fontSize: '13px', boxSizing: 'border-box' }}
@@ -502,11 +510,11 @@ export default function TradePlanner() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', marginBottom: '12px', maxHeight: '160px', overflowY: 'auto' }}>
             {fetchingPrice && <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>Fetching price for {fetchingPrice}...</div>}
             {searching && !fetchingPrice && <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>Searching...</div>}
-            {searchResults.map((r) => (
+            {searchResults.map((r, i) => (
               <div key={`${r.symbol}-${r.exchange}`} onClick={() => handleAddStock(r)}
-                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: '13px' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                onMouseEnter={() => setSearchHighlight(i)}
+                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: '13px',
+                  background: i === searchHighlight ? 'rgba(59,130,246,0.15)' : 'transparent' }}>
                 <span style={{ fontWeight: 600 }}>{r.symbol}</span>
                 <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>{r.name} · {r.exchange}</span>
                 <span style={{ float: 'right', fontSize: '11px', color: 'var(--green)' }}>+ Add</span>
