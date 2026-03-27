@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import useEscapeKey from '../hooks/useEscapeKey';
-import { lookupStockName } from '../services/api';
+import { lookupStockName, searchStock } from '../services/api';
 
 export default function AddStockModal({ onAdd, onClose, initialData }) {
   useEscapeKey(onClose);
@@ -14,49 +14,56 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
     notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
-  const [lookingUp, setLookingUp] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceRef = useRef(null);
 
-  // Debounced lookup: when symbol changes, fetch company name after 400ms pause
+  // Debounced search: when symbol changes, search after 200ms pause
   useEffect(() => {
-    const sym = form.symbol.trim().toUpperCase();
+    const sym = form.symbol.trim();
     if (!sym || sym.length < 2) {
+      setSuggestions([]);
       return;
     }
 
-    // Clear previous timer
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(async () => {
-      setLookingUp(true);
       try {
-        const result = await lookupStockName(sym, form.exchange);
-        if (result.name) {
-          setForm(prev => {
-            // Only update if symbol still matches (user may have typed more)
-            if (prev.symbol.trim().toUpperCase() === sym) {
-              return { ...prev, name: result.name };
-            }
-            return prev;
+        const results = await searchStock(sym, form.exchange);
+        if (Array.isArray(results)) {
+          // Sort: exact symbol match first, then starts-with symbol, then name matches
+          const q = sym.toUpperCase();
+          results.sort((a, b) => {
+            const aExact = a.symbol === q ? 0 : 1;
+            const bExact = b.symbol === q ? 0 : 1;
+            if (aExact !== bExact) return aExact - bExact;
+            const aStarts = a.symbol.startsWith(q) ? 0 : 1;
+            const bStarts = b.symbol.startsWith(q) ? 0 : 1;
+            if (aStarts !== bStarts) return aStarts - bStarts;
+            return a.symbol.localeCompare(b.symbol);
           });
+          setSuggestions(results.slice(0, 15));
+          setShowSuggestions(true);
         }
       } catch {
-        // Silently ignore lookup errors
-      } finally {
-        setLookingUp(false);
+        setSuggestions([]);
       }
-    }, 400);
+    }, 200);
 
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [form.symbol, form.exchange]);
+
+  const selectSuggestion = (s) => {
+    setForm(prev => ({ ...prev, symbol: s.symbol, name: s.name, exchange: s.exchange || prev.exchange }));
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'symbol') {
-      // Clear name when symbol changes so it gets re-fetched
-      setForm(prev => ({ ...prev, symbol: value, name: '' }));
+      setForm(prev => ({ ...prev, symbol: value.toUpperCase(), name: '' }));
     } else {
       setForm(prev => ({ ...prev, [name]: value }));
     }
@@ -81,16 +88,43 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
         <h2>Add Stock to Portfolio</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-row">
-            <div className="form-group">
+            <div className="form-group" style={{ position: 'relative' }}>
               <label>Stock Symbol *</label>
               <input
                 name="symbol"
                 value={form.symbol}
                 onChange={handleChange}
-                placeholder="e.g. RELIANCE"
+                onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setSuggestions([]); setShowSuggestions(false); } }}
+                placeholder="Type to search (e.g. LG, TRIVE)"
                 required
                 autoFocus
+                autoComplete="off"
               />
+              {showSuggestions && suggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                }}>
+                  {suggestions.map((s, i) => (
+                    <div key={i}
+                      onClick={() => selectSuggestion(s)}
+                      style={{
+                        padding: '8px 12px', cursor: 'pointer', fontSize: '12px',
+                        borderBottom: '1px solid var(--border)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span><strong>{s.symbol}</strong> <span style={{ color: 'var(--text-muted)' }}>{s.name}</span></span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{s.exchange}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>Exchange</label>
@@ -104,9 +138,9 @@ export default function AddStockModal({ onAdd, onClose, initialData }) {
           <div className="form-group">
             <label>
               Company Name
-              {lookingUp && (
+              {!form.name && form.symbol.length >= 2 && (
                 <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Looking up...
+                  Select from suggestions above
                 </span>
               )}
             </label>
