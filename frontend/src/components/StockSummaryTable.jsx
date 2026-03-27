@@ -2247,12 +2247,14 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
                         const sma = live?.sma_200;
                         const isBelow = sma && currentPrice && currentPrice < sma;
                         if (!sma) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>;
-                        if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>Above</span>;
-                        if (days === 0 && isBelow) return <span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>Below</span>;
-                        if (days <= 65) return <span style={{ fontSize: '12px' }}>{days}d</span>;
+                        const pct = ((currentPrice - sma) / sma * 100);
+                        if (days === 0 && !isBelow) return <span style={{ color: 'var(--green)', fontSize: '11px' }}>+{pct.toFixed(1)}%</span>;
+                        if (days === 0 && isBelow) return <span style={{ fontSize: '11px', color: 'var(--yellow, #f0ad4e)' }}>{pct.toFixed(1)}%</span>;
+                        const pctStr = `${pct.toFixed(1)}%`;
+                        if (days <= 65) return <div><span style={{ fontSize: '12px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{days}d below</div></div>;
                         const months = Math.round(days / 30 * 10) / 10;
-                        if (days <= 130) return <span style={{ fontSize: '12px', color: 'var(--yellow, #f0ad4e)' }}>~{months.toFixed(0)}m</span>;
-                        return <span style={{ fontSize: '12px', color: 'var(--red)' }}>~{months.toFixed(0)}m 🔴</span>;
+                        if (days <= 130) return <div><span style={{ fontSize: '12px', color: 'var(--yellow, #f0ad4e)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--yellow, #f0ad4e)' }}>~{months.toFixed(0)}m below</div></div>;
+                        return <div><span style={{ fontSize: '12px', color: 'var(--red)' }}>{pctStr}</span><div style={{ fontSize: '9px', color: 'var(--red)' }}>~{months.toFixed(0)}m below 🔴</div></div>;
                       })()}
                     </td>}
 
