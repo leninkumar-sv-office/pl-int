@@ -18,7 +18,12 @@ permissions:
   contents: write
 
 jobs:
+  # Run tests first (backend + frontend in parallel within single job)
+  tests:
+    uses: ./.github/workflows/test.yml
+
   tag:
+    needs: tests
     runs-on: self-hosted
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
