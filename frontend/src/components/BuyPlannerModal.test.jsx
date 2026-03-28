@@ -6,6 +6,8 @@ vi.mock('../services/api', () => ({
   fetchStockPrice: vi.fn().mockResolvedValue({ current_price: 100 }),
   getStockSummary: vi.fn().mockResolvedValue([]),
   getStockHistory: vi.fn().mockResolvedValue({ data: [] }),
+  getUserSettings: vi.fn().mockResolvedValue({}),
+  saveUserSettings: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('html2canvas', () => ({

@@ -4,6 +4,8 @@ import StockSummaryTable from './StockSummaryTable';
 
 vi.mock('../services/api', () => ({
   getStockHistory: vi.fn().mockResolvedValue([]),
+  getUserSettings: vi.fn().mockResolvedValue({}),
+  saveUserSettings: vi.fn().mockResolvedValue({}),
 }));
 
 // portfolio is an array of HoldingWithLive objects: { holding: {...}, ... }
