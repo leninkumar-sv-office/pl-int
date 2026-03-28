@@ -1608,6 +1608,17 @@ def get_stock_summary():
     return result
 
 
+@app.get("/api/portfolio/stock-summary/{symbol}")
+def get_stock_summary_single(symbol: str):
+    """Get stock summary for a SINGLE symbol. Lightweight alternative to the full list."""
+    sym = symbol.upper()
+    all_items = get_stock_summary()
+    for item in all_items:
+        if item.symbol == sym:
+            return item
+    raise HTTPException(status_code=404, detail=f"Stock {sym} not found in portfolio")
+
+
 # ══════════════════════════════════════════════════════════
 #  DIAGNOSTICS
 # ══════════════════════════════════════════════════════════
