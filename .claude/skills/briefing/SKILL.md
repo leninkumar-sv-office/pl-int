@@ -1,292 +1,310 @@
 ---
 name: briefing
-description: Generate a comprehensive, detailed market briefing from Business Line, The Hindu, and Google News. Use when user asks for market news, daily briefing, stock recommendations, or financial analysis.
+description: Generate a comprehensive, detailed market briefing from Business Line, The Hindu, Moneycontrol, and Google News. Use when user asks for market news, daily briefing, stock recommendations, 52-week low screening, or financial analysis.
 user_invocable: true
 ---
 
 # Daily Market Briefing
 
-Generate a comprehensive, detailed market briefing from the past 7 days of Business Line + The Hindu + Google News articles. Focus on today's actionable items but include context from the week.
+Generate a comprehensive market briefing from the past 7 days of Business Line + The Hindu + Moneycontrol + Google News articles.
+
+**Key output: An actionable stock report with buy/sell recommendations, 52-week low screening, broker calls, and per-stock deep analysis — all in clean, non-overlapping sections.**
+
+**IMPORTANT: The entire briefing MUST be displayed as your text response in the terminal.** The user reads the briefing in their terminal — do NOT hide content behind "see the saved file" or output a summary instead of the full report. The HTML file saved at the end is just a copy for later reference.
 
 ## Steps
 
-### Authentication
+### 1. Authentication
 
-1. **Generate auth token** — The API requires authentication:
-   ```bash
-   cd /Users/lenin/Desktop/workspace/pl/backend && python3 -c "
-   from app.auth import create_session_token, ALLOWED_EMAILS
-   email = ALLOWED_EMAILS[0] if ALLOWED_EMAILS else 'admin@local'
-   token = create_session_token(email, 'CLI')
-   print(token)
-   "
-   ```
-   Use this token as `Authorization: Bearer <token>` header on ALL API calls below.
+Generate auth token from the DOCKER container (port 9999):
+```bash
+docker exec pl-dashboard python3 -c "
+import sys
+sys.path.insert(0, '/app/backend')
+from app.auth import create_session_token, ALLOWED_EMAILS
+email = ALLOWED_EMAILS[0] if ALLOWED_EMAILS else 'admin@local'
+token = create_session_token(email, 'CLI')
+print(token)
+"
+```
+Use as `Authorization: Bearer <token>` on ALL API calls to `localhost:9999`.
 
-### Data Fetching
+### 2. Data Fetching (run all in parallel)
 
-2. **Fetch articles** from the backend (past 7 days from all sources):
-   ```bash
-   curl -s http://localhost:9999/api/advisor/articles -H "Authorization: Bearer $TOKEN"
-   ```
-   Returns a JSON array with fields: title, summary, body (up to 3000 chars), section, url, source ("Business Line", "The Hindu", or "Google News (SourceName)"), date (ISO format).
-   Articles span the past 7 days via RSS feeds + page scraping + Google News RSS search.
+```bash
+# Articles (past 7 days, all sources)
+curl -s http://localhost:9999/api/advisor/articles -H "Authorization: Bearer $TOKEN"
 
-3. If the articles list is empty or the backend is down, try refreshing first:
-   ```bash
-   curl -s -X POST http://localhost:9999/api/advisor/refresh -H "Authorization: Bearer $TOKEN"
-   ```
+# Portfolio holdings
+curl -s http://localhost:9999/api/portfolio/stock-summary -H "Authorization: Bearer $TOKEN"
 
-4. **Fetch portfolio holdings** for context:
-   ```bash
-   curl -s http://localhost:9999/api/portfolio/stock-summary -H "Authorization: Bearer $TOKEN"
-   ```
+# Advisor insights
+curl -s http://localhost:9999/api/advisor/insights -H "Authorization: Bearer $TOKEN"
 
-5. **Fetch advisor insights** (keyword-matched or AI-generated):
-   ```bash
-   curl -s http://localhost:9999/api/advisor/insights -H "Authorization: Bearer $TOKEN"
-   ```
+# Market ticker (GIFT Nifty, Sensex, Nifty, crude, gold, USDINR)
+curl -s http://localhost:9999/api/market-ticker -H "Authorization: Bearer $TOKEN"
+```
 
-6. **Fetch GIFT Nifty / market ticker data** for forecasting:
-   ```bash
-   curl -s http://localhost:9999/api/market-ticker -H "Authorization: Bearer $TOKEN"
-   ```
-   Returns tickers array with: key, label, price, change, change_pct, week_change_pct, month_change_pct. Includes GIFT Nifty, Sensex, Nifty50, crude oil, gold, silver, USDINR.
+If articles list is empty, refresh first: `curl -s -X POST http://localhost:9999/api/advisor/refresh -H "Authorization: Bearer $TOKEN"`
 
-### Stock Deep Research (for Portfolio Analysis section)
+### 3. Stock Technical Analysis
 
-7. **Fetch price history for EVERY stock** in the portfolio (both held and 0-unit):
-   For each stock from the stock-summary response, fetch 1-year history:
-   ```bash
-   curl -s "http://localhost:9999/api/stock/SYMBOL/history?exchange=NSE&period=1y" -H "Authorization: Bearer $TOKEN"
-   ```
-   This returns daily OHLCV candles. Use this to identify:
-   - 52-week high/low and where current price sits in that range
-   - Recent trend (last 1 month vs 3 months vs 6 months)
-   - Support/resistance levels from price action
-   - Volume trends (increasing/decreasing conviction)
-   - Whether the stock is in an uptrend, downtrend, or consolidation
+Fetch 1-year price history for EVERY portfolio stock (held + 0-unit watchlist):
+```bash
+curl -s "http://localhost:9999/api/stock/SYMBOL/history?exchange=NSE&period=1y" -H "Authorization: Bearer $TOKEN"
+```
+Compute from candles: 52-week high/low, % from low, 50-SMA, 200-SMA, RSI(14), trend direction.
 
-8. **Web search for EVERY stock** — For each stock in the portfolio, perform multiple web searches to gather comprehensive intelligence. This is the most critical step — do NOT skip or rush it:
+### 4. Deep Stock Research (parallel agents)
 
-   **Round 1 — Latest news & analyst views:**
-   ```
-   WebSearch: "{STOCK_NAME} NSE stock latest news analyst target price 2026"
-   ```
+Launch parallel Agent tool calls in batches of 10-12 stocks:
 
-   **Round 2 — Quarterly results & financials:**
-   ```
-   WebSearch: "{STOCK_NAME} quarterly results revenue profit margin Q3 Q4 FY2026"
-   ```
+- **Round 1**: `"{STOCK} NSE stock latest news analyst target price {year}"` — news + analyst views
+- **Round 2**: `"{STOCK} quarterly results revenue profit margin Q3 Q4 FY{year}"` — financials
+- **Round 3**: `"{STOCK} stock risks concerns downgrade sell {year}"` — bear case
 
-   **Round 3 — Risks & concerns:**
-   ```
-   WebSearch: "{STOCK_NAME} stock risks concerns downgrade sell 2026"
-   ```
+Also search for NEW opportunities:
+```
+"best stocks to buy India {month} {year} broker recommendations"
+"midcap largecap stocks 52 week low India {month} {year} value buy"
+"India defensive stocks {month} {year} analyst picks"
+```
 
-   **Round 4 — Sector outlook & competitive position:**
-   ```
-   WebSearch: "{STOCK_NAME} sector outlook competition market share India"
-   ```
+### 5. Article Analysis
 
-   For each stock, after gathering all search results, READ the most relevant articles (at least 2-3 per stock) using WebFetch to get full details — not just snippets.
+Read the BODY of every article. Extract: broker calls with target prices, stock-to-buy articles, F&O strategies, earnings results, FII/DII flows, policy changes, IPOs, 52-week low lists, deal amounts.
 
-9. **Iterative reasoning for each stock** — After gathering all data, reason through each stock's recommendation:
-   - **Iteration 1**: Form initial thesis based on price history + news + financials
-   - **Iteration 2**: Challenge the thesis — search for counter-arguments, bearish cases, risks you may have missed
-   - **Iteration 3**: Synthesize final recommendation with conviction level, incorporating all evidence
+### 6. Generate and Display Briefing
 
-   Do NOT finalize a recommendation until you have considered BOTH bull and bear cases. If your reasoning feels thin or unconvincing, do another search round. You must be convinced of your own explanation before writing it.
+Produce the briefing using the Output Format below. **Output the FULL briefing as your text response** — the user reads it directly in the terminal. Do NOT summarize, truncate, or say "see the HTML file for details." The terminal IS the primary reading experience.
 
-### Article Analysis
+**Write each section as a direct text response to the user.** The markdown you output to the terminal is the briefing.
 
-10. **Read the BODY of every article** — not just headlines. The `body` field contains actual article text. Extract:
-    - Specific investment amounts ("Apollo-led funds invest $500M in Adani Energy")
-    - Company names involved in deals, mergers, partnerships
-    - Negative news — lawsuits, frauds, earnings misses, downgrades
-    - Analyst recommendations with target prices
-    - Government policy changes with affected companies
-    - IPO details with subscription recommendations
-    - Earnings results with revenue/profit figures and YoY comparisons
-    - Management commentary and forward guidance
-    - Regulatory actions (SEBI, RBI, IRDAI, TRAI)
-    - Foreign investment flows (FII/DII daily and weekly figures)
+### 7. Save HTML (single file, synced to Drive)
 
-### Briefing Generation
+After outputting the full briefing to the terminal, save the same content as HTML:
+```bash
+curl -s -X POST http://localhost:9999/api/advisor/analysis-html \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"markdown\": \"<the full briefing markdown>\"}"
+```
+This saves to `dumps/temp/analysis/DD-MM-YY/HH_MMhrs.html` with full styling and syncs to Google Drive. Report the path and Drive sync status to the user.
 
-11. **Produce the briefing** using the Output Format below.
+**The HTML is a copy for later reference — the terminal output is the primary deliverable.**
 
-12. **Generate HTML** — After producing the briefing markdown, save it as a styled HTML file:
-    ```bash
-    curl -s -X POST http://localhost:9999/api/advisor/briefing-html \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $TOKEN" \
-      -d "{\"markdown\": \"<the full briefing markdown>\"}"
-    ```
-    Report the HTML file path to the user.
-
-13. **Generate analysis HTML** — Save an additional copy to the time-organized analysis directory and sync to Google Drive:
-    ```bash
-    curl -s -X POST http://localhost:9999/api/advisor/analysis-html \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $TOKEN" \
-      -d "{\"markdown\": \"<the full briefing markdown>\"}"
-    ```
-    This saves the HTML to `dumps/temp/analysis/DD-MM-YY/HH_MMhrs.html` (e.g., `dumps/temp/analysis/17-03-26/10_00hrs.html`) with full styling: dark theme, colored tables, dashboard metric cards, sector bars, and action cards. It also automatically syncs the file to Google Drive.
-    Report both the analysis HTML path and whether Drive sync succeeded.
+---
 
 ## Output Format
 
-Start with:
-> Sources: X articles from Business Line, Y articles from The Hindu, Z articles from Google News
+The briefing has **9 sections**, ordered from most urgent to reference material. Each section covers ONE topic — no duplication across sections.
+
+```
+> Sources: X from Business Line, Y from The Hindu, Z from Moneycontrol, W from Google News
 > Generated: YYYY-MM-DD HH:MM IST
+```
 
-### Market Overview
-Detailed bullets with context. Format: "**METRIC**: VALUE (CHANGE%) — context sentence."
-- **GIFT Nifty**: 23,718 (-0.9%) — trading at +79 pts premium to Nifty close, signaling a GAP UP opening. Premium has widened from +40 pts at Asian open, suggesting buying interest from global funds.
-- **Sensex**: VALUE (CHANGE%). **Nifty**: VALUE (CHANGE%). Include intraday high/low if available.
-- **Rupee**: VALUE vs USD. Include weekly trend. "Rupee at 83.42 (-0.15%), weakest in 3 weeks on dollar strength and crude spike."
-- **Brent Crude**: $XX.XX (CHANGE%). Impact on India: "Every $10 rise adds Rs.1.1L cr to import bill."
-- **Gold**: Rs.XX,XXX/10g (CHANGE%). Include MCX and international price.
-- **Top gainers**: 4-5 names with % and reason. "Tata Motors +4.2% (JLR strong Q4 deliveries), ONGC +3.1% (crude rally)"
-- **Top losers**: 4-5 names with % and reason.
-- **FII/DII flows**: Daily + weekly cumulative. "FII: -Rs.2,340 cr (net sellers 5th day). DII: +Rs.3,100 cr (absorbed selling)."
-- **Market breadth**: Advance/decline ratio if available.
+---
 
-### Actionable Stock Ideas
-| Stock | Signal | Action | Source | Detailed Analysis |
-|-------|--------|--------|--------|-------------------|
-- **Detailed Analysis column: 40-80 words.** Must explain the FULL reasoning chain — not just the catalyst but WHY it matters for this stock, HOW it impacts financials, WHAT the market is pricing in, and WHAT to do. Include: specific catalyst from articles, quantified financial impact (revenue/margin/EPS effect), analyst target prices with upside/downside %, holding value if in portfolio, entry/exit price levels, timeframe, key risk, and next catalyst date.
-  Example: "USFDA issued VAI classification for Andhra plant — removes key overhang that depressed valuation by ~15%. Plant contributes 22% of US revenue ($180M). With clearance, consensus EPS upgrades likely from Rs.42 to Rs.48. Holding Rs.1.57L at avg Rs.1,050. Consensus target Rs.1,400 (18% upside). Accumulate below Rs.1,180 in 2-3 tranches. Risk: FDA reinspection typically 6-12 months. Next catalyst: Q4 results April 25 where US business recovery should be visible."
-- Signal: BULLISH, BEARISH, NEUTRAL, BUY PUT, BOOK PROFIT, BREAKOUT, BREAKDOWN
-- Action: BUY, SELL, HOLD, ADD, TRIM, EXIT, AVOID, WATCH, SL@PRICE — always filled
-- Include ALL stocks mentioned in articles with recommendations
-- Group by conviction: HIGH conviction first, then MEDIUM, then LOW
+### SECTION 1: What To Do Today
 
-### Corporate Actions & Deals
-| WHO | WHAT | HOW MUCH | WHY IT MATTERS |
-|-----|------|----------|----------------|
-- **WHO**: Full entity names with relationship. "Apollo Global Management -> Adani Energy Solutions (via subsidiary)"
-- **WHAT**: Specific action with full context. "Issued secured notes to refinance existing debt on transmission unit. Replaces 9.5% bonds maturing 2025 with 7.8% notes due 2030."
-- **HOW MUCH**: Currency + amount + context. "$500M (Rs.4,150 cr at current rates). Represents 15% of Adani Energy's total debt."
-- **WHY IT MATTERS**: 25-50 words with full investor implication chain. "Signals institutional confidence in India power infra despite macro headwinds. Lower interest cost (9.5% → 7.8%) improves EBITDA margins by ~80bps and saves Rs.850 cr annually. Positive for Adani Green too as it validates the group's refinancing strategy. Watch for rating upgrade from Moody's."
+*The most actionable section — read this first. Every item has a specific price level.*
 
-### Negative News & Risks
-| WHAT | WHO | HOW BAD | ACTION |
-|------|-----|---------|--------|
-- **WHAT**: Full event description with context. "US initiates Section 301 trade investigation covering imports from 16 countries including India. Targets $150B+ in bilateral trade."
-- **WHO**: Name ALL affected companies and sectors. "Direct hit: Textiles (Welspun, Page Industries, KPR Mill), Auto (Tata Motors, Bajaj Auto exports), Steel (JSW, Tata Steel), Pharma (Sun, Dr Reddy's API exports)"
-- **HOW BAD**: Quantify with multiple metrics. "Potential 25% tariff on $30B Indian exports. Rs.3.6L cr fiscal hit. CAD could widen from 1.2% to 2% GDP. INR depreciation pressure to 84.5."
-- **ACTION**: Specific recommendation. "TRIM export-heavy holdings (Page, Welspun). WATCH Tata Motors for JLR UK exposure clarity. AVOID new positions in textile exporters until tariff rates announced (expected April 15)."
+**Immediate Actions:**
+- **[BUY]**: Stock @ price range, SL, target, 1-line reason
+- **[SELL/TRIM]**: Stock @ price, reason
+- **[WATCH]**: Stock — trigger condition
 
-### Sector Impacts
-Detailed paragraph per sector (5-8 sentences each). Each sector MUST include: (1) Direction verdict, (2) Primary catalyst with article source, (3) Quantified impact on sector financials, (4) Specific affected stocks with % changes, (5) How this connects to other sectors (chain effects), (6) Clear recommendation with price levels. Cover all relevant sectors:
+**This Week's Calendar:**
+| Date | Event | Stocks Affected | Expected Impact |
+|------|-------|----------------|-----------------|
 
-- **Oil & Energy**: Direction + catalyst + affected stocks + chain effects + recommendation. "BULLISH. Brent above $90 boosts upstream (ONGC +3%, Oil India +2.5%) but crushes downstream OMCs (BPCL -4%, HPCL -5%). Every $10/bbl rise adds Rs.15,000 cr to India's subsidy bill. Government may delay fuel price revision ahead of state elections — this means OMC under-recoveries could reach Rs.8/litre by Q1FY27. Chain effect: higher fuel → input cost inflation for paints (Asian Paints margin compression 200bps), logistics, and FMCG. Avoid OMCs; accumulate ONGC on dips below Rs.260."
-- **Banking & Finance**: NPA trends, credit growth, NIM outlook, rate cycle impact, specific bank performance, FPI flow impact on banking stocks.
-- **IT Services**: Deal wins, attrition, margin guidance, USD/INR impact, Accenture/peer results read-through, AI impact on demand.
-- **Pharma**: USFDA actions, API pricing, domestic formulation growth, patent expiries, rupee depreciation benefit quantified.
-- **Auto**: Monthly sales data, EV transition, commodity cost impact, export orders, specific OEM performance.
-- **Metals & Mining**: Global commodity prices, China demand, anti-dumping duties, domestic capacity, trade policy impact.
-- **Real Estate & Infra**: Project wins, order book, government capex trajectory, interest rate sensitivity, specific company orders.
-- **FMCG & Consumer**: Rural recovery, input cost inflation, volume vs value growth, crude-driven cost pressures.
-- **Insurance**: Regulatory changes, premium growth, claims ratio, investment income impact from market crash.
-- **Telecom**: ARPU trends, 5G rollout, spectrum costs, competitive dynamics.
+**Capital Deployment Plan:**
+```
+TRANCHE 1 (X%): Deploy now — list stocks
+TRANCHE 2 (X%): Deploy at [index level] — list stocks
+TRANCHE 3 (X%): Reserve for further dips
+```
 
-### MF / SIP / IPO
-| Item | Type | Detail | Recommendation |
-|------|------|--------|----------------|
-- **Detail**: 20-30 words with specific figures. "Parag Parikh Flexi Cap NAV Rs.72.34 (+1.2%). AUM crosses Rs.50,000 cr. Fund maintains 25% international allocation — hedges against INR weakness."
-- **Recommendation**: Specific action. "Continue SIP. Lump sum investors wait for Nifty correction below 22,000."
-- Cover: NFO launches, NAV milestones, category performance, SIP flow data, IPO listings and upcoming IPOs with subscription recommendations.
+---
 
-### Macro & Geopolitical
-Detailed bullets with chain-of-impact analysis:
-- **Crude Oil**: Price, trend, India-specific impact chain. "$92.27 (+2.3%). Iran tensions + OPEC cuts. India impact: OMC losses mount, subsidy bill rises Rs.15,000 cr, CAD widens. RBI may need to defend rupee via reserves."
-- **US Fed / Global rates**: Latest stance, market expectations, India spillover.
-- **China**: PMI data, property crisis, commodity demand impact on Indian metals.
-- **Geopolitical**: Wars, sanctions, trade disputes with specific India impact.
-- **Domestic macro**: GDP growth, IIP, CPI, PMI data with trend analysis.
-- **RBI**: Policy stance, liquidity management, forex reserves.
+### SECTION 2: Market Dashboard
 
-### Portfolio Impact
-| Stock | Current Value | 1D Change | Signal | Action | Detailed Analysis (50-80 words) |
-|-------|--------------|-----------|--------|--------|----------------------------------|
-- **Detailed Analysis**: Must include the FULL reasoning: (1) the specific catalyst from articles with source, (2) quantified financial impact on the company, (3) how it changes the investment thesis, (4) specific price levels for action, (5) what to watch for next, and (6) timeline.
-  Example: "Brent >$90 devastates refining margins — GRM dropped from $12 to $6/bbl in Q4 (BL). Singapore GRM benchmark confirms sustained compression. This wipes ~Rs.4,000 cr from annual EBITDA. Stock down 4% today, now at cost basis. Moody's flagged margin volatility in March report adding credit risk. TRIM 30% position if crude stays above $90 for 2 weeks — redeploy into upstream ONGC. Next catalyst: Q4 results April 25 where GRM guidance will be key."
-- ONLY stocks with news. List holdings with no news separately at the end.
-- Sort by action urgency: TRIM/EXIT first, then ADD, then HOLD, then WATCH.
-- Include current holding value, day change, and cumulative P&L.
+*All market numbers in one place. No stock-specific analysis here — just the scoreboard.*
 
-### Stock-by-Stock Deep Analysis Report
+| Indicator | Value | Day Change | Week Change | Month Change | Key Context |
+|-----------|-------|------------|-------------|--------------|-------------|
+| GIFT Nifty | | | | | Gap up/down signal |
+| Sensex | | | | | Consecutive weekly gains/losses |
+| Nifty 50 | | | | | |
+| Rupee/USD | | | | | vs all-time low |
+| Brent Crude | | | | | Impact on India |
+| Gold (MCX) | | | | | |
+| Silver (MCX) | | | | | |
+| 10Y G-Sec Yield | | | | | vs recent range |
+| Forex Reserves | | | | | Import cover days |
 
-This is the most important section. Cover EVERY stock from the portfolio (both currently held AND previously held with 0 units). For each stock, provide a deeply researched, multi-source analysis that you have verified through iterative reasoning.
+**Flows:**
+- FII: Daily / Weekly / Monthly cumulative (Rs Cr + $ equivalent)
+- DII: Daily / Weekly / Monthly cumulative
+- Consecutive selling/buying streak
 
-**Group stocks into three sections:**
+**Market Breadth:** Advances / Declines / Unchanged. Stocks at 52-week low count. Top 3 gainers + top 3 losers with % and reason.
 
-#### Currently Held Stocks (Qty > 0)
-#### Previously Held / Watchlist Stocks (Qty = 0)
-#### Stocks Worth Considering (from article research — not in portfolio but compelling)
+---
 
-**For EACH stock, provide ALL of the following:**
+### SECTION 3: Key Events & Macro Context
 
-| Field | Content |
-|-------|---------|
-| **Stock** | Name (Symbol) — Exchange |
-| **Current Price** | Rs.XXX (day change %) |
-| **Portfolio Position** | Qty held, Avg buy price, Current value, Unrealized P&L (%), Realized P&L from sold lots |
-| **Verdict** | **BUY** / **SELL** / **HOLD** / **ADD** / **TRIM** / **EXIT** / **ACCUMULATE** / **AVOID** / **RE-ENTER** (for 0-qty stocks) |
-| **Conviction** | HIGH / MEDIUM / LOW |
-| **Target Price** | Rs.XXX (X% upside/downside) — with timeframe |
-| **Stop Loss** | Rs.XXX (X% below current price) |
+*What happened this week and why it matters. Organized by theme, not by day.*
 
-**Detailed Analysis (150-300 words per stock, structured as follows):**
+For each major theme (geopolitical, policy, regulatory, global), write a **3-5 sentence paragraph** covering: what happened, who's affected, what to expect next.
 
-1. **Price Action & Technicals**: Where is the stock in its 52-week range? Recent trend (1m/3m/6m). Key support/resistance levels from the history data. Volume trend — is conviction building or fading? Any chart pattern (breakout, breakdown, consolidation, double bottom, etc.).
+Themes to always cover:
+- Geopolitical (wars, sanctions, trade)
+- Government policy (tax changes, duty changes, subsidies)
+- RBI / monetary policy
+- Global markets (US Fed, China, oil, currencies)
+- Regulatory (SEBI, RBI actions on specific companies)
 
-2. **Fundamental Story**: Latest quarterly results (revenue, profit, margins — YoY and QoQ). Forward guidance from management. EPS trend. Valuation — current PE vs historical PE vs sector PE. Debt/equity position. ROE/ROCE trajectory.
+---
 
-3. **News & Catalysts**: What are the latest developments from web search? Analyst upgrades/downgrades with specific target prices (cite the brokerage). Upcoming catalysts — earnings dates, AGM, product launches, regulatory decisions. Any corporate actions — splits, bonuses, buybacks, M&A.
+### SECTION 4: Broker Calls & Article Picks
 
-4. **Bull Case**: Why this stock could go up. Best-case scenario with quantified upside. What needs to go right.
+*Every analyst/broker recommendation extracted from this week's articles. Pure extraction — no editorializing.*
 
-5. **Bear Case**: Why this stock could go down. Worst-case scenario with quantified downside. Key risks — sector-specific, company-specific, macro. What could go wrong.
+| Stock | Call | Brokerage | Target | Stop Loss | Upside | Source Article |
+|-------|------|-----------|--------|-----------|--------|---------------|
 
-6. **Final Reasoning**: Synthesize bull vs bear. WHY you chose this verdict. What tipped the balance. How does this fit in the overall portfolio context (sector allocation, concentration risk). Compare with sector peers if relevant.
+Include: "Broker's call" articles, "Stock to buy today", "F&O Strategy", "Buy/sell/hold?" articles, analyst upgrades/downgrades with specific targets. One row per call.
 
-7. **Action Plan**: Specific executable instructions — at what price to buy/sell, how many tranches, what % of portfolio, what to watch as confirmation/invalidation of thesis. For 0-qty stocks: whether to re-enter and at what price. For held stocks: position sizing advice.
+---
 
-**CRITICAL RULES for this section:**
-- Do NOT provide shallow one-line verdicts. Each stock must have genuine analytical depth.
-- You MUST have searched for and read actual recent articles/analyst reports for each stock before writing. If your WebSearch returned thin results for a stock, try alternate search terms (company name vs ticker, include "NSE", try "moneycontrol", "screener.in", "trendlyne" in the query).
-- Challenge your own reasoning. If you think "BUY", force yourself to articulate the bear case. If you think "SELL", force yourself to articulate what could make you wrong.
-- Include SPECIFIC numbers: target prices from real analysts, actual quarterly figures, real PE ratios. Do not make up numbers.
-- For 0-qty (previously sold) stocks: analyze whether the reason you sold still holds. Has anything changed that warrants re-entry? What price would make it attractive again?
-- Cross-reference with the news articles already fetched — connect company-specific analysis with macro/sector themes from the briefing.
-- Sort within each group by conviction (HIGH first) then by action urgency (SELL/EXIT/TRIM before BUY/ADD/HOLD).
+### SECTION 5: Buy & Sell Recommendations
 
-### Weekly Trends
-Since articles span 7 days, identify emerging patterns:
-- Stocks with 3+ articles in the week (building momentum or trouble)
-- Sectors with shifting sentiment (was bearish, now turning)
-- Regulatory trends (multiple actions in same area)
-- FII/DII flow patterns over the week
+*Your synthesized recommendations combining technicals + fundamentals + news + broker calls. Grouped by conviction.*
 
-### Key Takeaway
-3-5 bullet points of what to DO today, not what happened:
-- **Immediate actions**: Stocks to buy/sell/trim TODAY with specific price levels
-- **This week**: What to watch for, upcoming events (earnings, policy, data releases)
-- **Risk management**: Position sizing advice, stop-loss levels, hedge suggestions
+#### HIGHEST CONVICTION
+| # | Stock | CMP | Entry Zone | Target (Source) | Upside | Stop Loss | Catalyst | Key Risk |
+|---|-------|-----|------------|-----------------|--------|-----------|----------|----------|
+
+#### HIGH CONVICTION
+Same table.
+
+#### MEDIUM CONVICTION
+Same table.
+
+#### SPECULATIVE
+Same table.
+
+#### SELL / TRIM / AVOID
+| # | Stock | CMP | Action | Reason |
+|---|-------|-----|--------|--------|
+
+*Every stock from Sections 4 + 8 should map to a conviction tier here. This is the master recommendation list.*
+
+---
+
+### SECTION 6: 52-Week Low Screener
+
+*Exhaustive list of stocks near 52-week lows from portfolio + articles + web searches.*
+
+#### LARGECAP (Market Cap > Rs.50,000 Cr)
+| # | Stock | CMP | 52W Low | 52W High | % From Low | RSI | Trend | Analyst View | Verdict |
+|---|-------|-----|---------|----------|------------|-----|-------|-------------|---------|
+
+#### MIDCAP (Rs.10,000 — Rs.50,000 Cr)
+Same table.
+
+#### SMALLCAP (< Rs.10,000 Cr)
+Same table.
+
+#### AVOID Despite Low
+| Stock | CMP | % From Low | Why Avoid |
+|-------|-----|------------|-----------|
+
+---
+
+### SECTION 7: Sector Analysis
+
+*One paragraph per sector (5-8 sentences). Include: what happened, key stocks affected, outlook, verdict.*
+
+Cover: Oil & Energy, Banking, IT Services, Pharma, Auto, Metals, Infra, FMCG, Insurance, Telecom, Defence, Renewables.
+
+End each sector paragraph with: **Sector verdict: OVERWEIGHT / NEUTRAL / UNDERWEIGHT**
+
+---
+
+### SECTION 8: Stock-by-Stock Deep Analysis
+
+*The longest section. Every portfolio stock + 10-15 new ideas. All per-stock info lives here — technicals, fundamentals, news, verdict. NOT duplicated elsewhere.*
+
+**Group into:**
+1. Currently Held Stocks (Qty > 0)
+2. Watchlist Stocks (Qty = 0) — top 20-25 most relevant
+3. New Stocks Worth Considering — at least 10-15 not in portfolio
+
+**For each stock, use this compact format:**
+
+**STOCK_NAME (SYMBOL)** — CMP: Rs.XXX | 52W: Rs.LOW — Rs.HIGH (X% from low) | RSI: XX | Trend: UP/DOWN/SIDE
+
+| Field | Value |
+|-------|-------|
+| Verdict | **BUY/SELL/HOLD/ADD/TRIM/AVOID** |
+| Conviction | HIGH / MEDIUM / LOW |
+| Target | Rs.XXX (X% upside) — Brokerage source |
+| Stop Loss | Rs.XXX |
+| Entry Plan | Tranche 1 at X, Tranche 2 at Y |
+
+**Analysis** (100-200 words covering):
+- Latest quarter: Revenue, PAT, margins (YoY)
+- Key news/catalyst this week
+- Bull case (quantified)
+- Bear case (quantified)
+- Why this verdict
+
+---
+
+### SECTION 9: Corporate Actions, IPOs & MF
+
+*Reference section for deals, IPOs, dividends, MF changes.*
+
+#### Deals & Corporate Actions
+| Company | Action | Amount | Date | Impact |
+|---------|--------|--------|------|--------|
+
+#### IPOs
+| Company | Size | Price Band | Subscription | Listing Date | Recommendation |
+|---------|------|-----------|--------------|-------------|----------------|
+
+#### Mutual Fund & SIP
+| Item | Detail | Recommendation |
+|------|--------|----------------|
+
+---
+
+## Section Rules (NO DUPLICATION)
+
+| Information | Lives in Section | NOT in |
+|------------|-----------------|--------|
+| Market index/currency/commodity numbers | 2 (Dashboard) | Anywhere else |
+| Macro events, policy, geopolitics | 3 (Events & Macro) | 2 or 7 |
+| Raw broker calls from articles | 4 (Broker Calls) | 5 or 8 |
+| Synthesized buy/sell recommendations | 5 (Recommendations) | 4 or 8 |
+| 52-week low screening tables | 6 (Screener) | 5 or 8 |
+| Sector-level analysis | 7 (Sectors) | 8 |
+| Per-stock deep analysis (technicals, fundamentals, verdict) | 8 (Deep Analysis) | 5, 6, or 7 |
+| Deals, IPOs, MF changes | 9 (Corporate Actions) | 3 or 8 |
+| Action items with price levels | 1 (What To Do) | Summary of 5 |
 
 ## Critical Guidelines
-- **DETAIL IS MANDATORY** — this is a comprehensive analytical briefing, NOT a dashboard. Include context, analysis, and reasoning.
+- **SINGLE PASS RULE**: Each fact appears in exactly ONE section. Cross-reference with "see Section X" if needed.
+- **DETAIL IS MANDATORY** — comprehensive analytical briefing, NOT a dashboard
+- **52-WEEK LOW SCREENING IS MANDATORY** — exhaustive list across all cap sizes
+- **NEW STOCK RECOMMENDATIONS ARE MANDATORY** — at least 10-15 new ideas beyond portfolio
+- **BROKER CALLS FROM ARTICLES ARE MANDATORY** — extract every BL/TH/MC broker recommendation
 - Read EVERY article body. Extract specific numbers, names, amounts, dates.
-- Cover ALL articles from ALL three sources (BL, TH, Google News)
-- Every stock/sector = clear verdict (BUY/SELL/HOLD/AVOID/WATCH) with reasoning
+- Every stock = clear verdict (BUY/SELL/HOLD/AVOID/WATCH) with reasoning
 - Connect dots across articles: crude up -> OMC margins down -> ONGC up -> paints input cost up
-- Flag urgent items with **[ACTION TODAY]** and include specific price levels
-- **GIFT Nifty is mandatory** as first Market Overview indicator
-- Include source attribution: "(BL)", "(TH)", "(GN-ET)", "(GN-Mint)" after each insight
+- Include source attribution: "(BL)", "(TH)", "(MC)", "(GN-ET)" after each insight
 - Quantify everything: Rs. amounts, % changes, target prices, timeframes
-- Portfolio impact section must map EVERY article with portfolio relevance to specific holdings
-- **Stock Deep Analysis is the highest-effort section** — spend the most time here. Every stock must have web-searched evidence, price history analysis, and multi-iteration reasoning. Do not shortcut this section. If you have 50 stocks, analyze all 50. Use parallel WebSearch calls where possible to save time, but do not sacrifice depth for speed.
+- Use parallel Agent tool calls to research stocks in batches of 10-12 for speed

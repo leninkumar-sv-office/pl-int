@@ -669,9 +669,16 @@ def add_stock(req: AddStockRequest):
     """Add a new stock — inserts a Buy row in the stock's xlsx."""
     # Auto-fetch name if not provided
     name = req.name
+    sym_upper = req.symbol.upper()
+    if not name or name == sym_upper:
+        # Try Zerodha instrument cache first (has proper company names)
+        name = zerodha_service.lookup_instrument_name(sym_upper, req.exchange.upper())
+    if not name or name == sym_upper:
+        live = stock_service.fetch_live_data(sym_upper, req.exchange)
+        if live and live.name and live.name != sym_upper:
+            name = live.name
     if not name:
-        live = stock_service.fetch_live_data(req.symbol, req.exchange)
-        name = live.name if live else req.symbol.upper()
+        name = sym_upper
 
     holding = Holding(
         id="temp",
@@ -1400,6 +1407,12 @@ def get_stock_summary():
             sold_lots = sold_info["lots"]
             exchange = held_info["exchange"] if held_lots else sold_info["exchange"]
             name = held_info["name"] if held_lots else sold_info["name"]
+
+            # If name is just the symbol (no proper company name), resolve it
+            if not name or name == sym:
+                resolved = zerodha_service.lookup_instrument_name(sym, exchange)
+                if resolved:
+                    name = resolved
 
             total_held_qty = sum(h.quantity for h in held_lots)
             total_sold_qty = sum(s.quantity for s in sold_lots)
