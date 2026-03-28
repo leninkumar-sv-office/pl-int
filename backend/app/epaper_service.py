@@ -50,15 +50,11 @@ _TH_SECTIONS = [
     ("business", "TH-Business"),
 ]
 
-# Moneycontrol RSS feeds
+# Moneycontrol RSS feeds (only feeds that return 200 reliably)
 _MC_FEEDS = [
-    ("https://www.moneycontrol.com/rss/marketreports.xml", "MC-Markets"),
-    ("https://www.moneycontrol.com/rss/results.xml", "MC-Results"),
-    ("https://www.moneycontrol.com/rss/economy.xml", "MC-Economy"),
-    ("https://www.moneycontrol.com/rss/stocksinnews.xml", "MC-Stocks"),
-    ("https://www.moneycontrol.com/rss/business.xml", "MC-Business"),
-    ("https://www.moneycontrol.com/rss/mf.xml", "MC-MutualFunds"),
-    ("https://www.moneycontrol.com/rss/techanaly.xml", "MC-TechAnalysis"),
+    ("https://www.moneycontrol.com/rss/latestnews.xml", "MC-Latest"),
+    ("https://www.moneycontrol.com/rss/MCtopnews.xml", "MC-TopNews"),
+    ("https://www.moneycontrol.com/rss/internationalmarkets.xml", "MC-Global"),
 ]
 
 # Google News search queries for Indian financial news
