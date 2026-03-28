@@ -201,6 +201,40 @@ export default function TradePlanner() {
         break;
       }
       case 'rsi': av = a.rsi ?? -1; bv = b.rsi ?? -1; break;
+      case 'buyQty': av = parseInt(a.buyQty) || 0; bv = parseInt(b.buyQty) || 0; break;
+      case 'sellQty': {
+        av = (parseInt(a.ltSellQty) || 0) + (parseInt(a.stSellQty) || 0);
+        bv = (parseInt(b.ltSellQty) || 0) + (parseInt(b.stSellQty) || 0);
+        break;
+      }
+      case 'ltSellQty': av = parseInt(a.ltSellQty) || 0; bv = parseInt(b.ltSellQty) || 0; break;
+      case 'stSellQty': av = parseInt(a.stSellQty) || 0; bv = parseInt(b.stSellQty) || 0; break;
+      case 'estAmount': {
+        const aBq = parseInt(a.buyQty) || 0, aSq = (parseInt(a.ltSellQty) || 0) + (parseInt(a.stSellQty) || 0);
+        const bBq = parseInt(b.buyQty) || 0, bSq = (parseInt(b.ltSellQty) || 0) + (parseInt(b.stSellQty) || 0);
+        av = (aSq * (a.current || 0)) - (aBq * (a.current || 0));
+        bv = (bSq * (b.current || 0)) - (bBq * (b.current || 0));
+        break;
+      }
+      case 'ltPl': {
+        const aLt = parseInt(a.ltSellQty) || 0, bLt = parseInt(b.ltSellQty) || 0;
+        av = aLt > 0 && a.avgBuy > 0 ? ((a.current || 0) - a.avgBuy) * aLt : 0;
+        bv = bLt > 0 && b.avgBuy > 0 ? ((b.current || 0) - b.avgBuy) * bLt : 0;
+        break;
+      }
+      case 'stPl': {
+        const aSt = parseInt(a.stSellQty) || 0, bSt = parseInt(b.stSellQty) || 0;
+        av = aSt > 0 && a.avgBuy > 0 ? ((a.current || 0) - a.avgBuy) * aSt : 0;
+        bv = bSt > 0 && b.avgBuy > 0 ? ((b.current || 0) - b.avgBuy) * bSt : 0;
+        break;
+      }
+      case 'totalPl': {
+        const aTs = (parseInt(a.ltSellQty) || 0) + (parseInt(a.stSellQty) || 0);
+        const bTs = (parseInt(b.ltSellQty) || 0) + (parseInt(b.stSellQty) || 0);
+        av = aTs > 0 && a.avgBuy > 0 ? ((a.current || 0) - a.avgBuy) * aTs : 0;
+        bv = bTs > 0 && b.avgBuy > 0 ? ((b.current || 0) - b.avgBuy) * bTs : 0;
+        break;
+      }
       default: av = a.symbol; bv = b.symbol;
     }
     if (typeof av === 'string') {
@@ -533,14 +567,14 @@ export default function TradePlanner() {
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('week_52_high')}>52W High<SortIcon field="week_52_high" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('signal')} title="Signal (SMA-based trend): Strong Bull, Weak Bull, Weak Bear, Strong Bear">Signal<SortIcon field="signal" /></th>
               <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('rsi')} title="RSI (14-day): <30 Oversold, 30-70 Neutral, >70 Overbought">RSI<SortIcon field="rsi" /></th>
-              <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Buy Qty</th>
-              <th style={{ ...thStyle, textAlign: 'right', width: '80px' }}>Sell Qty</th>
-              <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>LT</th>
-              <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>ST</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Est. Amount</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>LT P&L</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>ST P&L</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Total P&L</th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '80px', cursor: 'pointer' }} onClick={() => handleSort('buyQty')}>Buy Qty<SortIcon field="buyQty" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '80px', cursor: 'pointer' }} onClick={() => handleSort('sellQty')}>Sell Qty<SortIcon field="sellQty" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '60px', cursor: 'pointer' }} onClick={() => handleSort('ltSellQty')}>LT<SortIcon field="ltSellQty" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', width: '60px', cursor: 'pointer' }} onClick={() => handleSort('stSellQty')}>ST<SortIcon field="stSellQty" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('estAmount')}>Est. Amount<SortIcon field="estAmount" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('ltPl')}>LT P&L<SortIcon field="ltPl" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('stPl')}>ST P&L<SortIcon field="stPl" /></th>
+              <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('totalPl')}>Total P&L<SortIcon field="totalPl" /></th>
               <th style={{ ...thStyle, width: '28px' }}></th>
             </tr>
           </thead>
