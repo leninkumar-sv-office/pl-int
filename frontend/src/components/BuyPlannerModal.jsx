@@ -65,7 +65,7 @@ export default function TradePlanner() {
   const [searching, setSearching] = useState(false);
   const [fetchingPrice, setFetchingPrice] = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [sortField, setSortField] = useState('week_52_low');
+  const [sortField, setSortField] = useState('week_52_high');
   const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null); // "SYMBOL.EXCHANGE" or null
   const [chartPeriod, setChartPeriod] = useState('1y');
