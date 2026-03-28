@@ -4,9 +4,9 @@ description: Add comprehensive tests for new or changed code, ensuring CI/CD tes
 user_invocable: true
 ---
 
-# Include Tests
+# Include Tests — STRICT 100% COVERAGE
 
-Add tests for recently changed code, run them locally, and verify CI/CD passes.
+Add tests for recently changed code. **Target: 100% line coverage for all application code.**
 
 ## Prerequisites
 
@@ -17,41 +17,47 @@ git diff HEAD --stat
 git diff HEAD --name-only
 ```
 
-## Step 1: Identify Untested Code
-
-Check which components/modules were changed and need tests:
+## Step 1: Measure Current Coverage
 
 ```bash
-# Backend: list all modules vs test files
-ls backend/app/*.py | sed 's|backend/app/||;s|\.py||' | sort > /tmp/modules.txt
-ls backend/tests/unit/test_*.py backend/tests/integration/test_*.py 2>/dev/null | sed 's|.*/test_||;s|\.py||' | sort > /tmp/tested.txt
-comm -23 /tmp/modules.txt /tmp/tested.txt
+# Backend coverage
+cd backend && source venv/bin/activate
+AUTH_MODE=local python -m pytest tests/ --cov=app --cov-report=term-missing --tb=short -q
 
-# Frontend: list all components vs test files
-ls frontend/src/components/*.jsx | grep -v '.test.' | sed 's|.*/||;s|\.jsx||' | sort > /tmp/components.txt
-ls frontend/src/components/*.test.jsx 2>/dev/null | sed 's|.*/||;s|\.test\.jsx||' | sort > /tmp/tested_fe.txt
-comm -23 /tmp/components.txt /tmp/tested_fe.txt
+# Frontend coverage (install coverage dep if missing)
+cd frontend
+npm install @vitest/coverage-v8 --save-dev --silent 2>/dev/null
+npx vitest run --coverage --reporter=verbose
 ```
 
-## Step 2: Write Tests
+**Record the current coverage percentage.** Goal is 100%.
+
+## Step 2: Identify Uncovered Code
+
+From the coverage report, identify modules/files with <100% coverage:
+- Look at the "Missing" column — those are uncovered line numbers
+- Prioritize: business logic > API endpoints > parsers > external services
+- For external services (Zerodha, Drive, epaper), mock the external calls and test the internal logic
+
+## Step 3: Write Tests
 
 ### Backend Test Standards
 - Location: `backend/tests/unit/test_<module>.py` or `backend/tests/integration/test_api_<feature>.py`
 - Framework: pytest + pytest-asyncio + pytest-cov
-- Use existing fixtures from `backend/tests/conftest.py` (app_client, tmp_data_dir, tmp_dumps_dir, auth_token, sample_stock_xlsx)
-- Mock all external services (Zerodha, Google Drive, stock prices)
-- Test both success and error paths
-- Validate model constraints (Pydantic validation errors)
-- **Minimum 5 test cases per module**
+- Use existing fixtures from `backend/tests/conftest.py`
+- **Mock ALL external services** (Zerodha, Google Drive, stock prices, HTTP calls)
+- Test EVERY code path: success, error, edge cases, validation
+- Test EVERY function/method in the module
+- **Minimum: every line must be covered**
 - Read existing test files first to match patterns
 
 ### Frontend Test Standards
 - Location: `frontend/src/components/ComponentName.test.jsx`
-- Framework: Vitest + @testing-library/react
-- Use existing utilities from `frontend/src/test/utils.js` (renderComponent, setupAuth, mockStockData, mockMFData)
+- Framework: Vitest + @testing-library/react + @vitest/coverage-v8
+- Use existing utilities from `frontend/src/test/utils.js`
 - Mock API calls with `vi.mock('../services/api')`
 - Test: renders, content, form inputs, button clicks, callbacks, edge cases
-- **Minimum 5 test cases per component**
+- **Every component must have a test file with full coverage**
 - Read existing test files first to match patterns
 
 ### Quality Standards
@@ -60,92 +66,87 @@ comm -23 /tmp/components.txt /tmp/tested_fe.txt
 - Handle async operations properly
 - Mock chart libraries (recharts, etc.) to avoid SVG issues in jsdom
 - Test loading states, empty states, error states
+- Test error handling paths (catch blocks, fallbacks)
 
-## Step 3: Run Tests Locally
-
-Run both suites **in parallel** to validate:
+## Step 4: Run Tests with Coverage Enforcement
 
 ```bash
-# Terminal 1: Backend (with parallel execution)
+# Backend — MUST be 100%
 cd backend && source venv/bin/activate
-pip install pytest-xdist --quiet
-AUTH_MODE=local python -m pytest tests/ -n auto --cov=app --cov-report=term -v --tb=short
+AUTH_MODE=local python -m pytest tests/ \
+  --cov=app \
+  --cov-report=term-missing \
+  --cov-fail-under=100 \
+  -v --tb=short
 
-# Terminal 2: Frontend (with parallel threads)
-cd frontend && npx vitest run --reporter=verbose --pool=threads
+# Frontend — MUST be 100%
+cd frontend
+npx vitest run --coverage --reporter=verbose
 ```
 
-**Both must show 0 failures before proceeding.**
+**Both must show 0 failures AND 100% coverage before proceeding.**
 
-## Step 4: Fix Failures
+## Step 5: Fix Coverage Gaps
 
-If tests fail:
-1. Read the error message carefully
-2. Check if it's a test bug or a code bug
-3. If test bug: fix the test (wrong mock, outdated assertion)
-4. If code bug: fix the code AND the test
-5. Re-run until 0 failures
+If coverage is <100%:
+1. Read the "Missing" lines from the coverage report
+2. Write tests that exercise those specific lines
+3. For hard-to-test code (external API calls), mock the dependency
+4. For unreachable code (dead code), remove it
+5. Re-run until 100%
 
-Common issues:
-- `DUMPS_BASE` patches: modules import from `app.config`, not directly. Patch `app.config.DUMPS_BASE` or the function that uses it
-- Pydantic `gt=0` vs `ge=0`: check if model constraints changed
-- Missing API mocks: new API functions need to be added to `vi.mock`
-- Chart rendering: mock `recharts` ResponsiveContainer in jsdom
+Common patterns for covering missed lines:
+- `except` blocks: trigger the exception in a test
+- `if/else` branches: test both branches
+- Early returns: test the condition that triggers the early return
+- External API calls: mock with `unittest.mock.patch`
+- File I/O: use `tmp_path` fixture
 
-## Step 5: Commit and Push
+## Step 6: Update CI/CD Coverage Enforcement
+
+The CI/CD pipeline MUST enforce 100% coverage. Update `test.yml`:
+
+```yaml
+# Backend: --cov-fail-under=100
+AUTH_MODE=local python -m pytest tests/ --cov=app --cov-fail-under=100
+
+# Frontend: coverage thresholds in vitest.config.js
+# coverage: { thresholds: { lines: 100, branches: 100, functions: 100 } }
+```
+
+## Step 7: Commit and Push
 
 ```bash
-git add backend/tests/ frontend/src/components/*.test.jsx backend/requirements.txt
-git commit -m "Add tests for <changed modules/components>
+git add backend/tests/ frontend/src/components/*.test.jsx
+git commit -m "Achieve 100% test coverage
 
-Backend: X new tests for <modules>
-Frontend: Y new tests for <components>
-All tests passing locally.
+Backend: X tests covering all modules
+Frontend: Y tests covering all components
+Coverage enforced in CI/CD at 100%.
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
 git push origin main
 ```
 
-## Step 6: Verify CI/CD
-
-Watch both workflows:
+## Step 8: Verify CI/CD
 
 ```bash
-# Tests workflow (backend + frontend run in PARALLEL)
 sleep 5
-gh run list -w "Tests" --limit 1 --json databaseId,status
-gh run watch <RUN_ID> --exit-status
-
-# Deploy workflow
-gh run list -w "Deploy" --limit 1 --json databaseId,status
-gh run watch <RUN_ID> --exit-status
+gh run watch $(gh run list --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
 ```
 
-**Both must pass.** If Tests fail in CI but pass locally:
-- Check if `pytest-xdist` causes fixture conflicts (thread safety)
-- Check if GitHub runner has different Python/Node versions
-- Read the CI logs: `gh run view <RUN_ID> --log-failed`
-
-## Step 7: Verify Rollback Works
-
-The deploy workflow already has rollback (`if: failure()`). Verify it's present:
-
-```bash
-grep -n "Rollback\|prev_tag" .github/workflows/deploy.yml
-```
-
-Should show the rollback step that:
-1. Stops the failed deployment
-2. Checks out the previous tag
-3. Rebuilds and deploys
-4. Verifies with health check
+**Pipeline must pass with 100% coverage.** If it fails:
+- Check `gh run view <RUN_ID> --log-failed`
+- Fix coverage gaps
+- Push again
 
 ## Key Rules
 
-- **100% component coverage** — every frontend component must have a test file
-- **Parallel execution** — backend uses `pytest-xdist -n auto`, frontend uses `vitest --pool=threads`
-- **CI/CD runs both in parallel** — `backend-tests` and `frontend-tests` are independent GitHub Actions jobs
-- **Never skip tests** — if a test is flaky, fix it, don't skip it
-- **Test behavior, not implementation** — assert what the user sees, not internal state
+- **100% line coverage is MANDATORY** — not 99%, not 95%, exactly 100%
+- **CI/CD enforces coverage** — pipeline fails if coverage drops below 100%
+- **No dead code** — if code can't be covered, remove it
+- **Mock external dependencies** — never skip coverage because "it calls an API"
+- **Parallel execution** — backend + frontend tests run in parallel in CI/CD
+- **Never skip tests** — if a test is flaky, fix it
 - **Read existing tests first** — match the patterns already in use
