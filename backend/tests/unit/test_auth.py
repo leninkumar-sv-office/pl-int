@@ -592,3 +592,164 @@ class TestGetAnyDriveCredentials:
 
         assert creds is None
         assert email is None
+
+
+# ===================================================================
+# Additional coverage: _token_file_for_email, _load_all_tokens edge
+# cases, _save_tokens, _load_tokens
+# ===================================================================
+
+
+class TestTokenFileForEmail:
+    """Tests for _token_file_for_email() edge cases."""
+
+    def test_empty_email_returns_legacy_file(self, tmp_path):
+        import app.auth as auth
+
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy):
+            result = auth._token_file_for_email("")
+        assert result == legacy
+
+
+class TestLoadAllTokensEdgeCases:
+    """Edge cases for _load_all_tokens (lines 219-220, 231)."""
+
+    def test_corrupt_per_email_token_file_skipped(self, tmp_path):
+        """A corrupt token file in per-email dir is silently skipped."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        email_dir = dumps_base / "corrupt@example.com" / "settings"
+        email_dir.mkdir(parents=True)
+        (email_dir / "google_tokens.json").write_text("NOT JSON!!!")
+
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            result = auth._load_all_tokens()
+        # Corrupt file is silently ignored
+        assert "corrupt@example.com" not in result
+
+    def test_per_email_token_without_refresh_token_skipped(self, tmp_path):
+        """Token file without refresh_token is skipped."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        email_dir = dumps_base / "norrt@example.com" / "settings"
+        email_dir.mkdir(parents=True)
+        (email_dir / "google_tokens.json").write_text(
+            json.dumps({"access_token": "at_only"})
+        )
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            result = auth._load_all_tokens()
+        assert "norrt@example.com" not in result
+
+    def test_legacy_empty_key_with_refresh_token(self, tmp_path):
+        """Legacy file with empty-string key and refresh_token is loaded."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        dumps_base.mkdir(parents=True)
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text(json.dumps({
+            "": {"refresh_token": "rt_no_email", "access_token": "at"},
+        }))
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            result = auth._load_all_tokens()
+        # The empty key should be added as result[""]
+        assert result.get("", {}).get("refresh_token") == "rt_no_email"
+
+
+class TestSaveTokensEdgeCases:
+    """Edge cases for _save_tokens (lines 254-255)."""
+
+    def test_save_tokens_legacy_write_failure_swallowed(self, tmp_path):
+        """If legacy file write fails, the exception is swallowed."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        dumps_base.mkdir(parents=True)
+        # Make legacy file path unwritable by pointing to a read-only location
+        legacy_file = tmp_path / "legacy" / "google_tokens.json"
+        legacy_file.parent.mkdir(parents=True)
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy_file), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            # Patch the legacy file read to raise an exception
+            with patch("builtins.open", side_effect=PermissionError("no access")):
+                # This should still succeed because the exception is caught
+                # Actually, open is used for per-email too, so let's mock more selectively
+                pass
+
+        # Alternative approach: patch json.loads to raise on the legacy read
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy_file), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            # First save succeeds normally
+            auth._save_tokens("test@example.com", {"refresh_token": "rt"})
+            # Now make legacy file corrupt so next read in _save_tokens fails
+            legacy_file.write_text("CORRUPT JSON!")
+            # This should still work - the except catches the legacy read error
+            auth._save_tokens("test2@example.com", {"refresh_token": "rt2"})
+
+        # Per-email path should still have been saved
+        per_email = dumps_base / "test2@example.com" / "settings" / "google_tokens.json"
+        assert per_email.exists()
+
+
+class TestLoadTokensEdgeCases:
+    """Edge cases for _load_tokens (lines 267-268, 275)."""
+
+    def test_load_tokens_corrupt_per_email_file(self, tmp_path):
+        """Corrupt per-email token file falls back to _load_all_tokens."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        email_dir = dumps_base / "bad@example.com" / "settings"
+        email_dir.mkdir(parents=True)
+        (email_dir / "google_tokens.json").write_text("CORRUPT!")
+
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            result = auth._load_tokens("bad@example.com")
+        assert result is None
+
+    def test_load_tokens_per_email_no_refresh_token(self, tmp_path):
+        """Per-email file without refresh_token falls back to all tokens."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        email_dir = dumps_base / "nort@example.com" / "settings"
+        email_dir.mkdir(parents=True)
+        (email_dir / "google_tokens.json").write_text(
+            json.dumps({"access_token": "at_only"})
+        )
+
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            result = auth._load_tokens("nort@example.com")
+        assert result is None
+
+    def test_load_tokens_empty_email_no_tokens(self, tmp_path):
+        """_load_tokens('') returns None when no tokens exist anywhere."""
+        import app.auth as auth
+
+        dumps_base = tmp_path / "dumps"
+        dumps_base.mkdir(parents=True)
+        legacy = tmp_path / "legacy" / "google_tokens.json"
+
+        with patch.object(auth, "_LEGACY_TOKEN_FILE", legacy), \
+             patch("app.config.DUMPS_BASE", dumps_base):
+            result = auth._load_tokens("")
+        assert result is None

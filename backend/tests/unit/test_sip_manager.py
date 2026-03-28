@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -247,3 +248,71 @@ def test_compute_next_sip_date_quarterly():
     )
     parsed = datetime.strptime(result, "%Y-%m-%d")
     assert parsed > today
+
+
+# ---------------------------------------------------------------------------
+# Tests — load_configs with corrupt/missing file (covers lines 36-37)
+# ---------------------------------------------------------------------------
+
+def test_load_configs_corrupt_json(tmp_path):
+    """load_configs returns [] when file contains invalid JSON."""
+    config_file = tmp_path / "sip_config.json"
+    config_file.write_text("NOT VALID JSON!!!")
+    mgr = SIPManager(config_file=config_file)
+    assert mgr.load_configs() == []
+
+
+def test_load_configs_file_deleted_after_init(tmp_path):
+    """load_configs returns [] when file is deleted after initialization."""
+    config_file = tmp_path / "sip_config.json"
+    mgr = SIPManager(config_file=config_file)
+    # File exists after init, delete it
+    config_file.unlink()
+    assert mgr.load_configs() == []
+
+
+# ---------------------------------------------------------------------------
+# Tests — _compute_next_sip_date edge cases
+# ---------------------------------------------------------------------------
+
+def test_compute_next_sip_date_quarterly_wraps_year():
+    """Quarterly from a future October: month+3=13 wraps to Jan next year."""
+    # Use a future date in October so ref.month = 10, next_month = 13 > 12
+    future_oct = datetime(datetime.now().year + 1, 10, 15)
+    result = SIPManager._compute_next_sip_date(
+        "quarterly", 10, future_oct.strftime("%Y-%m-%d")
+    )
+    parsed = datetime.strptime(result, "%Y-%m-%d")
+    assert parsed > future_oct
+    assert parsed.month == 1  # wrapped to January
+
+
+def test_compute_next_sip_date_quarterly_future_date():
+    """Quarterly from a future date beyond next quarter."""
+    result = SIPManager._compute_next_sip_date(
+        "quarterly", 10, (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
+    )
+    parsed = datetime.strptime(result, "%Y-%m-%d")
+    assert parsed > datetime.now()
+
+
+def test_compute_next_sip_date_monthly_wraps_december():
+    """Monthly from a future December wraps to January next year (lines 207-208)."""
+    # Use a future date in December so ref.month = 12
+    future_dec = datetime(datetime.now().year + 1, 12, 20)
+    result = SIPManager._compute_next_sip_date(
+        "monthly", 15, future_dec.strftime("%Y-%m-%d")
+    )
+    parsed = datetime.strptime(result, "%Y-%m-%d")
+    assert parsed > future_dec
+    assert parsed.month == 1  # wrapped to January
+    assert parsed.year == future_dec.year + 1
+
+
+def test_compute_next_sip_date_invalid_from_date():
+    """Invalid from_date falls back to datetime.now()."""
+    result = SIPManager._compute_next_sip_date(
+        "monthly", 15, "not-a-date"
+    )
+    parsed = datetime.strptime(result, "%Y-%m-%d")
+    assert parsed >= datetime.now()

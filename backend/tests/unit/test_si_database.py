@@ -208,3 +208,201 @@ def test_to_date_str():
     assert _to_date_str("2024-06-15") == "2024-06-15"
     assert _to_date_str(None) == ""
     assert _to_date_str("") == ""
+
+
+# ---------------------------------------------------------------------------
+# Tests — _sync_to_drive / _delete_from_drive (lines 40, 45-57)
+# ---------------------------------------------------------------------------
+
+def test_sync_to_drive_is_noop():
+    """_sync_to_drive is a no-op that should not raise."""
+    from app.si_database import _sync_to_drive
+    from pathlib import Path
+    _sync_to_drive(Path("/tmp/test.xlsx"))
+
+
+def test_delete_from_drive_handles_exception():
+    """_delete_from_drive swallows exceptions."""
+    from app.si_database import _delete_from_drive
+    from pathlib import Path
+    _delete_from_drive(Path("/nonexistent/path/file.xlsx"))
+
+
+# ---------------------------------------------------------------------------
+# Tests — _load with corrupt file (lines 125-127)
+# ---------------------------------------------------------------------------
+
+def test_load_corrupt_file(si_base_dir):
+    """_load returns [] when xlsx file is corrupt."""
+    from app.si_database import _load
+    si_dir = si_base_dir / "Standing Instructions"
+    si_file = si_dir / "Standing Instructions.xlsx"
+    si_file.write_text("NOT AN XLSX FILE")
+
+    items = _load(si_file)
+    assert items == []
+
+
+# ---------------------------------------------------------------------------
+# Tests — _load skips rows without id (line 138)
+# ---------------------------------------------------------------------------
+
+def test_load_skips_rows_without_id(si_base_dir):
+    """Rows in xlsx without an id in column A are skipped."""
+    import openpyxl
+    from app.si_database import _load, _HEADERS
+    si_dir = si_base_dir / "Standing Instructions"
+    si_file = si_dir / "Standing Instructions.xlsx"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Standing Instructions"
+    for i, h in enumerate(_HEADERS, 1):
+        ws.cell(1, i, h)
+    # Row 2: valid row
+    ws.cell(2, 1, "si001")
+    ws.cell(2, 2, "HDFC")
+    ws.cell(2, 3, "MF X")
+    ws.cell(2, 4, 5000)
+    # Row 3: missing id (None)
+    ws.cell(3, 1, None)
+    ws.cell(3, 2, "SBI")
+    wb.save(str(si_file))
+    wb.close()
+
+    items = _load(si_file)
+    assert len(items) == 1
+    assert items[0]["id"] == "si001"
+
+
+# ---------------------------------------------------------------------------
+# Tests — _save with invalid dates (lines 183-184, 187-188)
+# ---------------------------------------------------------------------------
+
+def test_save_with_invalid_dates(si_base_dir):
+    """_save handles invalid date strings gracefully."""
+    from app.si_database import _save, _load
+    si_dir = si_base_dir / "Standing Instructions"
+    si_file = si_dir / "Standing Instructions.xlsx"
+
+    items = [{
+        "id": "bad_dates",
+        "bank": "Test",
+        "beneficiary": "X",
+        "amount": 100,
+        "frequency": "Monthly",
+        "purpose": "SIP",
+        "mandate_type": "NACH",
+        "account_number": "",
+        "start_date": "not-a-date",
+        "expiry_date": "also-not-a-date",
+        "alert_days": 30,
+        "status": "Active",
+        "remarks": "",
+    }]
+    _save(items, si_dir, si_file)
+
+    loaded = _load(si_file)
+    assert len(loaded) == 1
+    assert loaded[0]["id"] == "bad_dates"
+
+
+# ---------------------------------------------------------------------------
+# Tests — get_all with invalid expiry_date (lines 213-214)
+# ---------------------------------------------------------------------------
+
+def test_get_all_invalid_expiry_date(si_base_dir):
+    """get_all handles invalid expiry_date by setting days_to_expiry=0."""
+    from app.si_database import _save, get_all
+    si_dir = si_base_dir / "Standing Instructions"
+    si_file = si_dir / "Standing Instructions.xlsx"
+    from datetime import datetime
+
+    items = [{
+        "id": "inv_exp",
+        "bank": "Test",
+        "beneficiary": "X",
+        "amount": 100,
+        "frequency": "Monthly",
+        "purpose": "SIP",
+        "mandate_type": "NACH",
+        "account_number": "",
+        "start_date": "2024-01-01",
+        "expiry_date": "bad-date",
+        "alert_days": 30,
+        "status": "Active",
+        "remarks": "",
+    }]
+    _save(items, si_dir, si_file)
+
+    result = get_all(base_dir=str(si_base_dir))
+    assert result[0]["days_to_expiry"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests — dashboard frequency variants (lines 232-237)
+# ---------------------------------------------------------------------------
+
+def test_dashboard_half_yearly_and_annual_outflow(si_base_dir):
+    """Dashboard normalizes Half-Yearly and Annual SIs to monthly equivalent."""
+    from app.si_database import add, get_dashboard
+    add({
+        "bank": "A",
+        "beneficiary": "X",
+        "amount": 6000,
+        "frequency": "Half-Yearly",
+        "start_date": "2024-01-01",
+        "expiry_date": "2027-01-01",
+    }, base_dir=str(si_base_dir))
+    add({
+        "bank": "B",
+        "beneficiary": "Y",
+        "amount": 12000,
+        "frequency": "Annually",
+        "start_date": "2024-01-01",
+        "expiry_date": "2027-01-01",
+    }, base_dir=str(si_base_dir))
+    add({
+        "bank": "C",
+        "beneficiary": "Z",
+        "amount": 500,
+        "frequency": "Weekly",  # unknown freq defaults to monthly
+        "start_date": "2024-01-01",
+        "expiry_date": "2027-01-01",
+    }, base_dir=str(si_base_dir))
+
+    dash = get_dashboard(base_dir=str(si_base_dir))
+    # Half-Yearly: 6000/6 = 1000; Annually: 12000/12 = 1000; Weekly(default): 500
+    assert dash["total_monthly_outflow"] == 2500.0
+
+
+# ---------------------------------------------------------------------------
+# Tests — dashboard expiring_soon (line 239-242)
+# ---------------------------------------------------------------------------
+
+def test_dashboard_expiring_soon(si_base_dir):
+    """Dashboard counts SIs expiring within alert_days."""
+    from app.si_database import _save, get_dashboard
+    from datetime import datetime, timedelta
+    si_dir = si_base_dir / "Standing Instructions"
+    si_file = si_dir / "Standing Instructions.xlsx"
+    soon = (datetime.now().date() + timedelta(days=15)).strftime("%Y-%m-%d")
+    items = [{
+        "id": "soon001",
+        "bank": "Test",
+        "beneficiary": "X",
+        "amount": 1000,
+        "frequency": "Monthly",
+        "purpose": "SIP",
+        "mandate_type": "NACH",
+        "account_number": "",
+        "start_date": "2020-01-01",
+        "expiry_date": soon,
+        "alert_days": 30,
+        "status": "Active",
+        "remarks": "",
+    }]
+    _save(items, si_dir, si_file)
+
+    dash = get_dashboard(base_dir=str(si_base_dir))
+    assert dash["expiring_soon"] == 1

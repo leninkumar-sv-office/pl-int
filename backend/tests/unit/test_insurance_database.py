@@ -227,3 +227,78 @@ def test_days_to_expiry_past(ins_base_dir):
     items = get_all(base_dir=str(ins_base_dir))
     # Past expiry gives negative days
     assert items[0]["days_to_expiry"] < 0
+
+
+# ---------------------------------------------------------------------------
+# Tests — _sync_to_drive / _delete_from_drive (no-ops, cover lines 28, 33-45)
+# ---------------------------------------------------------------------------
+
+def test_sync_to_drive_is_noop():
+    """_sync_to_drive is a no-op that should not raise."""
+    from app.insurance_database import _sync_to_drive
+    from pathlib import Path
+    _sync_to_drive(Path("/tmp/test.json"))  # should not raise
+
+
+def test_delete_from_drive_handles_exception():
+    """_delete_from_drive swallows exceptions from drive_service."""
+    from app.insurance_database import _delete_from_drive
+    from pathlib import Path
+    # Calling with a path that won't resolve relative to DUMPS_BASE
+    # should not raise — exception is caught
+    _delete_from_drive(Path("/nonexistent/path/file.json"))
+
+
+# ---------------------------------------------------------------------------
+# Tests — days_to_expiry invalid date (covers line 82-83)
+# ---------------------------------------------------------------------------
+
+def test_days_to_expiry_invalid_date(ins_base_dir):
+    """When expiry_date is invalid, days_to_expiry defaults to 0."""
+    from app.insurance_database import _load, _save
+    json_file = ins_base_dir / "insurance_policies.json"
+    # Write a policy with an invalid expiry_date directly
+    _save([{
+        "id": "inv001",
+        "policy_name": "Bad Date",
+        "provider": "Test",
+        "premium": 1000,
+        "coverage_amount": 100000,
+        "start_date": "2024-01-01",
+        "expiry_date": "not-a-date",
+        "payment_frequency": "Annual",
+        "status": "Active",
+        "remarks": "",
+    }], json_file)
+
+    from app.insurance_database import get_all
+    items = get_all(base_dir=str(ins_base_dir))
+    assert len(items) == 1
+    assert items[0]["days_to_expiry"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests — dashboard with expiring soon (covers line 101)
+# ---------------------------------------------------------------------------
+
+def test_dashboard_expiring_soon(ins_base_dir):
+    """Verify expiring_soon count when policy expires within 90 days."""
+    from app.insurance_database import _save, get_dashboard
+    from datetime import datetime, timedelta
+    json_file = ins_base_dir / "insurance_policies.json"
+    soon = (datetime.now().date() + timedelta(days=30)).strftime("%Y-%m-%d")
+    _save([{
+        "id": "soon001",
+        "policy_name": "Expiring Soon",
+        "provider": "Test",
+        "premium": 5000,
+        "coverage_amount": 100000,
+        "start_date": "2020-01-01",
+        "expiry_date": soon,
+        "payment_frequency": "Annual",
+        "status": "Active",
+        "remarks": "",
+    }], json_file)
+
+    dash = get_dashboard(base_dir=str(ins_base_dir))
+    assert dash["expiring_soon"] == 1

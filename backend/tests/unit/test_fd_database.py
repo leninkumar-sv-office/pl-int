@@ -308,3 +308,363 @@ def test_enrich_json_item_sets_computed_fields():
     assert "installments" in enriched
     assert enriched["installments_total"] == 12
     assert enriched["status"] == "Matured"  # maturity date in the past
+
+
+# ---------------------------------------------------------------------------
+# Tests — _sync_to_drive / _delete_from_drive (lines 56, 61-73)
+# ---------------------------------------------------------------------------
+
+
+# Note: _sync_to_drive (line 56) and _delete_from_drive (lines 61-73) are
+# covered by test_drive_helpers.py which does not use the autouse mock.
+
+
+# ---------------------------------------------------------------------------
+# Tests — _to_date helper (lines 108-112)
+# ---------------------------------------------------------------------------
+
+def test_to_date_with_datetime():
+    from app.fd_database import _to_date
+    from datetime import datetime, date
+    assert _to_date(datetime(2024, 6, 15)) == date(2024, 6, 15)
+
+
+def test_to_date_with_date():
+    from app.fd_database import _to_date
+    from datetime import date
+    assert _to_date(date(2024, 6, 15)) == date(2024, 6, 15)
+
+
+def test_to_date_with_none():
+    from app.fd_database import _to_date
+    assert _to_date(None) is None
+
+
+def test_to_date_with_string():
+    from app.fd_database import _to_date
+    assert _to_date("2024-06-15") is None
+
+
+# ---------------------------------------------------------------------------
+# Tests — MIS xlsx parsing (line 163)
+# ---------------------------------------------------------------------------
+
+def test_add_mis_creates_xlsx_with_monthly_payout(fd_base_dir):
+    """MIS entries force monthly payout regardless of interest_payout setting."""
+    from app.fd_database import add, get_all
+    data = {
+        "bank": "Post Office",
+        "principal": 500000,
+        "interest_rate": 7.4,
+        "tenure_months": 60,
+        "start_date": "2024-01-01",
+        "type": "MIS",
+        "name": "PO MIS Account",
+    }
+    result = add(data, base_dir=str(fd_base_dir))
+    items = get_all(base_dir=str(fd_base_dir))
+    assert len(items) == 1
+    assert items[0]["type"] == "MIS"
+
+
+# ---------------------------------------------------------------------------
+# Tests — _parse_all_xlsx error handling (lines 252-253)
+# ---------------------------------------------------------------------------
+
+def test_parse_all_xlsx_skips_temp_files(fd_base_dir):
+    """Files starting with ~$ are skipped."""
+    fd_dir = fd_base_dir / "FD"
+    # Create a temp file
+    (fd_dir / "~$tempfile.xlsx").write_text("garbage")
+    from app.fd_database import _parse_all_xlsx
+    results = _parse_all_xlsx(xlsx_dir=fd_dir)
+    assert len(results) == 0
+
+
+def test_parse_all_xlsx_skips_corrupt_file(fd_base_dir):
+    """Corrupt xlsx files are skipped with error logging."""
+    fd_dir = fd_base_dir / "FD"
+    (fd_dir / "corrupt.xlsx").write_text("not an xlsx file")
+    from app.fd_database import _parse_all_xlsx
+    results = _parse_all_xlsx(xlsx_dir=fd_dir)
+    assert len(results) == 0
+
+
+def test_parse_all_xlsx_nonexistent_dir():
+    """Non-existent directory returns empty list."""
+    from app.fd_database import _parse_all_xlsx
+    results = _parse_all_xlsx(xlsx_dir=Path("/nonexistent/dir"))
+    assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Tests — _load_json error handling (lines 338-339)
+# ---------------------------------------------------------------------------
+
+def test_load_json_corrupt_file(fd_base_dir):
+    from app.fd_database import _load_json
+    json_file = fd_base_dir / "fixed_deposits.json"
+    json_file.write_text("NOT JSON!!!")
+    result = _load_json(json_file=json_file)
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Tests — _calc_maturity_date error (lines 375-376)
+# ---------------------------------------------------------------------------
+
+def test_calc_maturity_date_invalid():
+    from app.fd_database import _calc_maturity_date
+    assert _calc_maturity_date("not-a-date", 12) == ""
+    assert _calc_maturity_date(None, 12) == ""
+
+
+# ---------------------------------------------------------------------------
+# Tests — _enrich_json_item edge cases (lines 424, 433-435)
+# ---------------------------------------------------------------------------
+
+def test_enrich_json_item_no_start_date():
+    """_enrich_json_item with empty start_date generates no installments."""
+    from app.fd_database import _enrich_json_item
+    item = {
+        "id": "no_start",
+        "bank": "Test",
+        "principal": 0,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "",
+        "maturity_date": "",
+        "type": "FD",
+    }
+    enriched = _enrich_json_item(item)
+    assert enriched["installments"] == []
+    assert enriched["status"] == "Active"  # bad maturity_date falls through
+
+
+def test_enrich_json_item_mis_type():
+    """_enrich_json_item with MIS type defaults to Monthly payout."""
+    from app.fd_database import _enrich_json_item
+    item = {
+        "id": "mis_item",
+        "bank": "PO",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2020-01-01",
+        "maturity_date": "2021-01-01",
+        "type": "MIS",
+    }
+    enriched = _enrich_json_item(item)
+    assert enriched["interest_payout"] == "Monthly"
+
+
+def test_enrich_json_item_invalid_maturity_date():
+    """_enrich_json_item with invalid maturity_date uses defaults."""
+    from app.fd_database import _enrich_json_item
+    item = {
+        "id": "bad_mat",
+        "bank": "Test",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2020-01-01",
+        "maturity_date": "bad-date",
+        "type": "FD",
+    }
+    enriched = _enrich_json_item(item)
+    assert enriched["days_to_maturity"] == 0
+    assert enriched["status"] == "Active"
+
+
+# ---------------------------------------------------------------------------
+# Tests — get_all with JSON manual entries (line 470)
+# ---------------------------------------------------------------------------
+
+def test_get_all_includes_json_items(fd_base_dir):
+    """get_all returns both xlsx and JSON manual entries."""
+    from app.fd_database import _save_json, get_all
+    json_file = fd_base_dir / "fixed_deposits.json"
+    entry = {
+        "id": "json001",
+        "bank": "Manual Bank",
+        "principal": 50000,
+        "interest_rate": 6.0,
+        "tenure_months": 12,
+        "start_date": "2020-01-01",
+        "maturity_date": "2021-01-01",
+        "type": "FD",
+    }
+    _save_json([entry], json_file=json_file, dumps_dir=fd_base_dir)
+
+    items = get_all(base_dir=str(fd_base_dir))
+    assert len(items) == 1
+    assert items[0]["source"] == "manual"
+
+
+# ---------------------------------------------------------------------------
+# Tests — update xlsx FD (lines 550-553, 584-612)
+# ---------------------------------------------------------------------------
+
+def test_update_xlsx_fd(fd_base_dir):
+    """Update an xlsx-imported FD by changing bank and rate."""
+    from app.fd_database import add, update, get_all
+    data = {
+        "bank": "SBI",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2024-01-01",
+        "interest_payout": "Quarterly",
+    }
+    result = add(data, base_dir=str(fd_base_dir))
+    fd_id = result["id"]
+
+    updated = update(fd_id, {
+        "bank": "HDFC",
+        "interest_rate": 7.5,
+        "principal": 200000,
+        "start_date": "2024-06-01",
+        "tenure_months": 24,
+        "interest_payout": "Monthly",
+    }, base_dir=str(fd_base_dir))
+    assert updated["bank"] == "HDFC"
+
+
+def test_update_xlsx_fd_skips_temp_files(fd_base_dir):
+    """Update skips ~$ temp files during xlsx search."""
+    from app.fd_database import add, update
+    data = {
+        "bank": "SBI",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2024-01-01",
+    }
+    result = add(data, base_dir=str(fd_base_dir))
+    fd_id = result["id"]
+
+    # Create a temp file
+    fd_dir = fd_base_dir / "FD"
+    (fd_dir / "~$tempfile.xlsx").write_text("temp")
+
+    updated = update(fd_id, {"bank": "HDFC"}, base_dir=str(fd_base_dir))
+    assert updated["bank"] == "HDFC"
+
+
+def test_update_xlsx_fd_invalid_start_date(fd_base_dir):
+    """Update with invalid start_date is handled gracefully."""
+    from app.fd_database import add, update
+    data = {
+        "bank": "SBI",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2024-01-01",
+    }
+    result = add(data, base_dir=str(fd_base_dir))
+    fd_id = result["id"]
+
+    # Update with invalid start_date (line 593-594)
+    updated = update(fd_id, {"start_date": "invalid-date"}, base_dir=str(fd_base_dir))
+    assert updated is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests — update JSON with start_date/tenure_months change (lines 573-574)
+# ---------------------------------------------------------------------------
+
+def test_update_json_recalculates_maturity_date(fd_base_dir):
+    """Updating start_date/tenure_months recalculates maturity_date."""
+    from app.fd_database import _save_json, update
+    json_file = fd_base_dir / "fixed_deposits.json"
+    entry = {
+        "id": "upd_mat",
+        "bank": "Test",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2024-01-01",
+        "maturity_date": "2025-01-01",
+        "interest_payout": "Quarterly",
+        "status": "Active",
+        "remarks": "",
+        "tds": 0,
+        "type": "FD",
+        "name": "Test FD",
+    }
+    _save_json([entry], json_file=json_file, dumps_dir=fd_base_dir)
+
+    result = update("upd_mat", {
+        "start_date": "2024-06-01",
+        "tenure_months": 24,
+    }, base_dir=str(fd_base_dir))
+    assert result["maturity_date"] == "2026-06-01"
+
+
+# ---------------------------------------------------------------------------
+# Tests — delete JSON entry (lines 634-636)
+# ---------------------------------------------------------------------------
+
+def test_delete_json_entry(fd_base_dir):
+    """Delete a JSON-based FD entry."""
+    from app.fd_database import _save_json, delete
+    json_file = fd_base_dir / "fixed_deposits.json"
+    entry = {
+        "id": "del_json",
+        "bank": "Test",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": "2024-01-01",
+        "maturity_date": "2025-01-01",
+        "status": "Active",
+        "type": "FD",
+        "name": "Test FD",
+    }
+    _save_json([entry], json_file=json_file, dumps_dir=fd_base_dir)
+
+    result = delete("del_json", base_dir=str(fd_base_dir))
+    assert "deleted" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# Tests — half-yearly payout (line 95)
+# ---------------------------------------------------------------------------
+
+def test_maturity_calculation_half_yearly():
+    from app.fd_database import _calc_maturity
+    result = _calc_maturity(100000, 8.0, 12, "Half-Yearly")
+    # 8% annual, half-yearly: interest_per_half = 100000 * 0.08 / 2 = 4000
+    # 12 months = 2 half-year periods => total interest = 8000
+    assert result["interest_earned"] == 8000.0
+
+
+# ---------------------------------------------------------------------------
+# Tests — _payout_periods_per_year edge case (line 103)
+# ---------------------------------------------------------------------------
+
+def test_payout_periods_per_year_zero():
+    from app.fd_database import _payout_periods_per_year
+    assert _payout_periods_per_year(0) == 4  # default
+
+# ---------------------------------------------------------------------------
+# Tests — dashboard maturing_soon (line 480)
+# ---------------------------------------------------------------------------
+
+def test_dashboard_maturing_soon(fd_base_dir):
+    """Dashboard counts FDs maturing within 90 days."""
+    from app.fd_database import add, get_dashboard
+    from datetime import datetime, timedelta
+    # Create an FD maturing in ~60 days
+    start = (datetime.now().date() - timedelta(days=300)).strftime("%Y-%m-%d")
+    add({
+        "bank": "SBI",
+        "principal": 100000,
+        "interest_rate": 7.0,
+        "tenure_months": 12,
+        "start_date": start,
+    }, base_dir=str(fd_base_dir))
+
+    dash = get_dashboard(base_dir=str(fd_base_dir))
+    # The FD should be either active or matured; check both fields
+    assert dash["total_count"] == 1

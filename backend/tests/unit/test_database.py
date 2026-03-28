@@ -254,3 +254,20 @@ def test_get_all_manual_prices(db_dir):
     prices = get_all_manual_prices()
     assert prices["A.NSE"] == 10.0
     assert prices["B.BSE"] == 20.0
+
+
+# ---------------------------------------------------------------------------
+# Tests — _write_db (direct call, covers lines 34-36)
+# ---------------------------------------------------------------------------
+
+def test_write_db_creates_data_dir_and_file(tmp_path):
+    """Directly call _write_db to cover its os.makedirs + json.dump."""
+    from app import database as db
+    data_dir = str(tmp_path / "newdata")
+    db_file = str(tmp_path / "newdata" / "portfolio.json")
+    with patch("app.database.DATA_DIR", data_dir), \
+         patch("app.database.DB_FILE", db_file):
+        db._write_db({"holdings": [], "sold": [], "manual_prices": {}})
+    assert Path(db_file).exists()
+    data = json.loads(Path(db_file).read_text())
+    assert data["holdings"] == []
