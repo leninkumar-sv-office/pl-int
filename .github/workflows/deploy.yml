@@ -18,12 +18,12 @@ permissions:
   contents: write
 
 jobs:
-  # Tests temporarily disabled — uncomment to re-enable
-  # tests:
-  #   uses: ./.github/workflows/test.yml
+  # Run tests first (backend + frontend in parallel)
+  tests:
+    uses: ./.github/workflows/test.yml
 
   tag:
-    # needs: tests  # Re-enable when tests are back
+    needs: tests
     runs-on: self-hosted
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
