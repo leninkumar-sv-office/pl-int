@@ -586,7 +586,7 @@ export default function TradePlanner() {
                     {row.onHand ? (
                       <div>
                         <div style={{ fontWeight: 600 }}>{row.onHand}</div>
-                        {row.totalInvested > 0 && <div style={{ fontSize: '10px', color: 'var(--text-dim, #aaa)' }}>{fmtAmt(row.totalInvested)}</div>}
+                        {row.totalInvested > 0 && <div style={{ fontWeight: 600 }}>{fmtAmt(row.totalInvested)}</div>}
                       </div>
                     ) : '--'}
                   </td>
