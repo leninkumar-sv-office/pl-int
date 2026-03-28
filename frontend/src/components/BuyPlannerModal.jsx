@@ -92,8 +92,8 @@ export default function TradePlanner() {
     const savedMap = {};
     saved.forEach(s => { savedMap[`${s.symbol}.${s.exchange}`] = s; });
 
-    const held = stocks.filter(s => s.total_held_qty > 0);
-    const initial = held.map(s => {
+    // Show ALL stocks (held + watchlist), not just held
+    const initial = stocks.map(s => {
       const key = `${s.symbol}.${s.exchange}`;
       const sv = savedMap[key];
       delete savedMap[key];
@@ -101,7 +101,7 @@ export default function TradePlanner() {
       const stQty = (s.stcg_profitable_qty || 0) + (s.stcg_loss_qty || 0);
       return {
         symbol: s.symbol, exchange: s.exchange, name: s.name,
-        onHand: s.total_held_qty, avgBuy: s.avg_buy_price || 0,
+        onHand: s.total_held_qty || 0, avgBuy: s.avg_buy_price || 0,
         totalInvested: s.total_invested || 0, ltcgInvested: s.ltcg_invested || 0, stcgInvested: s.stcg_invested || 0,
         ltcgEarliestDate: s.ltcg_earliest_date || '', stcgEarliestDate: s.stcg_earliest_date || '',
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
@@ -114,8 +114,9 @@ export default function TradePlanner() {
     });
     initial.sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-    const heldSymbols = new Set(initial.map(r => r.symbol));
-    const remaining = Object.values(savedMap).filter(s => !heldSymbols.has(s.symbol));
+    // Add any saved stocks that aren't in the portfolio at all
+    const allSymbols = new Set(initial.map(r => r.symbol));
+    const remaining = Object.values(savedMap).filter(s => !allSymbols.has(s.symbol));
     if (remaining.length > 0) {
       const placeholders = remaining.map(s => ({
         symbol: s.symbol, exchange: s.exchange, name: s.symbol,
