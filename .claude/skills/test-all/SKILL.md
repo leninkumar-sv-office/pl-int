@@ -6,58 +6,60 @@ user_invocable: true
 
 # Run All Tests
 
-Run all three test suites and report a consolidated pass/fail summary.
+Run all test suites in parallel and report a consolidated pass/fail summary.
 
-## Steps
+## Step 1: Run backend and frontend tests in parallel
 
-### 1. Backend tests (pytest)
-
-```bash
-cd /Users/lenin/Desktop/workspace/pl/backend
-source venv/bin/activate 2>/dev/null || python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt -q
-AUTH_MODE=local python -m pytest tests/ -v --tb=short 2>&1
-```
-
-Record: total passed, failed, errors.
-
-### 2. Frontend tests (vitest)
+Launch both in background:
 
 ```bash
-cd /Users/lenin/Desktop/workspace/pl/frontend
-npm test 2>&1
+# Backend tests (parallel with pytest-xdist)
+cd /Users/lenin/Desktop/workspace/pl-int/backend
+source venv/bin/activate 2>/dev/null || (python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt -q)
+pip install pytest-xdist -q
+AUTH_MODE=local python -m pytest tests/ -n auto --cov=app --cov-report=term -v --tb=short 2>&1 | tee /tmp/backend-test-results.txt &
+
+# Frontend tests (parallel with threads)
+cd /Users/lenin/Desktop/workspace/pl-int/frontend
+npm install --silent 2>/dev/null
+npx vitest run --reporter=verbose --pool=threads 2>&1 | tee /tmp/frontend-test-results.txt &
+
+wait
 ```
 
-Record: total passed, failed.
+## Step 2: E2E tests (optional)
 
-### 3. E2E tests (playwright)
-
-Only run if backend + frontend are already running (check ports 9998/5173):
+Only run if the production site is accessible:
 
 ```bash
-cd /Users/lenin/Desktop/workspace/pl
-# Check if servers are up
-curl -s http://localhost:9998/api/health > /dev/null 2>&1 && curl -s http://localhost:5173 > /dev/null 2>&1
+curl -s https://pl.thirumagal.com/health | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['status'])" 2>/dev/null
 ```
 
-If both are up:
-```bash
-npx playwright test 2>&1
-```
+If healthy, run Playwright tests via the Playwright MCP browser:
+1. Navigate to https://pl.thirumagal.com
+2. Authenticate using JWT (generate from Docker container)
+3. Verify key features visually
 
-If not running, skip with a note: "E2E tests skipped — start backend (port 9998) and frontend (port 5173) first."
+## Step 3: Summary
 
-### 4. Summary
-
-Print a consolidated report:
+Print consolidated results:
 
 ```
 Test Results
-────────────
-Backend (pytest):    ✓ X passed / ✗ Y failed
-Frontend (vitest):   ✓ X passed / ✗ Y failed
-E2E (playwright):    ✓ X passed / ✗ Y failed  (or: skipped)
-────────────
+────────────────────────────────────────
+Backend (pytest):    ✓ X passed / ✗ Y failed  (Zs, parallel)
+Frontend (vitest):   ✓ X passed / ✗ Y failed  (Zs, threaded)
+E2E (playwright):    ✓ verified / skipped
+────────────────────────────────────────
 Overall: PASS / FAIL
 ```
 
-If any suite failed, highlight the failures and suggest next steps.
+If any suite failed, show the failing test names and suggest fixes.
+
+## Key Rules
+
+- Backend and frontend MUST run in parallel (not sequential)
+- Backend uses `pytest-xdist -n auto` for multi-process execution
+- Frontend uses `vitest --pool=threads` for multi-threaded execution
+- Report coverage numbers if available
+- If tests fail, don't just report — analyze and suggest fixes
