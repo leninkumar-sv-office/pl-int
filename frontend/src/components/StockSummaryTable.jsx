@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getStockHistory, updateHolding, updateSoldRow, renameStock, lookupStockName, searchStock } from '../services/api';
+import { getStockHistory, updateHolding, updateSoldRow, renameStock, lookupStockName, searchStock, getUserSettings, saveUserSettings } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import ExpiryAlertRules from './ExpiryAlertRules';
 import EditLotModal from './EditLotModal';
@@ -1087,12 +1087,79 @@ function RenameStockModal({ stock, onSave, onClose }) {
   );
 }
 
+/* ── Hide Stocks Modal ────────────────────────────────── */
+function HideStocksModal({ stocks, hiddenSet, onSave, onClose }) {
+  const [selected, setSelected] = useState(new Set(hiddenSet));
+  const [search, setSearch] = useState('');
+  const toggle = (sym) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(sym) ? next.delete(sym) : next.add(sym);
+    return next;
+  });
+  const q = search.trim().toLowerCase();
+  const filtered = stocks.filter(s => !q || s.symbol.toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q));
+  const held = filtered.filter(s => s.total_held_qty > 0);
+  const notHeld = filtered.filter(s => !s.total_held_qty || s.total_held_qty <= 0);
+
+  const renderGroup = (title, list) => (
+    list.length > 0 && (
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>{title} ({list.length})</div>
+        {list.map(s => (
+          <label key={s.symbol} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 8px', cursor: 'pointer', borderRadius: '4px', background: selected.has(s.symbol) ? 'rgba(239,68,68,0.1)' : 'transparent', fontSize: '13px' }}
+            onMouseEnter={e => { if (!selected.has(s.symbol)) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = selected.has(s.symbol) ? 'rgba(239,68,68,0.1)' : 'transparent'; }}
+          >
+            <input type="checkbox" checked={selected.has(s.symbol)} onChange={() => toggle(s.symbol)} style={{ accentColor: 'var(--red)', cursor: 'pointer' }} />
+            <span style={{ fontWeight: 600, minWidth: '100px' }}>{s.symbol}</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: '12px', flex: 1 }}>{s.name}</span>
+            {s.total_held_qty > 0 && <span style={{ fontSize: '11px', color: 'var(--blue)' }}>{s.total_held_qty} qty</span>}
+            {selected.has(s.symbol) && <span style={{ fontSize: '11px', color: 'var(--red)', fontWeight: 600 }}>HIDDEN</span>}
+          </label>
+        ))}
+      </div>
+    )
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+      <div style={{ position: 'relative', background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '520px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, fontSize: '16px' }}>Hide Stocks</h3>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{selected.size} hidden</span>
+        </div>
+        <p style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--text-dim)' }}>
+          Checked stocks will be hidden from Stock Summary and Trade Planner. This is per-user and synced.
+        </p>
+        <input type="text" placeholder="Search stocks..." value={search} onChange={e => setSearch(e.target.value)}
+          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text)', fontSize: '13px', marginBottom: '12px', boxSizing: 'border-box' }}
+        />
+        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          {renderGroup('Held Stocks', held)}
+          {renderGroup('Watchlist / Not Held', notHeld)}
+          {filtered.length === 0 && <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>No stocks match</div>}
+        </div>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+          <button onClick={() => { setSelected(new Set()); }} style={{ padding: '8px 16px', fontSize: '13px', background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer' }}>Show All</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={onClose} className="btn btn-ghost">Cancel</button>
+            <button onClick={() => onSave(selected)} style={{ padding: '8px 20px', fontSize: '13px', background: 'var(--blue)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Table ───────────────────────────────────────── */
 export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
   const [sortKeys, setSortKeys] = useState([{ field: 'unrealized_profit', dir: 'desc' }]);
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideZeroHeld, setHideZeroHeld] = useState(false);
+  const [hiddenStocks, setHiddenStocks] = useState(new Set());
+  const [hideModalOpen, setHideModalOpen] = useState(false);
   const [renamingStock, setRenamingStock] = useState(null); // { symbol, name }
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1110,6 +1177,19 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   useEffect(() => {
     if (bulkSellDoneKey > 0) setSelectedLots(new Set());
   }, [bulkSellDoneKey]);
+
+  // Load hidden stocks from user settings
+  useEffect(() => {
+    getUserSettings().then(s => {
+      if (s.hidden_stocks && Array.isArray(s.hidden_stocks)) setHiddenStocks(new Set(s.hidden_stocks));
+    }).catch(() => {});
+  }, []);
+
+  const saveHiddenStocks = useCallback((newSet) => {
+    setHiddenStocks(newSet);
+    setHideModalOpen(false);
+    saveUserSettings({ hidden_stocks: [...newSet] }).catch(() => {});
+  }, []);
 
   // ── Column visibility ──
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
@@ -1269,6 +1349,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
   // Filter stocks by search query (matches symbol or name), held-units toggle, and column filters
   const q = searchQuery.trim().toLowerCase();
   const filtered = stocks.filter(s => {
+    if (hiddenStocks.has(s.symbol)) return false;
     if (hideZeroHeld && s.total_held_qty <= 0) return false;
     if (q && !s.symbol.toLowerCase().includes(q) && !(s.name || '').toLowerCase().includes(q)) return false;
     // Column filters
@@ -1606,11 +1687,27 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           />
           Held only
         </label>
-        {(q || hideZeroHeld) && (
+        {(q || hideZeroHeld || hiddenStocks.size > 0) && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            {filtered.length} of {stocks.length} stocks
+            {filtered.length} of {stocks.length} stocks{hiddenStocks.size > 0 ? ` (${hiddenStocks.size} hidden)` : ''}
           </span>
         )}
+        <button
+          onClick={() => setHideModalOpen(true)}
+          style={{
+            padding: '5px 10px',
+            fontSize: '12px',
+            background: hiddenStocks.size > 0 ? 'rgba(239,68,68,0.15)' : 'var(--bg-input)',
+            color: hiddenStocks.size > 0 ? 'var(--red)' : 'var(--text-dim)',
+            border: `1px solid ${hiddenStocks.size > 0 ? 'var(--red)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            fontWeight: hiddenStocks.size > 0 ? 600 : 400,
+          }}
+        >
+          {hiddenStocks.size > 0 ? `${hiddenStocks.size} Hidden` : 'Hide Stocks'}
+        </button>
         {/* Filters toggle */}
         <button
           onClick={() => setFiltersVisible(v => !v)}
@@ -2570,6 +2667,16 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
             window.location.reload();
           }}
           onClose={() => setRenamingStock(null)}
+        />
+      )}
+
+      {/* Hide Stocks Modal */}
+      {hideModalOpen && (
+        <HideStocksModal
+          stocks={stocks}
+          hiddenSet={hiddenStocks}
+          onSave={saveHiddenStocks}
+          onClose={() => setHideModalOpen(false)}
         />
       )}
     </div>

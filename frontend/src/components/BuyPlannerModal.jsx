@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { searchStock, fetchStockPrice, getStockSummary, getStockHistory } from '../services/api';
+import { searchStock, fetchStockPrice, getStockSummary, getStockHistory, getUserSettings } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import html2canvas from 'html2canvas';
 
@@ -77,10 +77,16 @@ export default function TradePlanner() {
   const fileInputRef = useRef(null);
   const initializedRef = useRef(false);
 
-  // Fetch stock summary on mount
+  // Fetch stock summary + hidden stocks on mount
   useEffect(() => {
     document.title = 'Trade Planner';
-    getStockSummary().then(data => { setStocks(data); setLoading(false); }).catch(() => setLoading(false));
+    Promise.all([getStockSummary(), getUserSettings().catch(() => ({}))])
+      .then(([data, settings]) => {
+        const hidden = new Set(settings.hidden_stocks || []);
+        setStocks(hidden.size > 0 ? data.filter(s => !hidden.has(s.symbol)) : data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   // Pre-populate from portfolio stocks + restore saved quantities
