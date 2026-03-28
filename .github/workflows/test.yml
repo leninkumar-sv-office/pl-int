@@ -24,7 +24,7 @@ jobs:
             pip install pytest-xdist --quiet
             mkdir -p ../frontend/dist/assets
             AUTH_MODE=local ZERODHA_API_KEY="" ZERODHA_API_SECRET="" \
-              python -m pytest tests/ -n auto --cov=app --cov-report=term -v --tb=short \
+              python -m pytest tests/ --cov=app --cov-report=term -v --tb=short \
               > /tmp/backend-test-output.txt 2>&1
             echo $? > /tmp/backend-exit-code.txt
           ) &
