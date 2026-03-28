@@ -352,8 +352,9 @@ export default function App() {
   const handleAddStock = async (data) => {
     try {
       await addStock(data);
-      toast.success(`Added ${data.quantity} shares of ${data.symbol}`);
+      toast.success(`Added ${data.quantity || 0} shares of ${data.symbol}`);
       setAddModalData(null);
+      clearPriceCache().catch(() => {});
       loadStocks();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to add stock');
@@ -547,6 +548,7 @@ export default function App() {
       };
       setImportResult(resultData);
       setImportPreview(null);
+      clearPriceCache().catch(() => {});
       loadStocks();
     } catch (err) {
       toast.dismiss('import-progress');
@@ -645,6 +647,7 @@ export default function App() {
       }
 
       setDividendImportPreview(null);
+      clearPriceCache().catch(() => {});
       loadStocks();
     } catch (err) {
       const msg = err.response?.data?.detail || 'Failed to import dividends';
@@ -752,6 +755,7 @@ export default function App() {
       }
 
       setMfImportPreview(null);
+      clearPriceCache().catch(() => {});
       loadMutualFunds();
     } catch (err) {
       toast.dismiss('cdsl-cas-import');
