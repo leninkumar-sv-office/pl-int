@@ -65,8 +65,8 @@ export default function TradePlanner() {
   const [searching, setSearching] = useState(false);
   const [fetchingPrice, setFetchingPrice] = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [sortField, setSortField] = useState('signal');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortField, setSortField] = useState('week_52_low');
+  const [sortDir, setSortDir] = useState('asc');
   const [expandedSymbol, setExpandedSymbol] = useState(null); // "SYMBOL.EXCHANGE" or null
   const [chartPeriod, setChartPeriod] = useState('1y');
   const [chartData, setChartData] = useState([]);
@@ -177,11 +177,6 @@ export default function TradePlanner() {
   };
 
   const sortedRows = [...rows].sort((a, b) => {
-    // Rows with qty always first
-    const aHas = (parseInt(a.buyQty) || 0) > 0 || (parseInt(a.sellQty) || 0) > 0 ? 0 : 1;
-    const bHas = (parseInt(b.buyQty) || 0) > 0 || (parseInt(b.sellQty) || 0) > 0 ? 0 : 1;
-    if (aHas !== bHas) return aHas - bHas;
-
     let av, bv;
     switch (sortField) {
       case 'symbol': av = a.symbol; bv = b.symbol; break;
