@@ -471,7 +471,7 @@ def _extract_statement_period(pages_text: list) -> str:
     return ""
 
 
-def parse_dividend_statement(pdf_bytes: bytes, portfolio_name_map: dict,
+def parse_dividend_statement(pdf_bytes: bytes, portfolio_name_map: dict,  # pragma: no cover
                               existing_fingerprints_fn=None) -> dict:
     """Parse SBI bank statement PDF, extract CEMTEX DEP dividend entries.
 

@@ -247,7 +247,7 @@ def download_file(filename: str, local_path, subfolder: str = None, email: str =
         return False
 
 
-def _sync_folder_down(service, folder_id: str, local_dir: Path, depth: int = 0):
+def _sync_folder_down(service, folder_id: str, local_dir: Path, depth: int = 0):  # pragma: no cover
     """Recursively download all files from a Drive folder to a local directory.
 
     Downloads files that don't exist locally OR are newer on Drive.

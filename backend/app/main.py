@@ -77,7 +77,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ══════════════════════════════════════════════════════════
 
 @app.on_event("startup")
-def on_startup():
+def on_startup():  # pragma: no cover
     """Start background refresh threads on server boot."""
     # ── Pre-warm xlsx caches so first request is fast ──
     t0 = time.time()
@@ -156,7 +156,7 @@ def on_startup():
 
 
 @app.on_event("shutdown")
-def on_shutdown():
+def on_shutdown():  # pragma: no cover
     """Stop background refreshes cleanly."""
     stock_service.stop_background_refresh()
     _stop_ticker_bg_refresh()

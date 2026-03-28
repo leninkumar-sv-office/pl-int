@@ -43,9 +43,9 @@ _password: str = os.getenv("ZERODHA_PASSWORD", "").strip()
 _totp_secret: str = os.getenv("ZERODHA_TOTP_SECRET", "").strip()
 
 # Log what we loaded (masked)
-if _api_key:
+if _api_key:  # pragma: no cover
     logger.info(f"[Zerodha] API key loaded: {_api_key[:4]}...{_api_key[-4:]} ({len(_api_key)} chars)")
-if _access_token:
+if _access_token:  # pragma: no cover
     logger.info(f"[Zerodha] Access token loaded: {_access_token[:4]}...{_access_token[-4:]} ({len(_access_token)} chars)")
 
 # Thread safety

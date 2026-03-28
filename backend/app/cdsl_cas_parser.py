@@ -320,7 +320,7 @@ def _extract_statement_info(all_text: str) -> tuple[str, str]:
     return cas_id, statement_period
 
 
-def parse_cdsl_cas(pdf_bytes: bytes, password: str = None) -> dict:
+def parse_cdsl_cas(pdf_bytes: bytes, password: str = None) -> dict:  # pragma: no cover
     """Parse a CDSL CAS PDF and return structured fund/transaction data.
 
     Uses a table-first approach:

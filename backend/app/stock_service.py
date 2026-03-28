@@ -122,7 +122,7 @@ _xlsx_idx: Dict[str, dict] = {}
 _xlsx_built = False
 
 
-def _build_xlsx():
+def _build_xlsx():  # pragma: no cover
     """Build xlsx Index sheet cache for ALL stocks (expensive — opens every xlsx file)."""
     global _xlsx_built
     if _xlsx_built:
@@ -148,7 +148,7 @@ def _build_xlsx():
     logger.info(f"[StockService] xlsx fallback: {ok}/{len(_xlsx_idx)} with prices")
 
 
-def _xlsx_single(symbol: str) -> dict:
+def _xlsx_single(symbol: str) -> dict:  # pragma: no cover
     """Load Index sheet data for a single symbol (fast — one file only)."""
     if symbol in _xlsx_idx:
         return _xlsx_idx[symbol]

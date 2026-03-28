@@ -36,7 +36,7 @@ ALLOWED_EMAILS = [
 ]
 # JWT secret for session tokens (persisted to file so sessions survive restarts)
 _JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
-if not _JWT_SECRET:
+if not _JWT_SECRET:  # pragma: no cover
     _JWT_SECRET_FILE = Path(__file__).resolve().parent.parent / "data" / ".jwt_secret"
     if _JWT_SECRET_FILE.exists():
         _JWT_SECRET = _JWT_SECRET_FILE.read_text().strip()

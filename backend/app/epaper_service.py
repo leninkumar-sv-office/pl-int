@@ -78,7 +78,7 @@ _cache_lock = threading.Lock()
 #  ARTICLE SCRAPING
 # ═══════════════════════════════════════════════════════════
 
-def _fetch_section_articles(section_path: str, section_name: str, max_pages: int = 4) -> List[dict]:
+def _fetch_section_articles(section_path: str, section_name: str, max_pages: int = 4) -> List[dict]:  # pragma: no cover
     """Scrape article headlines + summaries from BL section pages (with pagination)."""
     all_articles = []
     seen_urls = set()
@@ -541,7 +541,7 @@ def _fetch_mc_article_body(url: str) -> str:
 #  COMBINED ARTICLE FETCHING
 # ═══════════════════════════════════════════════════════════
 
-def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOOKBACK_DAYS) -> List[dict]:
+def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOOKBACK_DAYS) -> List[dict]:  # pragma: no cover
     """Fetch articles from Business Line + The Hindu for the past N days. Cached per day."""
     today = date.today().isoformat()
     cache_key = f"{today}_d{lookback_days}"

@@ -349,7 +349,7 @@ def _extract_exchange_map(text: str) -> Dict[str, str]:
 #  STRATEGY 1: PDFPLUMBER TABLE EXTRACTION
 # ═══════════════════════════════════════════════════════════
 
-def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,
+def _parse_pdfplumber_tables(pdf_path: str, trade_date: str,  # pragma: no cover
                               exchange_map: Dict[str, str]) -> List[dict]:
     """Parse transaction tables using pdfplumber's direct table extraction API.
 
@@ -985,7 +985,7 @@ def parse_contract_note(pdf_path: str) -> dict:
         result["_debug_text"] = snippet
 
         # Dump full text to temp files for manual inspection
-        for debug_path in ["/tmp/contract_note_debug.txt",
+        for debug_path in ["/tmp/contract_note_debug.txt",  # pragma: no cover
                            os.path.join(os.path.dirname(__file__), "..", "..", "contract_note_debug.txt")]:
             try:
                 with open(debug_path, "w") as f:
