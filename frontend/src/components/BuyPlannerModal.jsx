@@ -582,7 +582,14 @@ export default function TradePlanner() {
                       </div>
                     </div>
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHand || '--'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.onHand ? (
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{row.onHand}</div>
+                        {row.totalInvested > 0 && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{fmtAmt(row.totalInvested)}</div>}
+                      </div>
+                    ) : '--'}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {row.low ? (() => {
                       const nearLow = row.current > 0 && row.current <= row.low * 1.05;
