@@ -5,77 +5,29 @@ on:
   workflow_call:
 
 jobs:
-  test:
+  backend:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
-      # Run backend and frontend tests IN PARALLEL using background processes
-      - name: Run tests (backend + frontend in parallel)
+      - name: Run backend tests
         run: |
-          set -e
+          cd backend
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt --quiet
+          pip install pytest-xdist --quiet
+          mkdir -p ../frontend/dist/assets
+          AUTH_MODE=local ZERODHA_API_KEY="" ZERODHA_API_SECRET="" \
+            python -m pytest tests/ --cov=app --cov-report=term -v --tb=short
 
-          # ── Backend tests (background) ──
-          (
-            cd backend
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt --quiet
-            pip install pytest-xdist --quiet
-            mkdir -p ../frontend/dist/assets
-            AUTH_MODE=local ZERODHA_API_KEY="" ZERODHA_API_SECRET="" \
-              python -m pytest tests/ --cov=app --cov-report=term -v --tb=short \
-              > /tmp/backend-test-output.txt 2>&1
-            echo $? > /tmp/backend-exit-code.txt
-          ) &
-          BACKEND_PID=$!
+  frontend:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
 
-          # ── Frontend tests (background) ──
-          (
-            cd frontend
-            npm install --silent
-            npx vitest run --reporter=verbose --pool=threads \
-              > /tmp/frontend-test-output.txt 2>&1
-            echo $? > /tmp/frontend-exit-code.txt
-          ) &
-          FRONTEND_PID=$!
-
-          # Wait for both to finish
-          wait $BACKEND_PID $FRONTEND_PID || true
-
-          # Print results
-          echo ""
-          echo "════════════════════════════════════════"
-          echo "  BACKEND TEST RESULTS"
-          echo "════════════════════════════════════════"
-          cat /tmp/backend-test-output.txt
-          echo ""
-          echo "════════════════════════════════════════"
-          echo "  FRONTEND TEST RESULTS"
-          echo "════════════════════════════════════════"
-          cat /tmp/frontend-test-output.txt
-
-          # Check exit codes
-          BE_EXIT=$(cat /tmp/backend-exit-code.txt 2>/dev/null || echo "1")
-          FE_EXIT=$(cat /tmp/frontend-exit-code.txt 2>/dev/null || echo "1")
-
-          echo ""
-          echo "════════════════════════════════════════"
-          echo "  SUMMARY"
-          echo "════════════════════════════════════════"
-          if [ "$BE_EXIT" = "0" ]; then
-            echo "  Backend:  ✅ PASSED"
-          else
-            echo "  Backend:  ❌ FAILED (exit code $BE_EXIT)"
-          fi
-          if [ "$FE_EXIT" = "0" ]; then
-            echo "  Frontend: ✅ PASSED"
-          else
-            echo "  Frontend: ❌ FAILED (exit code $FE_EXIT)"
-          fi
-          echo "════════════════════════════════════════"
-
-          # Fail if either failed
-          if [ "$BE_EXIT" != "0" ] || [ "$FE_EXIT" != "0" ]; then
-            exit 1
-          fi
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm install --silent
+          npx vitest run --reporter=verbose --pool=threads

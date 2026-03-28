@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 jobs:
-  # Run tests first (backend + frontend in parallel within single job)
+  # Run tests first (backend + frontend as parallel jobs)
   tests:
     uses: ./.github/workflows/test.yml
 
