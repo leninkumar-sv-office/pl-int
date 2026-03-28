@@ -50,6 +50,17 @@ _TH_SECTIONS = [
     ("business", "TH-Business"),
 ]
 
+# Moneycontrol RSS feeds
+_MC_FEEDS = [
+    ("https://www.moneycontrol.com/rss/marketreports.xml", "MC-Markets"),
+    ("https://www.moneycontrol.com/rss/results.xml", "MC-Results"),
+    ("https://www.moneycontrol.com/rss/economy.xml", "MC-Economy"),
+    ("https://www.moneycontrol.com/rss/stocksinnews.xml", "MC-Stocks"),
+    ("https://www.moneycontrol.com/rss/business.xml", "MC-Business"),
+    ("https://www.moneycontrol.com/rss/mf.xml", "MC-MutualFunds"),
+    ("https://www.moneycontrol.com/rss/techanaly.xml", "MC-TechAnalysis"),
+]
+
 # Google News search queries for Indian financial news
 _GN_SEARCHES = [
     ("Indian+stock+market+sensex+nifty", "GN-Markets"),
@@ -357,7 +368,7 @@ def _fetch_gn_rss_articles(query: str, section_name: str, lookback_days: int = 7
             if source_el is not None:
                 source_name = source_el.text.strip() if source_el.text else ""
                 source_lower = source_name.lower()
-                if any(s in source_lower for s in ["business line", "businessline", "the hindu", "thehindubusinessline"]):
+                if any(s in source_lower for s in ["business line", "businessline", "the hindu", "thehindubusinessline", "moneycontrol"]):
                     continue
 
             # Filter by lookback window
@@ -437,6 +448,100 @@ def _fetch_gn_article_body(url: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════
+#  MONEYCONTROL SCRAPING (RSS + article body)
+# ═══════════════════════════════════════════════════════════
+
+def _fetch_mc_rss_articles(feed_url: str, section_name: str, lookback_days: int = 7) -> List[dict]:
+    """Fetch articles from Moneycontrol RSS feed (past N days)."""
+    try:
+        resp = requests.get(feed_url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            logger.error(f"[Moneycontrol] RSS {section_name} failed: {resp.status_code}")
+            return []
+
+        root = ET.fromstring(resp.content)
+        articles = []
+        cutoff = date.today() - timedelta(days=lookback_days)
+
+        for item in root.findall(".//item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            desc_el = item.find("description")
+            pub_el = item.find("pubDate")
+
+            if title_el is None or link_el is None:
+                continue
+
+            title = title_el.text.strip() if title_el.text else ""
+            link = link_el.text.strip() if link_el.text else ""
+
+            if not title or len(title) < 15:
+                continue
+
+            # Filter to lookback window
+            art_date = None
+            if pub_el is not None and pub_el.text:
+                try:
+                    pub_date = parsedate_to_datetime(pub_el.text)
+                    art_date = pub_date.date().isoformat()
+                    if pub_date.date() < cutoff:
+                        continue
+                except Exception:
+                    pass
+
+            summary = ""
+            if desc_el is not None and desc_el.text:
+                soup = BeautifulSoup(desc_el.text, "html.parser")
+                summary = soup.get_text(strip=True)[:200]
+
+            articles.append({
+                "title": title,
+                "summary": summary,
+                "section": section_name,
+                "url": link,
+                "source": "Moneycontrol",
+                "date": art_date or date.today().isoformat(),
+            })
+
+        return articles
+    except Exception as e:
+        logger.error(f"[Moneycontrol] Error fetching RSS {section_name}: {e}")
+        return []
+
+
+def _fetch_mc_article_body(url: str) -> str:
+    """Fetch full article text from a Moneycontrol article URL."""
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        if resp.status_code != 200:
+            logger.warning(f"[Moneycontrol] Body fetch HTTP {resp.status_code}: {url[-50:]}")
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        body_parts = []
+        # Moneycontrol uses div.content_wrapper or div.arti-flow
+        el = soup.find("div", class_="content_wrapper")
+        if not el:
+            el = soup.find("div", class_="arti-flow")
+        if not el:
+            el = soup.find("div", class_="article_content")
+        if not el:
+            el = soup.find("div", id="contentdata")
+        if not el:
+            el = soup.find("article")
+        if el:
+            for p in el.find_all("p"):
+                text = p.get_text(strip=True)
+                if text and len(text) > 20:
+                    body_parts.append(text)
+
+        return "\n\n".join(body_parts)[:3000]
+    except Exception as e:
+        logger.error(f"[Moneycontrol] Error fetching article body: {e}")
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════
 #  COMBINED ARTICLE FETCHING
 # ═══════════════════════════════════════════════════════════
 
@@ -494,6 +599,20 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
     th_count = len(all_articles) - bl_count
     logger.info(f"[EPaper] The Hindu: {th_count} articles")
 
+    # --- Moneycontrol (RSS feeds with lookback) ---
+    pre_mc = len(all_articles)
+    logger.info(f"[EPaper] Fetching Moneycontrol articles (past {lookback_days} days)...")
+    for feed_url, section_name in _MC_FEEDS:
+        mc_articles = _fetch_mc_rss_articles(feed_url, section_name, lookback_days)
+        for art in mc_articles:
+            if art["url"] not in seen_urls:
+                seen_urls.add(art["url"])
+                all_articles.append(art)
+        time.sleep(0.3)
+
+    mc_count = len(all_articles) - pre_mc
+    logger.info(f"[EPaper] Moneycontrol: {mc_count} articles")
+
     # --- Google News (RSS search for Indian financial news) ---
     pre_gn = len(all_articles)
     logger.info(f"[EPaper] Fetching Google News articles (past {lookback_days} days)...")
@@ -515,6 +634,8 @@ def fetch_todays_articles(force_refresh: bool = False, lookback_days: int = _LOO
         source = art.get("source", "Business Line")
         if source == "The Hindu":
             body = _fetch_th_article_body(art["url"])
+        elif source == "Moneycontrol":
+            body = _fetch_mc_article_body(art["url"])
         elif source.startswith("Google News"):
             body = _fetch_gn_article_body(art["url"])
         else:
