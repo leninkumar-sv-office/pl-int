@@ -522,7 +522,7 @@ export default function TradePlanner() {
       </div>
 
       {/* Table */}
-      <div style={{ overflow: 'auto', flex: 1, padding: '0 24px', borderTop: '1px solid var(--border)' }}>
+      <div style={{ overflow: 'auto', flex: 1, padding: '0 24px', borderTop: '1px solid var(--border)', marginBottom: '0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
@@ -831,54 +831,37 @@ export default function TradePlanner() {
               <tr><td colSpan={14} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
                 No matching stocks — select from dropdown to add new</td></tr>
             )}
-            {filteredRows.length > 0 && (() => {
-              const totalLtPL = rows.reduce((sum, r) => {
-                const sq = parseInt(r.ltSellQty) || 0;
-                if (sq > 0 && r.avgBuy > 0 && r.current > 0) return sum + (r.current - r.avgBuy) * sq;
-                return sum;
-              }, 0);
-              const totalStPL = rows.reduce((sum, r) => {
-                const sq = parseInt(r.stSellQty) || 0;
-                if (sq > 0 && r.avgBuy > 0 && r.current > 0) return sum + (r.current - r.avgBuy) * sq;
-                return sum;
-              }, 0);
-              const totalRealizedPL = totalLtPL + totalStPL;
-              return (
-              <tr style={{ borderTop: '2px solid var(--border)' }}>
-                <td colSpan={9} style={{ ...tdStyle, fontWeight: 700, textAlign: 'right', paddingRight: '12px' }}>Grand Total</td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {buyTotal > 0 && <div style={{ color: 'var(--red)' }}>-{formatINR(buyTotal)}</div>}
-                  {sellTotal > 0 && <div style={{ color: 'var(--green)' }}>+{formatINR(sellTotal)}</div>}
-                  {!buyTotal && !sellTotal && <span style={{ color: 'var(--text-muted)' }}>--</span>}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {totalLtPL !== 0 ? (
-                    <div style={{ color: totalLtPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {totalLtPL >= 0 ? '+' : ''}{formatINR(totalLtPL)}
-                    </div>
-                  ) : ''}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {totalStPL !== 0 ? (
-                    <div style={{ color: totalStPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {totalStPL >= 0 ? '+' : ''}{formatINR(totalStPL)}
-                    </div>
-                  ) : ''}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {totalRealizedPL !== 0 ? (
-                    <div style={{ color: totalRealizedPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {totalRealizedPL >= 0 ? '+' : ''}{formatINR(totalRealizedPL)}
-                    </div>
-                  ) : ''}
-                </td>
-                <td></td>
-              </tr>
-              );
-            })()}
           </tbody>
         </table>
       </div>
+
+      {/* Grand Total — sticky above footer */}
+      {filteredRows.length > 0 && (() => {
+        const totalLtPL = rows.reduce((sum, r) => {
+          const sq = parseInt(r.ltSellQty) || 0;
+          if (sq > 0 && r.avgBuy > 0 && r.current > 0) return sum + (r.current - r.avgBuy) * sq;
+          return sum;
+        }, 0);
+        const totalStPL = rows.reduce((sum, r) => {
+          const sq = parseInt(r.stSellQty) || 0;
+          if (sq > 0 && r.avgBuy > 0 && r.current > 0) return sum + (r.current - r.avgBuy) * sq;
+          return sum;
+        }, 0);
+        const totalRealizedPL = totalLtPL + totalStPL;
+        return (
+          <div style={{ flexShrink: 0, borderTop: '2px solid var(--border)', padding: '8px 24px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '24px', fontSize: '13px', fontWeight: 700, background: 'var(--bg-card, #1e1e2e)' }}>
+            <span style={{ color: 'var(--text)' }}>Grand Total</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {buyTotal > 0 && <span style={{ color: 'var(--red)', marginRight: '8px' }}>Buy: -{formatINR(buyTotal)}</span>}
+              {sellTotal > 0 && <span style={{ color: 'var(--green)', marginRight: '8px' }}>Sell: +{formatINR(sellTotal)}</span>}
+            </span>
+            {totalLtPL !== 0 && <span style={{ color: totalLtPL >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>LT: {totalLtPL >= 0 ? '+' : ''}{formatINR(totalLtPL)}</span>}
+            {totalStPL !== 0 && <span style={{ color: totalStPL >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>ST: {totalStPL >= 0 ? '+' : ''}{formatINR(totalStPL)}</span>}
+            {totalRealizedPL !== 0 && <span style={{ color: totalRealizedPL >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums', fontSize: '14px' }}>Total: {totalRealizedPL >= 0 ? '+' : ''}{formatINR(totalRealizedPL)}</span>}
+            {!buyTotal && !sellTotal && <span style={{ color: 'var(--text-muted)' }}>--</span>}
+          </div>
+        );
+      })()}
 
       {/* Footer */}
       <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
