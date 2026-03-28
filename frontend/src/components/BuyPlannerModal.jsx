@@ -104,6 +104,7 @@ export default function TradePlanner() {
         onHand: s.total_held_qty || 0, avgBuy: s.avg_buy_price || 0,
         totalInvested: s.total_invested || 0, ltcgInvested: s.ltcg_invested || 0, stcgInvested: s.stcg_invested || 0,
         ltcgEarliestDate: s.ltcg_earliest_date || '', stcgEarliestDate: s.stcg_earliest_date || '',
+        lastTxDate: s.last_tx_date || '', lastTxType: s.last_tx_type || '',
         low: s.live?.week_52_low || 0, current: s.live?.current_price || 0, high: s.live?.week_52_high || 0,
         sma200: s.live?.sma_200 || 0, daysBelowSma: s.live?.days_below_sma || 0, rsi: s.live?.rsi, signal: s.live?.signal,
         dayChange: s.live?.day_change || 0, dayChangePct: s.live?.day_change_pct || 0,
@@ -579,6 +580,7 @@ export default function TradePlanner() {
                       <div>
                         <div style={{ fontWeight: 600 }}>{row.symbol}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-dim, #aaa)' }}>{row.name} · {row.exchange}</div>
+                        {row.lastTxDate && <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Last {row.lastTxType?.toLowerCase() || 'tx'}: {(() => { const d = new Date(row.lastTxDate + 'T00:00:00'); return isNaN(d) ? row.lastTxDate : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }); })()}</div>}
                       </div>
                     </div>
                   </td>
