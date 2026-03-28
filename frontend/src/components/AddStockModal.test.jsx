@@ -4,6 +4,7 @@ import AddStockModal from './AddStockModal';
 
 vi.mock('../services/api', () => ({
   lookupStockName: vi.fn().mockResolvedValue({ name: '' }),
+  searchStock: vi.fn().mockResolvedValue([]),
 }));
 
 const defaultProps = {
@@ -30,7 +31,7 @@ describe('AddStockModal', () => {
 
   it('renders Quantity field', () => {
     render(<AddStockModal {...defaultProps} />);
-    expect(screen.getByText('Quantity *')).toBeTruthy();
+    expect(screen.getByText('Quantity')).toBeTruthy();
   });
 
   it('renders Buy Price field', () => {
@@ -40,7 +41,7 @@ describe('AddStockModal', () => {
 
   it('renders Buy Date field', () => {
     render(<AddStockModal {...defaultProps} />);
-    expect(screen.getByText('Buy Date *')).toBeTruthy();
+    expect(screen.getByText('Buy Date')).toBeTruthy();
   });
 
   it('renders submit button', () => {
@@ -55,7 +56,7 @@ describe('AddStockModal', () => {
 
   it('pre-fills symbol from initialData', () => {
     render(<AddStockModal {...defaultProps} initialData={{ symbol: 'INFY', exchange: 'NSE' }} />);
-    const symbolInput = screen.getByPlaceholderText('e.g. RELIANCE');
+    const symbolInput = screen.getByPlaceholderText(/Type to search/);
     expect(symbolInput.value).toBe('INFY');
   });
 });

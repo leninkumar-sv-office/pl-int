@@ -65,34 +65,17 @@ class TestAnalysisPdfEndpoint:
             assert header == b"%PDF-"
         os.remove(path)
 
-    def test_drive_sync_attempted(self, app_client):
-        """Drive upload_file is called after PDF generation."""
-        with patch("app.drive_service.upload_file") as mock_upload:
-            resp = app_client.post(
-                "/api/advisor/analysis-pdf",
-                json={"markdown": SAMPLE_MARKDOWN},
-            )
+    def test_drive_sync_flag_present(self, app_client):
+        """Response includes drive_synced flag (Google Drive desktop sync handles upload)."""
+        resp = app_client.post(
+            "/api/advisor/analysis-pdf",
+            json={"markdown": SAMPLE_MARKDOWN},
+        )
 
         assert resp.status_code == 200
         assert resp.json()["drive_synced"] is True
-        mock_upload.assert_called_once()
-        assert "analysis" in str(mock_upload.call_args)
         # Cleanup
         os.remove(resp.json()["path"])
-
-    def test_drive_sync_failure_returns_false(self, app_client):
-        """If Drive sync fails, drive_synced is False but PDF still generated."""
-        with patch("app.drive_service.upload_file", side_effect=Exception("Drive down")):
-            resp = app_client.post(
-                "/api/advisor/analysis-pdf",
-                json={"markdown": SAMPLE_MARKDOWN},
-            )
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["drive_synced"] is False
-        assert os.path.exists(data["path"])
-        os.remove(data["path"])
 
     def test_empty_markdown_returns_error(self, app_client):
         """Empty markdown returns error response."""

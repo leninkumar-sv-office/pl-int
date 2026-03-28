@@ -12,7 +12,6 @@ def tmp_env(tmp_path, monkeypatch):
     dumps = tmp_path / "dumps"
     user_dir = dumps / "test@example.com" / "TestUser" / "settings"
     user_dir.mkdir(parents=True)
-    monkeypatch.setattr("app.notification_service.DUMPS_BASE", dumps)
     monkeypatch.setattr("app.notification_service._EMAIL_ADDRESS", "sender@gmail.com")
     monkeypatch.setattr("app.notification_service._EMAIL_APP_PASSWORD", "test-pass")
     monkeypatch.setattr("app.notification_service._TELEGRAM_BOT_TOKEN", "")
@@ -44,8 +43,7 @@ class TestChannelStatus:
 class TestUserPrefs:
     def test_save_and_get_prefs(self, tmp_env):
         from app.notification_service import save_user_prefs, get_user_prefs
-        with patch("app.notification_service._sync_prefs_to_drive"):
-            saved = save_user_prefs("test@example.com", "testuser", ["a@b.com", "c@d.com"])
+        saved = save_user_prefs("test@example.com", "testuser", ["a@b.com", "c@d.com"])
         assert saved["emails"] == ["a@b.com", "c@d.com"]
         assert "updated_at" in saved
 
@@ -54,10 +52,9 @@ class TestUserPrefs:
 
     def test_dedup_and_normalize(self, tmp_env):
         from app.notification_service import save_user_prefs
-        with patch("app.notification_service._sync_prefs_to_drive"):
-            saved = save_user_prefs("test@example.com", "testuser", [
-                "A@B.com", "  a@b.com  ", "c@d.com", "A@B.COM",
-            ])
+        saved = save_user_prefs("test@example.com", "testuser", [
+            "A@B.com", "  a@b.com  ", "c@d.com", "A@B.COM",
+        ])
         assert saved["emails"] == ["a@b.com", "c@d.com"]
 
     def test_empty_prefs_for_unknown_user(self, tmp_env):
@@ -67,8 +64,7 @@ class TestUserPrefs:
 
     def test_get_notification_emails_with_prefs(self, tmp_env):
         from app.notification_service import save_user_prefs, get_user_notification_emails
-        with patch("app.notification_service._sync_prefs_to_drive"):
-            save_user_prefs("test@example.com", "testuser", ["notify@test.com"])
+        save_user_prefs("test@example.com", "testuser", ["notify@test.com"])
         emails = get_user_notification_emails("test@example.com", "testuser")
         assert emails == ["notify@test.com"]
 

@@ -1,11 +1,14 @@
 name: Tests
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_call:
 
 jobs:
+  # Backend and frontend tests run IN PARALLEL (no 'needs:' dependency)
   backend-tests:
     runs-on: self-hosted
     defaults:
@@ -19,14 +22,16 @@ jobs:
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt --quiet
+          pip install pytest-xdist --quiet  # parallel test execution
 
       - name: Create frontend dist stub for StaticFiles mount
         run: mkdir -p ../frontend/dist/assets
 
-      - name: Run backend tests with coverage
+      - name: Run backend tests with coverage (parallel)
         run: |
           source venv/bin/activate
           python -m pytest tests/ \
+            -n auto \
             --cov=app \
             --cov-report=term-missing \
             --cov-report=html:coverage-html \
@@ -47,5 +52,5 @@ jobs:
       - name: Install dependencies
         run: npm install --silent
 
-      - name: Run frontend tests
-        run: npx vitest run --reporter=verbose
+      - name: Run frontend tests with coverage (parallel)
+        run: npx vitest run --reporter=verbose --pool=threads

@@ -147,9 +147,6 @@ def app_client(tmp_data_dir, tmp_dumps_dir):
         patch("app.expiry_rules.DUMPS_BASE", tmp_dumps_dir),
         patch("app.expiry_rules._LEGACY_RULES_FILE", tmp_data_dir / "expiry_rules.json"),
 
-        # user_settings paths
-        patch("app.user_settings.DUMPS_BASE", tmp_dumps_dir),
-
         # Mock external service calls so tests never hit the network
         patch("app.zerodha_service.is_configured", return_value=False),
         patch("app.zerodha_service.is_session_valid", return_value=False),

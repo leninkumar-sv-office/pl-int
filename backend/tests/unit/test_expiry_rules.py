@@ -36,10 +36,9 @@ class TestRuleTypes:
 class TestRuleCRUD:
     def test_create_rule(self, tmp_env):
         from app.expiry_rules import save_rule, get_rules
-        with patch("app.expiry_rules._sync_to_drive"):
-            rule = save_rule("test@example.com", "testuser", {
-                "category": "fd", "rule_type": "days_before_maturity", "days": 30,
-            })
+        rule = save_rule("test@example.com", "testuser", {
+            "category": "fd", "rule_type": "days_before_maturity", "days": 30,
+        })
         assert rule["id"]
         assert rule["category"] == "fd"
         assert rule["days"] == 30
@@ -51,36 +50,32 @@ class TestRuleCRUD:
 
     def test_update_rule(self, tmp_env):
         from app.expiry_rules import save_rule, get_rules
-        with patch("app.expiry_rules._sync_to_drive"):
-            rule = save_rule("test@example.com", "testuser", {
-                "category": "fd", "rule_type": "on_maturity",
-            })
-            updated = save_rule("test@example.com", "testuser", {
-                "id": rule["id"], "category": "fd", "rule_type": "on_maturity", "enabled": False,
-            })
+        rule = save_rule("test@example.com", "testuser", {
+            "category": "fd", "rule_type": "on_maturity",
+        })
+        updated = save_rule("test@example.com", "testuser", {
+            "id": rule["id"], "category": "fd", "rule_type": "on_maturity", "enabled": False,
+        })
         assert updated["enabled"] is False
         assert len(get_rules("test@example.com", "testuser")) == 1
 
     def test_delete_rule(self, tmp_env):
         from app.expiry_rules import save_rule, delete_rule, get_rules
-        with patch("app.expiry_rules._sync_to_drive"):
-            rule = save_rule("test@example.com", "testuser", {
-                "category": "rd", "rule_type": "on_maturity",
-            })
-            assert delete_rule("test@example.com", "testuser", rule["id"]) is True
+        rule = save_rule("test@example.com", "testuser", {
+            "category": "rd", "rule_type": "on_maturity",
+        })
+        assert delete_rule("test@example.com", "testuser", rule["id"]) is True
         assert len(get_rules("test@example.com", "testuser")) == 0
 
     def test_delete_nonexistent(self, tmp_env):
         from app.expiry_rules import delete_rule
-        with patch("app.expiry_rules._sync_to_drive"):
-            assert delete_rule("test@example.com", "testuser", "nope") is False
+        assert delete_rule("test@example.com", "testuser", "nope") is False
 
     def test_filter_by_category(self, tmp_env):
         from app.expiry_rules import save_rule, get_rules
-        with patch("app.expiry_rules._sync_to_drive"):
-            save_rule("test@example.com", "testuser", {"category": "fd", "rule_type": "on_maturity"})
-            save_rule("test@example.com", "testuser", {"category": "rd", "rule_type": "on_maturity"})
-            save_rule("test@example.com", "testuser", {"category": "fd", "rule_type": "days_before_maturity", "days": 7})
+        save_rule("test@example.com", "testuser", {"category": "fd", "rule_type": "on_maturity"})
+        save_rule("test@example.com", "testuser", {"category": "rd", "rule_type": "on_maturity"})
+        save_rule("test@example.com", "testuser", {"category": "fd", "rule_type": "days_before_maturity", "days": 7})
 
         assert len(get_rules("test@example.com", "testuser")) == 3
         assert len(get_rules("test@example.com", "testuser", category="fd")) == 2
@@ -89,9 +84,8 @@ class TestRuleCRUD:
     def test_per_user_isolation(self, tmp_env):
         from app.expiry_rules import save_rule, get_rules
         (tmp_env / "test@example.com" / "Appa" / "settings").mkdir(parents=True)
-        with patch("app.expiry_rules._sync_to_drive"):
-            save_rule("test@example.com", "testuser", {"category": "fd", "rule_type": "on_maturity"})
-            save_rule("test@example.com", "appa", {"category": "rd", "rule_type": "on_maturity"})
+        save_rule("test@example.com", "testuser", {"category": "fd", "rule_type": "on_maturity"})
+        save_rule("test@example.com", "appa", {"category": "rd", "rule_type": "on_maturity"})
 
         assert len(get_rules("test@example.com", "testuser")) == 1
         assert len(get_rules("test@example.com", "appa")) == 1

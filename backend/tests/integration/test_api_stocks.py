@@ -59,34 +59,36 @@ def test_add_stock_missing_symbol_returns_422(app_client):
     assert response.status_code == 422
 
 
-def test_add_stock_missing_quantity_returns_422(app_client):
-    """POST /api/portfolio/add without quantity returns 422."""
+def test_add_stock_missing_quantity_uses_default(app_client):
+    """POST /api/portfolio/add without quantity succeeds with default 0."""
     response = app_client.post(
         "/api/portfolio/add",
         json={"symbol": "TCS", "buy_price": 100.0, "buy_date": "2024-01-15"},
         headers=HEADERS,
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["quantity"] == 0
 
 
-def test_add_stock_missing_buy_price_returns_422(app_client):
-    """POST /api/portfolio/add without buy_price returns 422."""
+def test_add_stock_missing_buy_price_uses_default(app_client):
+    """POST /api/portfolio/add without buy_price succeeds with default 0."""
     response = app_client.post(
         "/api/portfolio/add",
         json={"symbol": "TCS", "quantity": 5, "buy_date": "2024-01-15"},
         headers=HEADERS,
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["buy_price"] == 0
 
 
-def test_add_stock_missing_buy_date_returns_422(app_client):
-    """POST /api/portfolio/add without buy_date returns 422."""
+def test_add_stock_missing_buy_date_uses_default(app_client):
+    """POST /api/portfolio/add without buy_date succeeds with default."""
     response = app_client.post(
         "/api/portfolio/add",
         json={"symbol": "TCS", "quantity": 5, "buy_price": 100.0},
         headers=HEADERS,
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
 
 
 def test_add_stock_appears_in_portfolio(app_client):

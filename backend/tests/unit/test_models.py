@@ -27,10 +27,12 @@ def test_add_stock_request_missing_symbol():
         AddStockRequest(quantity=10, buy_price=2500.0, buy_date="2024-01-01")
 
 
-def test_add_stock_request_zero_quantity():
+def test_add_stock_request_zero_quantity_allowed():
+    """Zero quantity is allowed for tracking-only stocks."""
     from app.models import AddStockRequest
-    with pytest.raises(ValidationError):
-        AddStockRequest(symbol="TCS", quantity=0, buy_price=100.0, buy_date="2024-01-01")
+    req = AddStockRequest(symbol="TCS", quantity=0, buy_price=0, buy_date="2024-01-01")
+    assert req.quantity == 0
+    assert req.buy_price == 0
 
 
 def test_add_stock_request_negative_price():

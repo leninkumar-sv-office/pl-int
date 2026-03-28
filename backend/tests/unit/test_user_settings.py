@@ -9,7 +9,6 @@ import pytest
 def tmp_env(tmp_path, monkeypatch):
     dumps = tmp_path / "dumps"
     (dumps / "test@example.com" / "TestUser" / "settings").mkdir(parents=True)
-    monkeypatch.setattr("app.user_settings.DUMPS_BASE", dumps)
     monkeypatch.setattr(
         "app.user_settings.get_user_dumps_dir",
         lambda uid, email: dumps / email / uid.title(),
@@ -25,8 +24,7 @@ class TestUserSettings:
 
     def test_save_and_get(self, tmp_env):
         from app.user_settings import save_settings, get_settings
-        with patch("app.user_settings._sync_to_drive"):
-            saved = save_settings("testuser", "test@example.com", {"page_refresh_interval": 300})
+        saved = save_settings("testuser", "test@example.com", {"page_refresh_interval": 300})
         assert saved["page_refresh_interval"] == 300
         assert "updated_at" in saved
 
@@ -35,9 +33,8 @@ class TestUserSettings:
 
     def test_merge_preserves_existing(self, tmp_env):
         from app.user_settings import save_settings, get_settings
-        with patch("app.user_settings._sync_to_drive"):
-            save_settings("testuser", "test@example.com", {"page_refresh_interval": 120})
-            save_settings("testuser", "test@example.com", {"custom_key": "hello"})
+        save_settings("testuser", "test@example.com", {"page_refresh_interval": 120})
+        save_settings("testuser", "test@example.com", {"custom_key": "hello"})
 
         loaded = get_settings("testuser", "test@example.com")
         assert loaded["page_refresh_interval"] == 120
@@ -46,9 +43,8 @@ class TestUserSettings:
     def test_per_user_isolation(self, tmp_env):
         from app.user_settings import save_settings, get_settings
         (tmp_env / "test@example.com" / "Appa" / "settings").mkdir(parents=True)
-        with patch("app.user_settings._sync_to_drive"):
-            save_settings("testuser", "test@example.com", {"page_refresh_interval": 100})
-            save_settings("appa", "test@example.com", {"page_refresh_interval": 200})
+        save_settings("testuser", "test@example.com", {"page_refresh_interval": 100})
+        save_settings("appa", "test@example.com", {"page_refresh_interval": 200})
 
         assert get_settings("testuser", "test@example.com")["page_refresh_interval"] == 100
         assert get_settings("appa", "test@example.com")["page_refresh_interval"] == 200
