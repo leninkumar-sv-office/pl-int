@@ -509,8 +509,15 @@ export default function TradePlanner() {
     return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading stocks...</div>;
   }
 
+  const handleBgClick = useCallback((e) => {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'A' || e.target.closest('[role="dialog"]')) return;
+    clearSearch();
+    searchInputRef.current?.focus();
+  }, []);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }} onClick={handleBgClick}>
       {/* Header */}
       <div style={{ padding: '16px 24px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
