@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { searchStock, fetchStockPrice, getStockSummary, getStockHistory, getUserSettings } from '../services/api';
+import { searchStock, fetchStockPrice, getStockSummary, getStockHistory, getUserSettings, saveUserSettings } from '../services/api';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import html2canvas from 'html2canvas';
 
@@ -36,16 +36,22 @@ const todayStr = () => {
   return `${dd}-${months[d.getMonth()]}-${d.getFullYear()}`;
 };
 
-const loadSaved = () => {
+const loadSavedLocal = () => {
   try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch {}
   return [];
 };
 
+const savePlanLocal = (data) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+};
+
 const savePlan = (rows) => {
   const data = rows
-    .filter(r => (parseInt(r.buyQty) || 0) > 0 || (parseInt(r.sellQty) || 0) > 0)
+    .filter(r => (parseInt(r.buyQty) || 0) > 0 || (parseInt(r.sellQty) || 0) > 0 || (parseInt(r.ltSellQty) || 0) > 0 || (parseInt(r.stSellQty) || 0) > 0)
     .map(r => ({ symbol: r.symbol, exchange: r.exchange, buyQty: r.buyQty || '', sellQty: r.sellQty || '', ltSellQty: r.ltSellQty || '', stSellQty: r.stSellQty || '' }));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  savePlanLocal(data);
+  // Sync to backend (fire-and-forget)
+  saveUserSettings({ trade_plan: data }).catch(() => {});
 };
 
 // Opens the Trade Planner in a new browser window
@@ -67,6 +73,8 @@ export default function TradePlanner() {
   const [generating, setGenerating] = useState(false);
   const [sortField, setSortField] = useState('week_52_high');
   const [sortDir, setSortDir] = useState('desc');
+  const [showPlannedOnly, setShowPlannedOnly] = useState(false);
+  const savedPlanRef = useRef(null);
   const [expandedSymbol, setExpandedSymbol] = useState(null); // "SYMBOL.EXCHANGE" or null
   const [chartPeriod, setChartPeriod] = useState('1y');
   const [chartData, setChartData] = useState([]);
@@ -77,13 +85,19 @@ export default function TradePlanner() {
   const fileInputRef = useRef(null);
   const initializedRef = useRef(false);
 
-  // Fetch stock summary + hidden stocks on mount
+  // Fetch stock summary + hidden stocks + trade plan from backend on mount
   useEffect(() => {
     document.title = 'Trade Planner';
     Promise.all([getStockSummary(), getUserSettings().catch(() => ({}))])
       .then(([data, settings]) => {
         const hidden = new Set(settings.hidden_stocks || []);
         setStocks(hidden.size > 0 ? data.filter(s => !hidden.has(s.symbol)) : data);
+        // If backend has trade_plan, use it (synced across devices). Else fall back to localStorage.
+        const backendPlan = settings.trade_plan;
+        if (backendPlan && Array.isArray(backendPlan) && backendPlan.length > 0) {
+          savePlanLocal(backendPlan); // sync to localStorage too
+          savedPlanRef.current = backendPlan;
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -94,7 +108,7 @@ export default function TradePlanner() {
     if (!stocks || stocks.length === 0 || initializedRef.current) return;
     initializedRef.current = true;
 
-    const saved = loadSaved();
+    const saved = savedPlanRef.current || loadSavedLocal();
     const savedMap = {};
     saved.forEach(s => { savedMap[`${s.symbol}.${s.exchange}`] = s; });
 
@@ -250,12 +264,15 @@ export default function TradePlanner() {
     return sortDir === 'asc' ? av - bv : bv - av;
   });
 
+  const afterPlannedFilter = showPlannedOnly
+    ? sortedRows.filter(r => (parseInt(r.buyQty)||0) > 0 || (parseInt(r.ltSellQty)||0) > 0 || (parseInt(r.stSellQty)||0) > 0)
+    : sortedRows;
   const filteredRows = searchQuery.trim()
-    ? sortedRows.filter(r => {
+    ? afterPlannedFilter.filter(r => {
         const q = searchQuery.trim().toLowerCase();
         return r.symbol.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
       })
-    : sortedRows;
+    : afterPlannedFilter;
 
   const handleSearchChange = useCallback((e) => {
     const q = e.target.value;
@@ -316,6 +333,7 @@ export default function TradePlanner() {
   const clearAllQty = () => {
     setRows(prev => prev.map(r => ({ ...r, buyQty: '', sellQty: '', ltSellQty: '', stSellQty: '' })));
     localStorage.removeItem(STORAGE_KEY);
+    saveUserSettings({ trade_plan: [] }).catch(() => {});
   };
 
   const CHART_PERIODS = ['1D', '5D', '1M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
@@ -566,6 +584,11 @@ export default function TradePlanner() {
             ))}
           </div>
         )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-dim)', cursor: 'pointer', marginBottom: '8px' }}>
+          <input type="checkbox" checked={showPlannedOnly} onChange={e => setShowPlannedOnly(e.target.checked)} style={{ cursor: 'pointer' }} />
+          Planned only
+          {showPlannedOnly && <span style={{ color: 'var(--text-muted)' }}>({afterPlannedFilter.length} stocks)</span>}
+        </label>
       </div>
 
       {/* Table */}
