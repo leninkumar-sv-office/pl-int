@@ -505,16 +505,16 @@ export default function TradePlanner() {
     e.target.value = '';
   };
 
-  if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading stocks...</div>;
-  }
-
   const handleBgClick = useCallback((e) => {
     // Only clear search when clicking on empty/background areas — not table content
     if (e.target.closest('table') || e.target.closest('input') || e.target.closest('button') || e.target.closest('select') || e.target.closest('a') || e.target.closest('[role="dialog"]') || e.target.closest('svg')) return;
     clearSearch();
     searchInputRef.current?.focus();
   }, []);
+
+  if (loading) {
+    return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading stocks...</div>;
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }} onClick={handleBgClick}>
