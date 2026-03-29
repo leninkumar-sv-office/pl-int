@@ -83,37 +83,71 @@ npm run test:report
 - All MF funds are Direct Growth plans, names in Title Case
 - **Feature parity: StockSummaryTable ↔ MutualFundTable** — any feature added to one (sorting modes, filtering, display options, columns) MUST also be added to the other. They should have the same UX capabilities.
 
-## MANDATORY: Verify Every Deploy with Playwright
+## MANDATORY: Test Locally Before Deploy
 
-**THIS IS NOT OPTIONAL. After EVERY deploy**, verify using the Playwright MCP browser:
-1. Navigate to `https://pl.thirumagal.com`
-2. Wait for data to load (wait for "ADANI" or similar stock name)
-3. Take a screenshot to visually confirm the change works
-4. Check columns have data, filters work, no empty values where data should be
-5. Check the browser console for errors
-6. If Playwright can't launch (Chrome session conflict), verify via API calls instead
+**After making frontend or backend changes, ALWAYS test locally using Chrome DevTools MCP before pushing to CI/CD.**
 
-**If you skip this step, the user WILL find bugs and ask you to test. Do it proactively.**
+### Local Testing Setup
+
+- **Local dev** runs on port **9998** (backend) + port **5173** (Vite frontend)
+- **Docker prod** runs on port **9999** — do NOT use Docker for local testing
+- Start local dev: `./scripts/run.sh` or manually:
+  ```bash
+  cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 9998
+  cd frontend && npm run dev   # Vite proxies /api → localhost:9998
+  ```
+
+### Local Test Flow (do this BEFORE every deploy)
+
+1. **Build frontend**: `cd frontend && npm run build`
+2. **Navigate Chrome DevTools** to `http://localhost:5173` (Vite dev) or `http://localhost:9998` (built)
+3. **Inject auth** (generate token from LOCAL backend, not Docker):
+   ```python
+   cd backend && python3 -c "
+   from app.auth import create_session_token
+   print(create_session_token('leninkumar.sv.ai@gmail.com', 'Lenin'))
+   "
+   ```
+4. **Inject into browser** via `evaluate_script`:
+   ```javascript
+   localStorage.setItem('sessionToken', '<TOKEN>');
+   localStorage.setItem('authUser', JSON.stringify({email:'leninkumar.sv.ai@gmail.com',name:'Lenin'}));
+   localStorage.setItem('selectedUserId', 'lenin');
+   location.reload();
+   ```
+5. **Take screenshot** to visually confirm the change works
+6. **Check console** for errors (React errors, API failures, etc.)
+7. **Only then** commit, push, and deploy via `/deploy`
+
+**If you skip local testing, the user WILL find bugs. Test locally FIRST, deploy SECOND.**
 **Every time you think "this is a small change, no need to test" — TEST IT ANYWAY.**
 
-### Authentication for Playwright/Chrome DevTools
+### Post-Deploy Verification
 
-**DO NOT ask the user to log in. Log in yourself.** Generate a JWT token using `app/auth.py` and inject it:
+After CI/CD deploy succeeds, also verify prod:
+1. Navigate to `https://pl.thirumagal.com`
+2. Wait for data to load, take screenshot
+3. Check console for errors
+4. If Chrome DevTools can't connect, verify via API calls instead
 
+### Authentication for Chrome DevTools
+
+**DO NOT ask the user to log in. Log in yourself.**
+
+For **local testing** (port 9998):
 ```python
-# Generate token from Docker container
-docker exec pl-dashboard python3 -c "
+cd backend && python3 -c "
 from app.auth import create_session_token
 print(create_session_token('leninkumar.sv.ai@gmail.com', 'Lenin'))
 "
 ```
 
-Then inject into the browser via JavaScript (using `browser_evaluate` or `evaluate_script`):
-```javascript
-localStorage.setItem('sessionToken', '<TOKEN>');
-localStorage.setItem('authUser', JSON.stringify({email:'leninkumar.sv.ai@gmail.com',name:'Lenin'}));
-localStorage.setItem('selectedUserId', 'lenin');
-location.reload();
+For **prod verification** (port 9999 Docker):
+```python
+docker exec pl-dashboard python3 -c "
+from app.auth import create_session_token
+print(create_session_token('leninkumar.sv.ai@gmail.com', 'Lenin'))
+"
 ```
 
 **THIS IS A STRICT REQUIREMENT. NEVER ask the user to log in. NEVER say "please log in". NEVER wait for the user. Generate the token and inject it yourself. If you cannot, fall back to API verification with auth headers. There is NO scenario where you should ask the user to authenticate for testing.**
