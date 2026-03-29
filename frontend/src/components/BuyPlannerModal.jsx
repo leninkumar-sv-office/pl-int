@@ -510,8 +510,8 @@ export default function TradePlanner() {
   }
 
   const handleBgClick = useCallback((e) => {
-    const tag = e.target.tagName;
-    if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'A' || e.target.closest('[role="dialog"]')) return;
+    // Only clear search when clicking on empty/background areas — not table content
+    if (e.target.closest('table') || e.target.closest('input') || e.target.closest('button') || e.target.closest('select') || e.target.closest('a') || e.target.closest('[role="dialog"]') || e.target.closest('svg')) return;
     clearSearch();
     searchInputRef.current?.focus();
   }, []);
