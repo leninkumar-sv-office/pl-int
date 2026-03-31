@@ -294,13 +294,28 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                 </thead>
                 <tbody>
                   {buys.map((t, i) => renderRow(t, i, 'Buy'))}
+                  {(() => {
+                    const allQty = buys.reduce((s, t) => s + t.quantity, 0);
+                    const allCost = buys.reduce((s, t) => s + t.net_total_after_levies, 0);
+                    const allCharges = buys.reduce((s, t) => s + (t.net_total_after_levies - t.wap * t.quantity), 0);
+                    return (
+                      <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600, background: 'rgba(59,130,246,0.06)' }}>
+                        <td style={tdStyle} colSpan={4}>Total All Buys ({buys.length})</td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{allQty}</td>
+                        <td style={tdStyle}></td>
+                        <td style={tdStyle}></td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(allCost)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(allCharges)}</td>
+                      </tr>
+                    );
+                  })()}
                   <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
                     <td style={tdStyle} colSpan={4}>Total Buys (excl. duplicates)</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{importableBuys.reduce((s, t) => s + t.quantity, 0)}</td>
                     <td style={tdStyle}></td>
                     <td style={tdStyle}></td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalBuyCost)}</td>
-                    <td style={tdStyle}></td>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(importableBuys.reduce((s, t) => s + (t.net_total_after_levies - t.wap * t.quantity), 0))}</td>
                   </tr>
                 </tbody>
               </table>
@@ -371,11 +386,28 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                     return renderRow(t, i, 'Sell', plCell);
                   })}
                   {(() => {
+                    const allSellQty = sells.reduce((s, t) => s + t.quantity, 0);
+                    const allSellProceeds = sells.reduce((s, t) => s + t.net_total_after_levies, 0);
+                    const allSellCharges = sells.reduce((s, t) => s + ((t.wap * t.quantity) - t.net_total_after_levies), 0);
+                    return (
+                      <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 600, background: 'rgba(59,130,246,0.06)' }}>
+                        <td style={tdStyle} colSpan={4}>Total All Sells ({sells.length})</td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{allSellQty}</td>
+                        <td style={tdStyle}></td>
+                        <td style={tdStyle}></td>
+                        <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(allSellProceeds)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(allSellCharges)}</td>
+                        <td style={tdStyle}></td>
+                      </tr>
+                    );
+                  })()}
+                  {(() => {
                     const totalRealizedPL = importableSells.reduce((sum, t) => {
                       const avgBuy = avgBuyMap[t.symbol] || 0;
                       if (avgBuy > 0) return sum + (t.effective_price - avgBuy) * t.quantity;
                       return sum;
                     }, 0);
+                    const exclSellCharges = importableSells.reduce((s, t) => s + ((t.wap * t.quantity) - t.net_total_after_levies), 0);
                     return (
                     <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
                       <td style={tdStyle} colSpan={4}>Total Sells (excl. duplicates)</td>
@@ -383,7 +415,7 @@ export default function ImportPreviewModal({ data, existingSymbols = new Set(), 
                       <td style={tdStyle}></td>
                       <td style={tdStyle}></td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>{formatINR(totalSellProceeds)}</td>
-                      <td style={tdStyle}></td>
+                      <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>{formatINR(exclSellCharges)}</td>
                       <td style={{ ...tdStyle, textAlign: 'right', color: totalRealizedPL >= 0 ? 'var(--green)' : 'var(--red)' }}>
                         {totalRealizedPL !== 0 ? `${totalRealizedPL >= 0 ? '+' : ''}${formatINR(totalRealizedPL)}` : ''}
                       </td>
