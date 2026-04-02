@@ -955,11 +955,16 @@ def parse_contract_note_preview(req: ContractNoteUpload):
     parsed = _decode_and_parse_pdf(req)
 
     # ── Duplicate detection ──
-    # Build a fingerprint cache: symbol → (fingerprints_set, remarks_set)
+    # Build a fingerprint cache: symbol → (fingerprints_dict, remarks_set)
     _fp_cache: dict = {}
     contract_no = parsed.get("contract_no", "")
     cn_remark = f"CN#{contract_no}" if contract_no else ""
     dup_count = 0
+    total_tx = len(parsed.get("transactions", []))
+
+    logger.info(f"[Preview] CN#{contract_no}: {total_tx} transactions, "
+                f"user={_resolve_email()}, uid={_resolve_user_id()}, "
+                f"stocks_dir={udb().stocks_dir}")
 
     for tx in parsed.get("transactions", []):
         symbol = (tx.get("symbol") or "").upper()
@@ -971,7 +976,10 @@ def parse_contract_note_preview(req: ContractNoteUpload):
         if symbol not in _fp_cache:
             try:
                 _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
-            except Exception:
+                fp_count = len(_fp_cache[symbol][0])
+                logger.info(f"[Preview] {symbol}: loaded {fp_count} existing fingerprints")
+            except Exception as e:
+                logger.error(f"[Preview] {symbol}: fingerprint load failed: {e}")
                 _fp_cache[symbol] = ({}, set())
 
         fingerprints, remarks_set = _fp_cache[symbol]
@@ -986,10 +994,19 @@ def parse_contract_note_preview(req: ContractNoteUpload):
 
         fp = (trade_date, action, qty, wap)
         fp_alt = (trade_date, action, qty, eff)
-        existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
+        # Avoid double-counting when fp == fp_alt
+        if fp == fp_alt:
+            existing_count = fingerprints.get(fp, 0)
+        else:
+            existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
         batch_key = f"_preview_{symbol}:{fp}"
         batch_count = _fp_cache.get(batch_key, 0)
-        if batch_count < existing_count:
+
+        is_dup = batch_count < existing_count
+        if not is_dup:
+            logger.debug(f"[Preview] NOT dup: {symbol} {fp} existing={existing_count} batch={batch_count}")
+
+        if is_dup:
             tx["isDuplicate"] = True
             _fp_cache[batch_key] = batch_count + 1
             dup_count += 1
@@ -997,8 +1014,7 @@ def parse_contract_note_preview(req: ContractNoteUpload):
             tx["isDuplicate"] = False
             _fp_cache[batch_key] = batch_count + 1
 
-    if dup_count > 0:
-        logger.info(f"[Import] Found {dup_count} duplicate transaction(s) in preview")
+    logger.info(f"[Preview] Result: {dup_count}/{total_tx} duplicates detected")
 
     return parsed
 
@@ -1026,7 +1042,6 @@ def import_contract_note(req: ContractNoteUpload):
 
     # ── Server-side duplicate detection ──
     _fp_cache: dict = {}
-    cn_remark = f"CN#{contract_no}" if contract_no else ""
     skipped_dups = 0
 
     imported_buys = []
@@ -1042,7 +1057,7 @@ def import_contract_note(req: ContractNoteUpload):
                     try:
                         _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
                     except Exception:
-                        _fp_cache[symbol] = (set(), set())
+                        _fp_cache[symbol] = ({}, set())
 
                 fingerprints, remarks_set = _fp_cache[symbol]
 
@@ -1057,7 +1072,10 @@ def import_contract_note(req: ContractNoteUpload):
                 fp = (tx_date, action, qty, wap)
                 fp_alt = (tx_date, action, qty, eff)
                 # Count how many times this fingerprint exists in xlsx
-                existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
+                if fp == fp_alt:
+                    existing_count = fingerprints.get(fp, 0)
+                else:
+                    existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
                 # Count how many times we've already imported this fp in this batch
                 batch_key = f"{symbol}:{fp}"
                 batch_count = _fp_cache.get(batch_key, 0)
@@ -1205,10 +1223,9 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
         }
 
     # ── Server-side duplicate detection (safety net) ──
-    # IMPORTANT: _fp_cache is updated after each insert so that within-batch
-    # duplicates are also caught (e.g. same stock appears twice in the same batch).
-    _fp_cache: dict = {}  # symbol -> (fingerprints_set, remarks_set)
-    cn_remark = f"CN#{contract_no}" if contract_no else ""
+    # Count-based: allows N identical transactions if N appear in batch
+    # but skips if already N exist in the xlsx
+    _fp_cache: dict = {}  # symbol -> (fingerprints_dict, remarks_set)
     skipped_dups = 0
 
     imported_buys = []
@@ -1224,26 +1241,29 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
                     try:
                         _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
                     except Exception:
-                        _fp_cache[symbol] = (set(), set())
+                        _fp_cache[symbol] = ({}, set())
 
                 fingerprints, remarks_set = _fp_cache[symbol]
 
-                # Check 1: CN# remark match
-                if cn_remark and cn_remark in remarks_set:
-                    skipped_dups += 1
-                    continue
-
-                # Check 2: transaction fingerprint match (try both WAP and effective price)
+                # Dedup by exact transaction fingerprint (count-based)
                 tx_date = tx.get("trade_date", trade_date)
                 action = tx.get("action", "")
                 qty = int(tx.get("quantity", 0))
                 wap = round(tx.get("wap", 0), 2)
                 eff = round(tx.get("effective_price", tx.get("wap", 0)), 2)
-                fp_wap = (tx_date, action, qty, wap)
-                fp_eff = (tx_date, action, qty, eff)
-                if fp_wap in fingerprints or fp_eff in fingerprints:
+                fp = (tx_date, action, qty, wap)
+                fp_alt = (tx_date, action, qty, eff)
+                if fp == fp_alt:
+                    existing_count = fingerprints.get(fp, 0)
+                else:
+                    existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
+                batch_key = f"{symbol}:{fp}"
+                batch_count = _fp_cache.get(batch_key, 0)
+                if batch_count < existing_count:
+                    _fp_cache[batch_key] = batch_count + 1
                     skipped_dups += 1
                     continue
+                _fp_cache[batch_key] = batch_count + 1
 
             remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
 
