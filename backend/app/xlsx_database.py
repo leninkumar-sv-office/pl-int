@@ -464,21 +464,30 @@ class XlsxPortfolio:
 
         Call this periodically (e.g. every refresh cycle) so that newly
         dropped xlsx files appear without a backend restart.
+
+        Uses build-then-swap so concurrent readers never see empty dicts.
         """
         with self._lock:
             old_symbols = set(self._file_map.keys())
-            # Clear maps and rebuild
-            self._file_map.clear()
-            self._all_files.clear()
-            self._name_map.clear()
-            self._build_file_map()
-            new_symbols = set(self._file_map.keys())
 
+            # Build into NEW dicts — old dicts remain readable by concurrent threads
+            old_file_map, old_all_files, old_name_map = self._file_map, self._all_files, self._name_map
+            self._file_map = {}
+            self._all_files = {}
+            self._name_map = {}
+            self._build_file_map()
+
+            # If rebuild failed, keep old maps
+            if not self._file_map and old_file_map:
+                self._file_map, self._all_files, self._name_map = old_file_map, old_all_files, old_name_map
+                logger.error("[XlsxDB] Reindex produced empty results — keeping old maps")
+                return
+
+            new_symbols = set(self._file_map.keys())
             added = new_symbols - old_symbols
             removed = old_symbols - new_symbols
 
             # Invalidate caches for changed/new/removed symbols
-            # Also invalidate existing symbols whose files may have changed
             for sym in new_symbols | removed:
                 self._invalidate_symbol(sym)
 
@@ -1268,9 +1277,15 @@ class XlsxPortfolio:
         Used for duplicate detection before import.
         """
         symbol = symbol.upper()
-        files = self._all_files.get(symbol, [])
+        # Snapshot _all_files reference under lock to avoid reading during reindex
+        with self._lock:
+            all_files = self._all_files
+            file_map = self._file_map
+        files = all_files.get(symbol, [])
         if not files:
-            fallback = self._find_file_for_symbol(symbol)
+            fallback = file_map.get(symbol)
+            if not fallback:
+                fallback = self._find_file_for_symbol(symbol)
             if fallback:
                 files = [fallback]
             else:
