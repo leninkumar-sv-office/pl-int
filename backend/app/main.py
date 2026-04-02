@@ -1323,14 +1323,10 @@ def import_contract_note_confirmed(req: ConfirmedImportPayload):
                 })
 
             # ── Update in-memory cache so within-batch duplicates are caught ──
-            # Only add fingerprints — NOT the CN# remark.
-            # CN# remark check is for "entire contract note already imported before"
-            # (from xlsx). Within-batch, fingerprint check handles individual tx dedup.
-            if symbol:
-                fingerprints, remarks_set = _fp_cache.get(symbol, (set(), set()))
-                fingerprints.add(fp_wap)
-                fingerprints.add(fp_eff)
-                _fp_cache[symbol] = (fingerprints, remarks_set)
+            if symbol and symbol in _fp_cache:
+                fingerprints, remarks_set = _fp_cache[symbol]
+                fp_inserted = (tx_date, action, qty, wap)
+                fingerprints[fp_inserted] = fingerprints.get(fp_inserted, 0) + 1
 
         except Exception as e:
             error_msg = f"{tx.get('action', '?')} {tx.get('symbol', '?')}: {str(e)[:100]}"
