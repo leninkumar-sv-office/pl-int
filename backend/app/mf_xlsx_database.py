@@ -279,7 +279,7 @@ def _fetch_nav_history_mfapi(scheme_code: int) -> Optional[list]:
 def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> Dict[str, float]:
     """Compute 1D, 7D and 30D NAV change % using mfapi.in historical data.
     Returns {day_change_pct, week_change_pct, month_change_pct}."""
-    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_50": None, "sma_200": None, "signal": None, "days_below_sma": 0, "rsi": None}
+    result = {"day_change": 0.0, "day_change_pct": 0.0, "week_change_pct": 0.0, "month_change_pct": 0.0, "week_52_high": 0.0, "week_52_low": 0.0, "sma_50": None, "sma_200": None, "signal": None, "days_below_sma": 0, "rsi": None, "cagr_1y": None, "cagr_3y": None, "cagr_5y": None}
     if current_nav <= 0:
         return result
 
@@ -300,6 +300,9 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
                 "signal": cached.get("signal"),
                 "days_below_sma": cached.get("days_below_sma", 0),
                 "rsi": cached.get("rsi"),
+                "cagr_1y": cached.get("cagr_1y"),
+                "cagr_3y": cached.get("cagr_3y"),
+                "cagr_5y": cached.get("cagr_5y"),
             }
 
     # Look up AMFI scheme code (cached on disk)
@@ -421,6 +424,20 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
         elif avg_gain > 0:
             result["rsi"] = 100.0
 
+    # CAGR calculation (1Y, 3Y, 5Y) — dated_navs is most-recent-first
+    for years, key in [(1, "cagr_1y"), (3, "cagr_3y"), (5, "cagr_5y")]:
+        target_date = today - timedelta(days=years * 365)
+        # Find the NAV closest to (on or before) the target date
+        best_date = None
+        best_nav = 0.0
+        for d, nav in dated_navs:
+            if d <= target_date:
+                if best_date is None or d > best_date:
+                    best_date = d
+                    best_nav = nav
+        if best_nav > 0 and current_nav > 0:
+            result[key] = round((pow(current_nav / best_nav, 1.0 / years) - 1) * 100, 2)
+
     # Cache result
     with _nav_change_cache_lock:
         _nav_change_cache[fund_code] = {
@@ -435,6 +452,9 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             "signal": result["signal"],
             "days_below_sma": result["days_below_sma"],
             "rsi": result["rsi"],
+            "cagr_1y": result["cagr_1y"],
+            "cagr_3y": result["cagr_3y"],
+            "cagr_5y": result["cagr_5y"],
             "fetched_at": now,
         }
 
@@ -1069,6 +1089,9 @@ class MFXlsxPortfolio:
                 "signal": nav_changes.get("signal"),
                 "days_below_sma": nav_changes.get("days_below_sma", 0),
                 "rsi": nav_changes.get("rsi"),
+                "cagr_1y": nav_changes.get("cagr_1y"),
+                "cagr_3y": nav_changes.get("cagr_3y"),
+                "cagr_5y": nav_changes.get("cagr_5y"),
                 # Include held lots and sold lots for detail view
                 "held_lots": [
                     {

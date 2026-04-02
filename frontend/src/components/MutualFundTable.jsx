@@ -110,20 +110,23 @@ const COL_DEFS = [
   { id: 'w52High',      label: '52W High' },
   { id: 'signal',       label: 'Signal' },
   { id: 'rsi',          label: 'RSI' },
+  { id: 'cagr1y',       label: '1Y CAGR' },
+  { id: 'cagr3y',       label: '3Y CAGR' },
+  { id: 'cagr5y',       label: '5Y CAGR' },
   { id: 'currentValue', label: 'Current Value' },
   { id: 'invested',     label: 'Invested' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
   { id: 'realizedPL',   label: 'Realized P&L' },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
-const LS_KEY = 'mfVisibleCols_v2';
+const LS_KEY = 'mfVisibleCols_v3';
 
 function loadVisibleCols() {
   try {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
   } catch (_) {}
-  const DEFAULT_HIDDEN = ['realizedPL'];
+  const DEFAULT_HIDDEN = ['realizedPL', 'cagr3y', 'cagr5y'];
   return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
 
@@ -953,6 +956,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
       case 'w52High': return f.week_52_high || 0;
       case 'signal': { const sma = f.sma_200, nav = f.current_nav || 0; const pct = sma > 0 && nav > 0 ? ((nav - sma) / sma * 100) : -9999; const base = { strong_bull: 400, weak_bull: 200, weak_bear: -200, strong_bear: -400 }; return (base[f.signal] ?? -500) + pct; }
       case 'rsi': return f.rsi ?? -1;
+      case 'cagr1y': return f.cagr_1y ?? -Infinity;
+      case 'cagr3y': return f.cagr_3y ?? -Infinity;
+      case 'cagr5y': return f.cagr_5y ?? -Infinity;
       case 'currentValue': return f.current_value;
       case 'unrealizedPL':
         if (sortMode === 'pa') return mfPaVal(f, 'unrealizedPL');
@@ -1305,6 +1311,15 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                 RSI<SortIcon field="rsi" />
                 <span title={"RSI (14-day Relative Strength Index)\n< 30: Oversold (beaten down)\n30-70: Neutral\n> 70: Overbought (run up fast)"} style={{ marginLeft: '4px', fontSize: '10px', cursor: 'help', opacity: 0.6 }}>ⓘ</span>
               </th>}
+              {col('cagr1y') && <th onClick={(e) => handleSort('cagr1y', e)} style={{ cursor: 'pointer' }}>
+                1Y CAGR<SortIcon field="cagr1y" />
+              </th>}
+              {col('cagr3y') && <th onClick={(e) => handleSort('cagr3y', e)} style={{ cursor: 'pointer' }}>
+                3Y CAGR<SortIcon field="cagr3y" />
+              </th>}
+              {col('cagr5y') && <th onClick={(e) => handleSort('cagr5y', e)} style={{ cursor: 'pointer' }}>
+                5Y CAGR<SortIcon field="cagr5y" />
+              </th>}
               {col('currentValue') && <th onClick={(e) => handleSort('currentValue', e)} style={{ cursor: 'pointer' }}>
                 Current Value<SortIcon field="currentValue" />
               </th>}
@@ -1543,6 +1558,27 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       })()}
                     </td>}
 
+                    {col('cagr1y') && <td>
+                      {f.cagr_1y != null ? (
+                        <div style={{ fontWeight: 600, color: f.cagr_1y >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {f.cagr_1y >= 0 ? '+' : ''}{f.cagr_1y.toFixed(1)}%
+                        </div>
+                      ) : <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>}
+                    </td>}
+                    {col('cagr3y') && <td>
+                      {f.cagr_3y != null ? (
+                        <div style={{ fontWeight: 600, color: f.cagr_3y >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {f.cagr_3y >= 0 ? '+' : ''}{f.cagr_3y.toFixed(1)}%
+                        </div>
+                      ) : <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>}
+                    </td>}
+                    {col('cagr5y') && <td>
+                      {f.cagr_5y != null ? (
+                        <div style={{ fontWeight: 600, color: f.cagr_5y >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {f.cagr_5y >= 0 ? '+' : ''}{f.cagr_5y.toFixed(1)}%
+                        </div>
+                      ) : <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>--</span>}
+                    </td>}
                     {col('currentValue') && <td>
                       <div style={{ fontWeight: 600 }}>
                         {hasHeld ? formatINR(f.current_value) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
