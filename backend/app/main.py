@@ -972,36 +972,30 @@ def parse_contract_note_preview(req: ContractNoteUpload):
             try:
                 _fp_cache[symbol] = udb().get_existing_transaction_fingerprints(symbol)
             except Exception:
-                _fp_cache[symbol] = (set(), set())
+                _fp_cache[symbol] = ({}, set())
 
         fingerprints, remarks_set = _fp_cache[symbol]
 
-        # Check 1: exact contract note number match → definitely duplicate
-        if cn_remark and cn_remark in remarks_set:
-            tx["isDuplicate"] = True
-            dup_count += 1
-            continue
-
-        # Check 2: transaction fingerprint match (date + action + qty + price)
-        # Try both WAP and effective_price since xlsx might store either
+        # Dedup by exact transaction fingerprint (count-based)
+        # A contract note can have multiple identical buys of the same stock
         trade_date = tx.get("trade_date", parsed.get("trade_date", ""))
         action = tx.get("action", "")
         qty = int(tx.get("quantity", 0))
         wap = round(tx.get("wap", 0), 2)
         eff = round(tx.get("effective_price", 0), 2)
 
-        fp_wap = (trade_date, action, qty, wap)
-        fp_eff = (trade_date, action, qty, eff)
-        matched = fp_wap in fingerprints or fp_eff in fingerprints
-        if matched:
+        fp = (trade_date, action, qty, wap)
+        fp_alt = (trade_date, action, qty, eff)
+        existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
+        batch_key = f"_preview_{symbol}:{fp}"
+        batch_count = _fp_cache.get(batch_key, 0)
+        if batch_count < existing_count:
             tx["isDuplicate"] = True
+            _fp_cache[batch_key] = batch_count + 1
             dup_count += 1
         else:
             tx["isDuplicate"] = False
-            # Add to in-memory cache so within-batch duplicates are also flagged
-            # (e.g. parser produced same row twice, or multi-PDF merge has overlaps)
-            fingerprints.add(fp_wap)
-            fingerprints.add(fp_eff)
+            _fp_cache[batch_key] = batch_count + 1
 
     if dup_count > 0:
         logger.info(f"[Import] Found {dup_count} duplicate transaction(s) in preview")
@@ -1052,20 +1046,27 @@ def import_contract_note(req: ContractNoteUpload):
 
                 fingerprints, remarks_set = _fp_cache[symbol]
 
-                if cn_remark and cn_remark in remarks_set:
-                    skipped_dups += 1
-                    continue
-
+                # Dedup by exact transaction fingerprint (date+action+qty+price)
+                # Count-based: allows N identical transactions if N appear in batch
+                # but skips if already N exist in the xlsx
                 tx_date = tx.get("trade_date", trade_date)
                 action = tx.get("action", "")
                 qty = int(tx.get("quantity", 0))
                 wap = round(tx.get("wap", 0), 2)
                 eff = round(tx.get("effective_price", tx.get("wap", 0)), 2)
-                fp_wap = (tx_date, action, qty, wap)
-                fp_eff = (tx_date, action, qty, eff)
-                if fp_wap in fingerprints or fp_eff in fingerprints:
+                fp = (tx_date, action, qty, wap)
+                fp_alt = (tx_date, action, qty, eff)
+                # Count how many times this fingerprint exists in xlsx
+                existing_count = fingerprints.get(fp, 0) + fingerprints.get(fp_alt, 0)
+                # Count how many times we've already imported this fp in this batch
+                batch_key = f"{symbol}:{fp}"
+                batch_count = _fp_cache.get(batch_key, 0)
+                if batch_count < existing_count:
+                    # Already exists in xlsx — skip
+                    _fp_cache[batch_key] = batch_count + 1
                     skipped_dups += 1
                     continue
+                _fp_cache[batch_key] = batch_count + 1
 
             remark = f"CN#{contract_no}" if contract_no else f"CN-{trade_date}"
 

@@ -1263,21 +1263,20 @@ class XlsxPortfolio:
     def get_existing_transaction_fingerprints(self, symbol: str):
         """Return (fingerprints, remarks_set) for existing transactions in a stock's xlsx.
 
-        fingerprints: set of (date_str, action, qty, price_rounded) tuples
+        fingerprints: dict of {(date_str, action, qty, price_rounded): count}
         remarks_set: set of CN# remark strings
         Used for duplicate detection before import.
         """
         symbol = symbol.upper()
         files = self._all_files.get(symbol, [])
         if not files:
-            # Fallback: try glob-based file lookup (matches symbol substring in filename)
             fallback = self._find_file_for_symbol(symbol)
             if fallback:
                 files = [fallback]
             else:
-                return set(), set()
+                return {}, set()
 
-        fingerprints = set()
+        fingerprints = {}  # count-based: {fingerprint_tuple: count}
         remarks_set = set()
 
         for fp in files:
@@ -1319,7 +1318,7 @@ class XlsxPortfolio:
 
                     if date_str and qty_int > 0:
                         fp_tuple = (date_str, str(action).strip(), qty_int, price_r)
-                        fingerprints.add(fp_tuple)
+                        fingerprints[fp_tuple] = fingerprints.get(fp_tuple, 0) + 1
 
                     # Also track CN# remarks for contract-note-level dedup
                     if remarks and str(remarks).startswith("CN#"):
