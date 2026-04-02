@@ -425,18 +425,16 @@ def compute_nav_changes(fund_code: str, fund_name: str, current_nav: float) -> D
             result["rsi"] = 100.0
 
     # CAGR calculation (1Y, 3Y, 5Y) — dated_navs is most-recent-first
-    for years, key in [(1, "cagr_1y"), (3, "cagr_3y"), (5, "cagr_5y")]:
-        target_date = today - timedelta(days=years * 365)
-        # Find the NAV closest to (on or before) the target date
-        best_date = None
-        best_nav = 0.0
-        for d, nav in dated_navs:
-            if d <= target_date:
-                if best_date is None or d > best_date:
-                    best_date = d
-                    best_nav = nav
-        if best_nav > 0 and current_nav > 0:
-            result[key] = round((pow(current_nav / best_nav, 1.0 / years) - 1) * 100, 2)
+    # Use the most recent NAV from mfapi.in (same data source as historical)
+    latest_nav = dated_navs[0][1] if dated_navs else 0.0
+    if latest_nav > 0:
+        for years, key in [(1, "cagr_1y"), (3, "cagr_3y"), (5, "cagr_5y")]:
+            target_date = today - timedelta(days=years * 365)
+            # Find the NAV closest to (on or before) the target date
+            for d, nav in dated_navs:
+                if d <= target_date and nav > 0:
+                    result[key] = round((pow(latest_nav / nav, 1.0 / years) - 1) * 100, 2)
+                    break
 
     # Cache result
     with _nav_change_cache_lock:
