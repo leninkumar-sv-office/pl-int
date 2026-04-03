@@ -297,6 +297,7 @@ function StockDetail({ stock, portfolio, transactions, onSell, onAddStock, onDiv
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Realized P&L</div>
               <div style={{ fontWeight: 600, color: stock.realized_pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                 {stock.realized_pl >= 0 ? '+' : ''}{formatINR(stock.realized_pl)}
+                {stock.realized_pl_pct != null && <span style={{ fontSize: '11px', fontWeight: 400, marginLeft: '6px' }}>({stock.realized_pl_pct >= 0 ? '+' : ''}{stock.realized_pl_pct.toFixed(1)}%)</span>}
               </div>
             </div>
           )}

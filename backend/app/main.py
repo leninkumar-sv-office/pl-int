@@ -1444,6 +1444,8 @@ def get_stock_summary():
                 sum(h.price * h.quantity for h in held_lots) / total_held_qty
             ) if total_held_qty > 0 else 0
             realized_pl = sum(s.realized_pl for s in sold_lots)
+            total_sold_cost = sum(s.buy_price * s.quantity for s in sold_lots)
+            realized_pl_pct = (realized_pl / total_sold_cost * 100) if total_sold_cost > 0 else 0
             # Split realized P&L by holding period (LTCG vs STCG)
             ltcg_realized_pl = 0.0
             stcg_realized_pl = 0.0
@@ -1568,6 +1570,7 @@ def get_stock_summary():
                 unrealized_profit=round(unrealized_profit, 2),
                 unrealized_loss=round(unrealized_loss, 2),
                 realized_pl=round(realized_pl, 2),
+                realized_pl_pct=round(realized_pl_pct, 2),
                 ltcg_unrealized_profit=round(ltcg_unrealized_profit, 2),
                 stcg_unrealized_profit=round(stcg_unrealized_profit, 2),
                 ltcg_unrealized_loss=round(ltcg_unrealized_loss, 2),

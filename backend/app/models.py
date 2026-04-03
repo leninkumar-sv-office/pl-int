@@ -135,6 +135,7 @@ class StockSummaryItem(BaseModel):
     unrealized_profit: float = 0.0   # P&L from lots where current > buy (positive)
     unrealized_loss: float = 0.0     # P&L from lots where current <= buy (negative)
     realized_pl: float = 0.0        # sum of realized P&L from sold lots
+    realized_pl_pct: float = 0.0     # realized P&L as % of sold cost
     # LTCG / STCG breakdown (India: >12 months = long-term)
     ltcg_unrealized_profit: float = 0.0
     stcg_unrealized_profit: float = 0.0
