@@ -611,3 +611,4 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
     </div>
   );
 }
+
