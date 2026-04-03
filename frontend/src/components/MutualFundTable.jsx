@@ -126,7 +126,7 @@ function loadVisibleCols() {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
   } catch (_) {}
-  const DEFAULT_HIDDEN = ['realizedPL', 'cagr3y', 'cagr5y'];
+  const DEFAULT_HIDDEN = ['realizedPL'];
   return new Set(ALL_COL_IDS.filter(id => !DEFAULT_HIDDEN.includes(id)));
 }
 
