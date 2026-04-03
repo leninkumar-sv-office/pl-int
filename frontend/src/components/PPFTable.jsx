@@ -49,7 +49,7 @@ const paymentTypeStyle = (ppf) => {
 const COL_DEFS = [
   { id: 'bank',           label: 'Bank' },
   { id: 'type',           label: 'Type' },
-  { id: 'sipAmount',      label: 'Amount' },
+  { id: 'sipAmount',      label: 'Balance' },
   { id: 'sipEnd',         label: 'SIP End' },
   { id: 'rate',           label: 'Rate %' },
   { id: 'tenure',         label: 'Tenure' },
@@ -690,7 +690,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
       case 'account_name':   va = a.account_name; vb = b.account_name; break;
       case 'bank':           va = a.bank; vb = b.bank; break;
       case 'type':           va = isOneTime(a) ? 0 : 1; vb = isOneTime(b) ? 0 : 1; break;
-      case 'sipAmount':      va = a.sip_amount || 0; vb = b.sip_amount || 0; break;
+      case 'sipAmount':      va = a.current_balance || 0; vb = b.current_balance || 0; break;
       case 'sipEnd':         va = a.sip_end_date || 'zzzz'; vb = b.sip_end_date || 'zzzz'; break;
       case 'rate':           va = a.interest_rate; vb = b.interest_rate; break;
       case 'tenure':         va = a.tenure_years || 0; vb = b.tenure_years || 0; break;
@@ -825,7 +825,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                 onClick={() => handleSort('account_name')}>Account<SortIcon field="account_name" /></th>
               {col('bank') && <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('bank')}>Bank<SortIcon field="bank" /></th>}
               {col('type') && <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('type')}>Type<SortIcon field="type" /></th>}
-              {col('sipAmount') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('sipAmount')}>Amount<SortIcon field="sipAmount" /></th>}
+              {col('sipAmount') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('sipAmount')}>Balance<SortIcon field="sipAmount" /></th>}
               {col('sipEnd') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('sipEnd')}>SIP End<SortIcon field="sipEnd" /></th>}
               {col('rate') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('rate')}>Rate %<SortIcon field="rate" /></th>}
               {col('tenure') && <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('tenure')}>Tenure<SortIcon field="tenure" /></th>}
@@ -882,7 +882,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                         </div>
                       ); })()}
                     </td>}
-                    {col('sipAmount') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.sip_amount)}</td>}
+                    {col('sipAmount') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.current_balance || 0)}</td>}
                     {col('sipEnd') && <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>
                       {isOneTime(ppf) ? '--' : (ppf.sip_end_date ? formatDate(ppf.sip_end_date) : <span style={{ fontSize: '10px', color: 'var(--green)' }}>Until Maturity</span>)}
                     </td>}
