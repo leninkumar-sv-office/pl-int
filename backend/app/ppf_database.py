@@ -496,21 +496,305 @@ def _parse_ppf_xlsx(filepath: Path) -> dict:
 
 
 def _parse_all_xlsx(ppf_dir: Path = None) -> list:
-    """Parse all xlsx files from dumps/PPF/ directory."""
-    ppf_dir = ppf_dir or PPF_DIR
-    results = []
-    if not ppf_dir.exists():
-        return results
+    """Parse all xlsx files from dumps/PPF/ directory.
 
+    Accounts with the same account_number are merged into a single combined
+    account so that interest compounds on the total balance (matching how the
+    bank calculates PPF interest on one account).
+    """
+    ppf_dir = ppf_dir or PPF_DIR
+    if not ppf_dir.exists():
+        return []
+
+    raw = []
     for f in sorted(ppf_dir.glob("*.xlsx")):
         if f.name.startswith("~$"):
             continue
         try:
             parsed = _parse_ppf_xlsx(f)
-            results.append(parsed)
+            parsed["_filepath"] = str(f)
+            raw.append(parsed)
         except Exception as e:
             logger.error(f"[PPF] Error parsing {f.name}: {e}")
+
+    # Group by account_number — merge accounts sharing the same number
+    from collections import defaultdict
+    groups = defaultdict(list)
+    standalone = []
+    for item in raw:
+        acn = (item.get("account_number") or "").strip()
+        if acn:
+            groups[acn].append(item)
+        else:
+            standalone.append(item)
+
+    results = list(standalone)
+    for acn, items in groups.items():
+        if len(items) == 1:
+            results.append(items[0])
+        else:
+            merged = _merge_ppf_accounts(items, acn)
+            if merged:
+                results.append(merged)
+            else:
+                results.extend(items)  # fallback: keep separate
+
+    # Remove internal fields
+    for r in results:
+        r.pop("_filepath", None)
+
     return results
+
+
+def _merge_ppf_accounts(items: list, account_number: str) -> dict | None:
+    """Merge multiple PPF 'accounts' (xlsx files) that share the same account_number
+    into a single combined account with all SIP phases and contributions.
+
+    Interest then compounds on the total combined balance, matching how the
+    bank calculates PPF interest.
+    """
+    try:
+        # Sort by start date (earliest first)
+        items.sort(key=lambda x: x.get("start_date", ""))
+
+        # Use metadata from the earliest (original) account
+        first = items[0]
+        earliest_start = first["start_date"]
+        bank = first.get("bank", "Post Office")
+        rate_pct = first.get("interest_rate", PPF_DEFAULT_RATE)
+
+        # Find the latest maturity date
+        latest_maturity = max(i.get("maturity_date", "") for i in items)
+
+        # Combine all SIP phases (sorted by start date)
+        combined_phases = []
+        for item in items:
+            phases = item.get("sip_phases") or []
+            combined_phases.extend(phases)
+        combined_phases.sort(key=lambda p: p.get("start", ""))
+
+        # Combine all contributions (sorted by date)
+        combined_contributions = []
+        for item in items:
+            contribs = item.get("contributions") or []
+            combined_contributions.extend(contribs)
+        combined_contributions.sort(key=lambda c: c.get("date", ""))
+
+        # Compute tenure from earliest start to latest maturity
+        start_dt = datetime.strptime(earliest_start, "%Y-%m-%d").date()
+        maturity_dt = datetime.strptime(latest_maturity, "%Y-%m-%d").date()
+        from dateutil.relativedelta import relativedelta as _rd
+        diff = _rd(maturity_dt, start_dt)
+        tenure_months = diff.years * 12 + diff.months
+        if tenure_months < 180:
+            tenure_months = 180  # PPF minimum 15 years
+        maturity_years = tenure_months / 12
+
+        rate_decimal = rate_pct / 100 if rate_pct > 1 else rate_pct
+        rate_for_calc = rate_decimal
+        end_dt = start_dt + relativedelta(months=tenure_months)
+
+        # Build contrib_by_month lookup
+        contrib_by_month = {}
+        for c in combined_contributions:
+            try:
+                c_date = datetime.strptime(c["date"], "%Y-%m-%d").date()
+                key = (c_date.year, c_date.month)
+                contrib_by_month[key] = contrib_by_month.get(key, 0) + float(c.get("amount", 0))
+            except (ValueError, KeyError, TypeError):
+                pass
+
+        # Generate combined installment schedule using BANK method:
+        # - Monthly interest = (balance on 5th) × rate / 12
+        # - Deposits on/before 5th count for that month; after 5th count from next
+        # - Interest accumulated monthly, CREDITED on March 31
+        # - SIP deposits on 1st of month → always before 5th → count that month
+        # - One-time deposits: check if date <= 5th of that month
+        today = date.today()
+        installments = []
+        running_balance = 0.0  # actual balance including credited interest
+        total_deposited = 0.0
+        total_withdrawn = 0.0
+        cumulative_deposited = 0.0
+        total_interest_earned = 0.0
+        total_interest_projected = 0.0
+        cumulative_interest = 0.0
+        current_balance = 0.0
+        months_since_compound = 0
+        accrued_fy_interest = 0.0  # interest accumulated this FY (Apr-Mar), credited on Mar 31
+
+        # Pre-parse phase dates for performance
+        parsed_phases = []
+        for phase in combined_phases:
+            p_start = datetime.strptime(phase["start"], "%Y-%m-%d").date()
+            p_end_str = phase.get("end")
+            p_end = datetime.strptime(p_end_str, "%Y-%m-%d").date() if p_end_str else None
+            parsed_phases.append({
+                "start": p_start, "end": p_end,
+                "amount": float(phase.get("amount", 0)),
+                "frequency": phase.get("frequency", "monthly"),
+                "is_onetime": p_end is not None and p_start == p_end,
+            })
+
+        # Also track which deposits happen after the 5th (for one-time deposits)
+        # SIP deposits on 1st are always before 5th
+        after_5th_deposits = {}  # (year, month) -> amount to defer to next month
+        for phase in parsed_phases:
+            if phase["is_onetime"] and phase["start"].day > 5:
+                key = (phase["start"].year, phase["start"].month)
+                after_5th_deposits[key] = after_5th_deposits.get(key, 0) + phase["amount"]
+
+        for m in range(1, tenure_months + 1):
+            base_date = start_dt + relativedelta(months=m - 1)
+            inst_date = date(base_date.year, base_date.month, 1)
+            is_past = inst_date <= today
+
+            # --- Deposits for this month ---
+            sip_deposit = 0.0
+            for pp in parsed_phases:
+                if pp["is_onetime"]:
+                    # One-time: match by month. If after 5th, it was deferred.
+                    if pp["start"].day <= 5:
+                        if inst_date.year == pp["start"].year and inst_date.month == pp["start"].month:
+                            sip_deposit += pp["amount"]
+                    else:
+                        # Deferred: deposit counts in the NEXT month's balance
+                        next_month = pp["start"] + relativedelta(months=1)
+                        if inst_date.year == next_month.year and inst_date.month == next_month.month:
+                            sip_deposit += pp["amount"]
+                    continue
+
+                # Recurring SIP (always on 1st, before 5th)
+                if inst_date.year < pp["start"].year or (inst_date.year == pp["start"].year and inst_date.month < pp["start"].month):
+                    continue
+                if pp["end"] and (inst_date.year > pp["end"].year or (inst_date.year == pp["end"].year and inst_date.month > pp["end"].month)):
+                    continue
+                p_interval = _sip_freq_to_months(pp["frequency"])
+                months_since = (inst_date.year - pp["start"].year) * 12 + (inst_date.month - pp["start"].month)
+                if months_since >= 0 and (months_since % p_interval == 0):
+                    sip_deposit += pp["amount"]
+
+            # Contributions/withdrawals
+            extra = contrib_by_month.get((inst_date.year, inst_date.month), 0)
+            month_deposited = sip_deposit + max(extra, 0)
+            month_withdrawn = abs(min(extra, 0))
+            net = month_deposited - month_withdrawn
+
+            # Add deposits BEFORE computing this month's interest
+            # (SIP on 1st is before 5th, so it counts this month)
+            running_balance += net
+            cumulative_deposited += net
+            if is_past:
+                total_deposited += month_deposited
+                total_withdrawn += month_withdrawn
+
+            # Monthly interest accrual: balance × rate / 12
+            monthly_interest = running_balance * rate_for_calc / 12 if running_balance > 0 else 0
+
+            # Credit interest on March 31 (end of financial year)
+            is_compound_month = (inst_date.month == 3 and m > 1)
+            credited_interest = 0.0
+            if is_compound_month:
+                # Add this March's monthly interest to the FY total, then credit
+                accrued_fy_interest += monthly_interest
+                credited_interest = round(accrued_fy_interest, 2)
+                running_balance += credited_interest
+                cumulative_interest += credited_interest
+                accrued_fy_interest = 0.0  # reset for next FY
+            else:
+                accrued_fy_interest += monthly_interest
+
+            if is_past:
+                total_interest_earned += credited_interest
+                current_balance = running_balance
+                if is_compound_month:
+                    months_since_compound = 0
+                else:
+                    months_since_compound += 1
+            else:
+                total_interest_projected += credited_interest
+
+            years_elapsed = (inst_date - start_dt).days / 365.25
+            lock_status = "free" if years_elapsed > 15 else ("partial" if years_elapsed > 7 else "locked")
+
+            installments.append({
+                "month": m,
+                "date": inst_date.strftime("%Y-%m-%d"),
+                "amount_invested": round(month_deposited, 2),
+                "amount_withdrawn": round(month_withdrawn, 2),
+                "cumulative_deposited": round(cumulative_deposited, 2),
+                "interest_earned": round(credited_interest, 2) if is_past else 0.0,
+                "interest_projected": round(credited_interest, 2) if not is_past else 0.0,
+                "cumulative_interest": round(cumulative_interest, 2),
+                "cumulative_amount": round(running_balance, 2),
+                "is_compound_month": is_compound_month,
+                "is_past": is_past,
+                "lock_status": lock_status,
+            })
+
+        # Accrued interest
+        accrued_interest = round(current_balance * rate_for_calc * months_since_compound / 12, 2)
+        current_balance = round(current_balance + accrued_interest, 2)
+
+        maturity_amount = round(running_balance, 2)
+        status = "Matured" if end_dt <= today else "Active"
+        days_to_maturity = max(0, (end_dt - today).days)
+
+        # Determine the primary SIP info for display
+        active_sip = None
+        for p in reversed(combined_phases):
+            p_end = p.get("end")
+            if not p_end or datetime.strptime(p_end, "%Y-%m-%d").date() >= today:
+                active_sip = p
+                break
+        sip_amount_display = float(active_sip["amount"]) if active_sip else 0
+        sip_freq_display = active_sip.get("frequency", "monthly") if active_sip else "monthly"
+        sip_end_display = combined_phases[-1].get("end") if combined_phases else None
+
+        # Use the first file's name but label as merged
+        merged_name = first.get("account_name", first.get("name", "PPF Account"))
+        # Remove numbering suffixes like " (2)", " (3)" etc.
+        import re
+        merged_name = re.sub(r'\s*\(\d+\)\s*$', '', merged_name)
+
+        return {
+            "id": _gen_ppf_id(account_number),  # stable ID based on account number
+            "name": merged_name,
+            "account_name": merged_name,
+            "bank": bank,
+            "account_number": account_number,
+            "interest_rate": rate_pct,
+            "interest_payout": "Annually",
+            "sip_amount": round(sip_amount_display, 2),
+            "sip_frequency": sip_freq_display,
+            "sip_end_date": sip_end_display,
+            "sip_phases": combined_phases,
+            "contributions": combined_contributions,
+            "tenure_years": int(maturity_years),
+            "tenure_months": tenure_months,
+            "start_date": earliest_start,
+            "maturity_date": end_dt.strftime("%Y-%m-%d"),
+            "maturity_amount": maturity_amount,
+            "current_balance": round(current_balance, 2),
+            "total_deposited": round(total_deposited, 2),
+            "total_withdrawn": round(total_withdrawn, 2),
+            "total_interest_accrued": round(total_interest_earned, 2),
+            "interest_earned": round(total_interest_earned, 2),
+            "interest_projected": round(total_interest_projected, 2),
+            "status": status,
+            "days_to_maturity": days_to_maturity,
+            "source": "xlsx",
+            "remarks": f"Merged from {len(items)} phases",
+            "installments": installments,
+            "installments_paid": sum(1 for i in installments if i["is_past"]),
+            "installments_total": len(installments),
+            "_source_files": [i.get("_filepath", "") for i in items],
+        }
+    except Exception as e:
+        logger.error(f"[PPF] Error merging accounts for {account_number}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
 
 
 # ===================================================================
