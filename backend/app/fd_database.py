@@ -127,13 +127,14 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
     name = filepath.stem
 
     # ── Preload rows for read_only mode ───────────────────
-    all_rows = list(ws.iter_rows(min_row=1, max_row=3, values_only=True))
+    all_rows = list(ws.iter_rows(min_row=1, max_row=4, values_only=True))
     wb.close()
 
-    # ── Metadata rows 1-3 ────────────────────────────────
+    # ── Metadata rows 1-4 ────────────────────────────────
     row1 = all_rows[0] if len(all_rows) > 0 else ()
     row2 = all_rows[1] if len(all_rows) > 1 else ()
     row3 = all_rows[2] if len(all_rows) > 2 else ()
+    row4 = all_rows[3] if len(all_rows) > 3 else ()
 
     start_date_raw = row1[1] if len(row1) > 1 else None      # B1: start date
     maturity_years = (row1[7] if len(row1) > 7 else None) or 5   # H1: years
@@ -143,6 +144,7 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
 
     rate_decimal = (row3[1] if len(row3) > 1 else None) or 0   # B3: rate as decimal (0.0625)
     sip = (row3[7] if len(row3) > 7 else None) or 0            # H3: SIP / principal
+    status_override = str(row4[10]).strip() if len(row4) > 10 and row4[10] else ""  # K4: status override
 
     # ── Convert & derive ─────────────────────────────────
     start_dt = _to_date(start_date_raw) or date.today()
@@ -201,7 +203,7 @@ def _parse_fd_xlsx(filepath: Path) -> dict:
     total_interest = total_interest_earned + total_interest_projected
     maturity_amount = round(total_invested + total_interest, 2)
 
-    status = "Matured" if end_dt <= today else "Active"
+    status = status_override if status_override in ("Withdrawn", "Closed", "Premature") else ("Matured" if end_dt <= today else "Active")
     days_to_maturity = max(0, (end_dt - today).days)
 
     installments_paid = sum(
@@ -604,6 +606,8 @@ def _update_xlsx_fd(filepath: Path, data: dict, dumps_dir: Path) -> dict:
         ws.cell(3, 2, value=rate / 100 if rate > 1 else rate)  # B3 as decimal
     if "principal" in data:
         ws.cell(3, 8, value=float(data["principal"]))  # H3
+    if "status" in data and data["status"] in ("Withdrawn", "Closed", "Premature", "Active"):
+        ws.cell(4, 11, value=data["status"] if data["status"] != "Active" else "")  # K4: status override
     if "maturity_date" in data:
         try:
             mat_dt = datetime.strptime(data["maturity_date"], "%Y-%m-%d")

@@ -849,6 +849,16 @@ export default function App() {
     }
   };
 
+  const handleWithdrawFD = async (fdId) => {
+    try {
+      await updateFD(fdId, { status: 'Withdrawn' });
+      toast.success('FD marked as withdrawn');
+      loadFD();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to withdraw FD');
+    }
+  };
+
   // ── Recurring Deposit handlers ────────────────────
   const handleAddRD = async (data) => {
     try {
@@ -1443,6 +1453,7 @@ export default function App() {
           onAddFD={() => setAddFDModalData({})}
           onEditFD={(fd) => setAddFDModalData(fd)}
           onDeleteFD={handleDeleteFD}
+          onWithdrawFD={handleWithdrawFD}
         />
       )}
 

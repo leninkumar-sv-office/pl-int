@@ -18,6 +18,7 @@ const statusColor = (s) => {
   switch (s) {
     case 'Active': return { bg: 'var(--green-bg)', color: 'var(--green)' };
     case 'Matured': return { bg: 'var(--blue-bg)', color: 'var(--blue)' };
+    case 'Withdrawn': return { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b' };
     case 'Premature': case 'Closed': return { bg: 'var(--red-bg)', color: 'var(--red)' };
     default: return { bg: 'var(--yellow-bg)', color: 'var(--yellow)' };
   }
@@ -95,7 +96,7 @@ const heldTd = {
 };
 
 /* ── FD Detail Row ───────────────────────────────── */
-function FDDetail({ fd, onEdit, onDelete }) {
+function FDDetail({ fd, onEdit, onDelete, onWithdraw }) {
   const sc = statusColor(fd.status);
   const tc = typeColor(fd.type);
   const installments = fd.installments || [];
@@ -140,6 +141,17 @@ function FDDetail({ fd, onEdit, onDelete }) {
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
             onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete FD "${fd.name}"?`)) onDelete(fd.id); }}>
             Delete
+          </button>
+        )}
+        {onWithdraw && fd.status !== 'Withdrawn' && (
+          <button className="btn btn-ghost btn-sm" style={{ color: '#f59e0b', borderColor: '#f59e0b' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Withdraw FD "${fd.name}"?\n\nThis will mark the FD as withdrawn.`)) {
+                onWithdraw(fd.id);
+              }
+            }}>
+            Withdraw
           </button>
         )}
       </div>
@@ -346,7 +358,7 @@ function FDDetail({ fd, onEdit, onDelete }) {
 }
 
 /* ── Main Table ───────────────────────────────────── */
-export default function FixedDepositTable({ deposits, loading, fdDashboard, onAddFD, onEditFD, onDeleteFD }) {
+export default function FixedDepositTable({ deposits, loading, fdDashboard, onAddFD, onEditFD, onDeleteFD, onWithdrawFD }) {
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState('bank');
   const [sortDir, setSortDir] = useState('asc');
@@ -599,7 +611,7 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
                   </tr>
                   {isExpanded && (
                     <tr><td colSpan={TOTAL_COLS} style={{ padding: 0 }}>
-                      <FDDetail fd={fd} onEdit={onEditFD} onDelete={onDeleteFD} />
+                      <FDDetail fd={fd} onEdit={onEditFD} onDelete={onDeleteFD} onWithdraw={onWithdrawFD} />
                     </td></tr>
                   )}
                 </React.Fragment>
