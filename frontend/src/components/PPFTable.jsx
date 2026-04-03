@@ -50,6 +50,7 @@ const COL_DEFS = [
   { id: 'bank',           label: 'Bank' },
   { id: 'type',           label: 'Type' },
   { id: 'sipAmount',      label: 'Amount' },
+  { id: 'sipEnd',         label: 'SIP End' },
   { id: 'rate',           label: 'Rate %' },
   { id: 'tenure',         label: 'Tenure' },
   { id: 'startDate',      label: 'Start Date' },
@@ -62,6 +63,13 @@ const COL_DEFS = [
   { id: 'maturityAmt',    label: 'Maturity Value' },
   { id: 'status',         label: 'Status' },
 ];
+
+/** Is SIP currently active for this PPF? */
+const isSipActive = (ppf) => {
+  if (isOneTime(ppf) || !ppf.sip_amount || ppf.status !== 'Active') return false;
+  if (!ppf.sip_end_date) return true; // no end date = until maturity
+  return new Date(ppf.sip_end_date + 'T00:00:00') >= new Date();
+};
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
 const LS_KEY = 'ppfVisibleCols_v3';
 
@@ -679,6 +687,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
       case 'bank':           va = a.bank; vb = b.bank; break;
       case 'type':           va = isOneTime(a) ? 0 : 1; vb = isOneTime(b) ? 0 : 1; break;
       case 'sipAmount':      va = a.sip_amount || 0; vb = b.sip_amount || 0; break;
+      case 'sipEnd':         va = a.sip_end_date || 'zzzz'; vb = b.sip_end_date || 'zzzz'; break;
       case 'rate':           va = a.interest_rate; vb = b.interest_rate; break;
       case 'tenure':         va = a.tenure_years || 0; vb = b.tenure_years || 0; break;
       case 'startDate':      va = a.start_date; vb = b.start_date; break;
@@ -838,7 +847,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
               return (
                 <React.Fragment key={ppf.id}>
                   <tr onClick={() => setExpandedId(isExpanded ? null : ppf.id)}
-                    style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isExpanded ? 'var(--bg-card-hover)' : 'transparent', transition: 'background 0.15s' }}
+                    style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isExpanded ? 'var(--bg-card-hover)' : 'transparent', transition: 'background 0.15s', borderLeft: isSipActive(ppf) ? '3px solid var(--green)' : '3px solid transparent' }}
                     onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
                     onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}>
                     <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -857,11 +866,21 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
                     </td>
                     {col('bank') && <td style={{ padding: '10px 12px', color: 'var(--text-dim)' }}>{ppf.bank}</td>}
                     {col('type') && <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      {(() => { const pts = paymentTypeStyle(ppf); return (
-                        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: pts.bg, color: pts.color }}>{paymentTypeLabel(ppf)}</span>
+                      {(() => { const pts = paymentTypeStyle(ppf); const active = isSipActive(ppf); return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                          <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: pts.bg, color: pts.color }}>{paymentTypeLabel(ppf)}</span>
+                          {!isOneTime(ppf) && ppf.sip_amount > 0 && (
+                            <span style={{ fontSize: '9px', fontWeight: 600, color: active ? 'var(--green)' : 'var(--text-muted)' }}>
+                              {active ? 'Active' : 'Ended'}
+                            </span>
+                          )}
+                        </div>
                       ); })()}
                     </td>}
                     {col('sipAmount') && <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{formatINR(ppf.sip_amount)}</td>}
+                    {col('sipEnd') && <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>
+                      {isOneTime(ppf) ? '--' : (ppf.sip_end_date ? formatDate(ppf.sip_end_date) : <span style={{ fontSize: '10px', color: 'var(--green)' }}>Until Maturity</span>)}
+                    </td>}
                     {col('rate') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.interest_rate}%</td>}
                     {col('tenure') && <td style={{ padding: '10px 12px', textAlign: 'right' }}>{ppf.tenure_years}y</td>}
                     {col('startDate') && <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)' }}>{formatDate(ppf.start_date)}</td>}
