@@ -732,9 +732,8 @@ def _merge_ppf_accounts(items: list, account_number: str) -> dict | None:
                 "lock_status": lock_status,
             })
 
-        # Accrued interest
-        accrued_interest = round(current_balance * rate_for_calc * months_since_compound / 12, 2)
-        current_balance = round(current_balance + accrued_interest, 2)
+        # PPF interest is only credited on March 31 — no accrued interest mid-year
+        current_balance = round(current_balance, 2)
 
         maturity_amount = round(running_balance, 2)
         status = "Matured" if end_dt <= today else "Active"
