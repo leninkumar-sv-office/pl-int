@@ -199,13 +199,30 @@ _nav_change_cache_lock = threading.Lock()
 _NAV_CHANGE_CACHE_TTL = 6 * 3600  # 6 hours
 
 
+# Hardcoded ISIN → AMFI scheme code overrides for funds where the fuzzy
+# search picks the wrong scheme (e.g. "HDFC Mid-Cap" → "HDFC Large & Mid Cap").
+# These are verified manually against mfapi.in NAV data.
+_SCHEME_OVERRIDES: Dict[str, int] = {
+    "INF179K01XQ0": 118989,   # HDFC Mid-Cap Fund Direct Growth (NOT Large & Mid Cap 130498)
+    "INF179KA1YQ1": 118989,   # Same fund, alternate ISIN
+    "INF109K01Y31": 120592,   # ICICI Prudential ELSS Tax Saver Direct Growth (NOT Long Term Bond 120743)
+    "INF109KC1RH9": 145897,   # ICICI Prudential India Opportunities Direct Growth (NOT IDCW 145898)
+    "INF174K01LS2": 120166,   # Kotak Flexicap Fund Direct Growth (NOT Floating Rate 147267)
+    "INF200K01TS8": 119839,   # SBI Conservative Hybrid Fund Direct Growth (NOT Retirement 148690)
+    "INF204KA1B72": 133630,   # Nippon India Retirement Wealth Creation Direct Growth
+}
+
+
 def _load_scheme_map() -> Dict[str, int]:
-    """Load {fund_code: amfi_scheme_code} mapping from disk."""
+    """Load {fund_code: amfi_scheme_code} mapping from disk, with overrides applied."""
     try:
         with open(_SCHEME_MAP_FILE) as f:
-            return json.load(f)
+            mapping = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        mapping = {}
+    # Apply hardcoded overrides (always win over fuzzy-search results)
+    mapping.update(_SCHEME_OVERRIDES)
+    return mapping
 
 
 def _save_scheme_map(mapping: Dict[str, int]):
