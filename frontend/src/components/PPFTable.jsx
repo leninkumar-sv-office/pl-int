@@ -564,9 +564,13 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
                   const isCompound = inst.is_compound_month;
                   const lockStatus = inst.lock_status || 'locked';
 
-                  // Background priority: compound > lock status > past/future
+                  // Background priority: withdrawal > compound > lock status > past/future
+                  const hasWithdrawal = inst.amount_withdrawn > 0;
                   let bg, borderColor;
-                  if (isCompound) {
+                  if (hasWithdrawal) {
+                    bg = 'rgba(239,68,68,0.12)';
+                    borderColor = '#ef4444';
+                  } else if (isCompound) {
                     bg = isPast ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.06)';
                     borderColor = '#f59e0b';
                   } else if (lockStatus === 'free') {
