@@ -371,6 +371,10 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
     try { return localStorage.getItem('fdShowMatured') === 'true'; } catch { return false; }
   });
   const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; localStorage.setItem('fdShowMatured', String(next)); return next; });
+  const [showWithdrawn, setShowWithdrawn] = useState(() => {
+    try { return localStorage.getItem('fdShowWithdrawn') === 'true'; } catch { return false; }
+  });
+  const toggleShowWithdrawn = () => setShowWithdrawn(prev => { const next = !prev; localStorage.setItem('fdShowWithdrawn', String(next)); return next; });
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
     try { return localStorage.getItem('fdSummaryCollapsed') !== 'false'; } catch { return true; }
   });
@@ -409,7 +413,8 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   // Filter + sort
   const q = searchTerm.trim().toLowerCase();
   let filtered = (deposits || []).filter(fd => {
-    if (!showMatured && fd.status !== 'Active') return false;
+    if (fd.status === 'Matured' && !showMatured) return false;
+    if (fd.status === 'Withdrawn' && !showWithdrawn) return false;
     if (q) return (fd.name || '').toLowerCase().includes(q) || fd.bank.toLowerCase().includes(q) || (fd.remarks || '').toLowerCase().includes(q) || (fd.type || '').toLowerCase().includes(q);
     return true;
   });
@@ -438,6 +443,8 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   });
 
   const activeCount = (deposits || []).filter(d => d.status === 'Active').length;
+  const maturedCount = (deposits || []).filter(d => d.status === 'Matured').length;
+  const withdrawnCount = (deposits || []).filter(d => d.status === 'Withdrawn').length;
   const TOTAL_COLS = 2 + COL_DEFS.filter(c => visibleCols.has(c.id)).length;
 
   if (loading && (deposits || []).length === 0) {
@@ -457,10 +464,13 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
             <input type="checkbox" checked={showMatured} onChange={toggleShowMatured} style={{ accentColor: 'var(--blue)' }} />
             Show matured
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={showWithdrawn} onChange={toggleShowWithdrawn} style={{ accentColor: '#f59e0b' }} />
+            Show withdrawn
+          </label>
           <span className="section-badge">{activeCount} active</span>
-          <span className="section-badge" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
-            {(deposits || []).length} total
-          </span>
+          {maturedCount > 0 && <span className="section-badge" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>{maturedCount} matured</span>}
+          {withdrawnCount > 0 && <span className="section-badge" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>{withdrawnCount} withdrawn</span>}
         </div>
       </div>
 
