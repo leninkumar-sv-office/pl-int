@@ -814,7 +814,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
-  const [heldOnly, setHeldOnly] = useState(false);
+  const [heldOnly, setHeldOnly] = useState(true);
 
   // ── Lot-level selection for bulk redeem ──
   const [selectedLots, setSelectedLots] = useState(new Set());
