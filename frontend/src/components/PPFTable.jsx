@@ -643,6 +643,10 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
+  const [showMatured, setShowMatured] = useState(() => {
+    try { return localStorage.getItem('ppfShowMatured') === 'true'; } catch { return false; }
+  });
+  const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; localStorage.setItem('ppfShowMatured', String(next)); return next; });
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
     try { return localStorage.getItem('ppfSummaryCollapsed') !== 'false'; } catch { return true; }
   });
@@ -680,6 +684,7 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
 
   const q = searchTerm.trim().toLowerCase();
   let filtered = (accounts || []).filter(ppf => {
+    if (!showMatured && ppf.status !== 'Active') return false;
     if (q) return ppf.account_name.toLowerCase().includes(q) || ppf.bank.toLowerCase().includes(q) || (ppf.account_number || '').includes(q);
     return true;
   });
@@ -725,6 +730,10 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
           <ExpiryAlertRules category="ppf" />
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={showMatured} onChange={toggleShowMatured} style={{ accentColor: 'var(--blue)' }} />
+            Show matured
+          </label>
           <span className="section-badge">{activeCount} active</span>
           <span className="section-badge" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
             {(accounts || []).length} total

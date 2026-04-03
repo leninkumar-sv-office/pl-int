@@ -355,6 +355,10 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
+  const [showMatured, setShowMatured] = useState(() => {
+    try { return localStorage.getItem('fdShowMatured') === 'true'; } catch { return false; }
+  });
+  const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; localStorage.setItem('fdShowMatured', String(next)); return next; });
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
     try { return localStorage.getItem('fdSummaryCollapsed') !== 'false'; } catch { return true; }
   });
@@ -393,6 +397,7 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   // Filter + sort
   const q = searchTerm.trim().toLowerCase();
   let filtered = (deposits || []).filter(fd => {
+    if (!showMatured && fd.status !== 'Active') return false;
     if (q) return (fd.name || '').toLowerCase().includes(q) || fd.bank.toLowerCase().includes(q) || (fd.remarks || '').toLowerCase().includes(q) || (fd.type || '').toLowerCase().includes(q);
     return true;
   });
@@ -436,6 +441,10 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
           <ExpiryAlertRules category="fd" />
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={showMatured} onChange={toggleShowMatured} style={{ accentColor: 'var(--blue)' }} />
+            Show matured
+          </label>
           <span className="section-badge">{activeCount} active</span>
           <span className="section-badge" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
             {(deposits || []).length} total
