@@ -604,6 +604,12 @@ def _update_xlsx_fd(filepath: Path, data: dict, dumps_dir: Path) -> dict:
         ws.cell(3, 2, value=rate / 100 if rate > 1 else rate)  # B3 as decimal
     if "principal" in data:
         ws.cell(3, 8, value=float(data["principal"]))  # H3
+    if "maturity_date" in data:
+        try:
+            dt = datetime.strptime(data["maturity_date"], "%Y-%m-%d")
+            ws.cell(2, 2, value=dt)  # B2 = end_date
+        except ValueError:
+            pass
 
     wb.save(str(filepath))
     wb.close()
