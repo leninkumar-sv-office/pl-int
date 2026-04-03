@@ -606,8 +606,17 @@ def _update_xlsx_fd(filepath: Path, data: dict, dumps_dir: Path) -> dict:
         ws.cell(3, 8, value=float(data["principal"]))  # H3
     if "maturity_date" in data:
         try:
-            dt = datetime.strptime(data["maturity_date"], "%Y-%m-%d")
-            ws.cell(2, 2, value=dt)  # B2 = end_date
+            mat_dt = datetime.strptime(data["maturity_date"], "%Y-%m-%d")
+            ws.cell(2, 2, value=mat_dt)  # B2 = end_date
+            # Also update tenure (H1) so _parse_fd_xlsx computes consistently
+            start_raw = ws.cell(1, 2).value
+            if start_raw:
+                start_d = start_raw.date() if hasattr(start_raw, 'date') else _to_date(start_raw)
+                if start_d:
+                    from dateutil.relativedelta import relativedelta as _rd
+                    diff = _rd(mat_dt.date() if hasattr(mat_dt, 'date') else mat_dt, start_d)
+                    new_tenure_months = diff.years * 12 + diff.months
+                    ws.cell(1, 8, value=new_tenure_months / 12)  # H1 = years
         except ValueError:
             pass
 
