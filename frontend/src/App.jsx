@@ -1429,53 +1429,50 @@ export default function App() {
               <button className="btn btn-primary" onClick={() => { setNpsModalMode('add'); setAddNPSModalData({}); }}>
                 + Add NPS
               </button>
-              {npsAccounts.length > 0 && (
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <button className="btn btn-ghost" onClick={() => setNpsImportDropdown(v => !v)}>
-                    Import Statement ▾
-                  </button>
-                  {npsImportDropdown && (
-                    <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: '4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 0', zIndex: 100, minWidth: '220px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-                      {npsAccounts.map(a => (
-                        <label key={a.id} style={{ display: 'block', padding: '8px 16px', fontSize: '13px', color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+              {(() => {
+                const fileRef = React.createRef();
+                return (
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <input ref={fileRef} type="file" accept=".pdf" multiple hidden onChange={(e) => {
+                      if (e.target.files?.length) {
+                        setNpsImportDropdown(false);
+                        handleParseNPSStatement([...e.target.files]);
+                      }
+                      e.target.value = '';
+                    }} />
+                    <button className="btn btn-ghost" onClick={() => {
+                      if (npsAccounts.length === 0) {
+                        fileRef.current?.click();
+                      } else {
+                        setNpsImportDropdown(v => !v);
+                      }
+                    }}>
+                      Import Statement {npsAccounts.length > 0 ? '▾' : ''}
+                    </button>
+                    {npsImportDropdown && npsAccounts.length > 0 && (
+                      <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: '4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 0', zIndex: 100, minWidth: '240px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                        {npsAccounts.map(a => (
+                          <div key={a.id}
+                            style={{ padding: '8px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            onClick={() => fileRef.current?.click()}>
+                            <div style={{ fontWeight: 600, fontSize: '13px' }}>{a.account_name || a.pran}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>PRAN: {a.pran}</div>
+                          </div>
+                        ))}
+                        <div
+                          style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '13px', color: 'var(--green)', fontWeight: 600 }}
                           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <div style={{ fontWeight: 600 }}>{a.account_name || a.pran}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>PRAN: {a.pran}</div>
-                          <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
-                            if (e.target.files?.length) {
-                              setNpsImportDropdown(false);
-                              handleParseNPSStatement([...e.target.files]);
-                            }
-                            e.target.value = '';
-                          }} />
-                        </label>
-                      ))}
-                      <label style={{ display: 'block', padding: '8px 16px', fontSize: '13px', color: 'var(--green)', cursor: 'pointer', fontWeight: 600 }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        + New Account (auto-detect)
-                        <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
-                          if (e.target.files?.length) {
-                            setNpsImportDropdown(false);
-                            handleParseNPSStatement([...e.target.files]);
-                          }
-                          e.target.value = '';
-                        }} />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-              {npsAccounts.length === 0 && (
-                <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
-                  Import Statement
-                  <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
-                    if (e.target.files?.length) handleParseNPSStatement([...e.target.files]);
-                    e.target.value = '';
-                  }} />
-                </label>
-              )}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          onClick={() => fileRef.current?.click()}>
+                          + New Account (auto-detect)
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           ) : activeTab === 'standingInstructions' ? (
             <button className="btn btn-primary" onClick={() => setAddSIModalData({})}>
