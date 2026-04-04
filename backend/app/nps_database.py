@@ -191,6 +191,29 @@ def _parse_subscriber_info(text: str) -> dict:
         info["holdings_value"] = _parse_num(m.group(1))
         info["total_contribution"] = _parse_num(m.group(2))
 
+    # Scheme-wise Investment Details (exact value, units, NAV from PDF)
+    scheme_details = []
+    for sm in re.finditer(
+        r"SBI PENSION FUND SCHEME ([ECG]) - TIER I[^\n]*?\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{4})\s+([\d.]+)",
+        text
+    ):
+        code = sm.group(1)
+        value = _parse_num(sm.group(2))
+        units = _parse_num(sm.group(3))
+        nav = float(sm.group(4))
+        # Only take the entry from the "Investment Details" section (has reasonable values)
+        if value > 1000 and units > 10:
+            # Check if we already have this scheme (take first match from Investment Details)
+            if not any(s["scheme"] == code for s in scheme_details):
+                scheme_details.append({
+                    "scheme": code,
+                    "units": round(units, 4),
+                    "nav": round(nav, 4),
+                    "value": round(value, 2),
+                })
+    if scheme_details:
+        info["scheme_details"] = scheme_details
+
     return info
 
 
@@ -390,7 +413,7 @@ def _merge_pdf_data(all_parsed: list) -> dict:
     # Override with latest PDF values for fields that change over time
     if latest_pdf:
         li = latest_pdf.get("subscriber_info", {})
-        for key in ("holdings_value", "total_contribution", "status"):
+        for key in ("holdings_value", "total_contribution", "status", "scheme_details"):
             if key in li:
                 latest_info[key] = li[key]
 
@@ -421,15 +444,16 @@ def _merge_pdf_data(all_parsed: list) -> dict:
                 merged_contribs.append(c)
     merged_contribs.sort(key=lambda c: c["date"])
 
-    # Get closing balances from the latest PDF (highest holdings)
-    schemes_summary = []
-    if latest_pdf:
+    # Get scheme-wise details from the latest PDF's Investment Details table
+    # (exact values as printed in the PDF statement)
+    schemes_summary = latest_info.get("scheme_details", [])
+    if not schemes_summary and latest_pdf:
+        # Fallback: compute from closing balances
         for code in ("E", "C", "G"):
             txns = latest_pdf.get("scheme_transactions", {}).get(code, [])
             closing = [t for t in txns if t.get("type") == "closing_balance"]
             if closing:
                 units = closing[-1]["units"]
-                # Get latest NAV from last real transaction before closing
                 real_txns = [t for t in txns if t.get("type") not in ("opening_balance", "closing_balance") and t.get("nav", 0) > 0]
                 nav = real_txns[-1]["nav"] if real_txns else 0
                 schemes_summary.append({
