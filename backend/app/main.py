@@ -2989,7 +2989,8 @@ def parse_nps_statement(req: ContractNoteUpload):
         flat_txns.sort(key=lambda t: (t["date"], t.get("scheme", "")))
 
         # Check for duplicates against existing xlsx
-        nps_dir = Path(user_dumps_dir()) / "NPS"
+        from pathlib import Path as _Path
+        nps_dir = _Path(user_dumps_dir()) / "NPS"
         existing_keys = set()
         if nps_dir.exists():
             from .nps_database import _read_xlsx
