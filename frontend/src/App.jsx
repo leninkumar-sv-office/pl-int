@@ -133,6 +133,7 @@ export default function App() {
   const [tickerLastUpdated, setTickerLastUpdated] = useState(null);
   const refreshInterval = 60; // Fixed: backend refreshes prices every 60s
   const [pageRefreshInterval, setPageRefreshInterval] = useState(600);
+  const [userSettings, setUserSettings] = useState({});
   const [zerodhaStatus, setZerodhaStatus] = useState(null); // {configured, has_access_token, session_valid}
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
@@ -210,8 +211,11 @@ export default function App() {
       if (resp.last_updated) setTickerLastUpdated(resp.last_updated);
     }
     if (zsR.status === 'fulfilled') setZerodhaStatus(zsR.value);
-    if (settingsR.status === 'fulfilled' && settingsR.value.page_refresh_interval !== undefined) {
-      setPageRefreshInterval(settingsR.value.page_refresh_interval);
+    if (settingsR.status === 'fulfilled') {
+      setUserSettings(settingsR.value || {});
+      if (settingsR.value.page_refresh_interval !== undefined) {
+        setPageRefreshInterval(settingsR.value.page_refresh_interval);
+      }
     }
   }, []);
 
@@ -849,6 +853,11 @@ export default function App() {
     }
   };
 
+  const handleSaveSettings = async (updates) => {
+    setUserSettings(prev => ({ ...prev, ...updates }));
+    try { await saveUserSettings(updates); } catch (e) { console.error('Settings save failed:', e); }
+  };
+
   const handleWithdrawFD = async (fdId) => {
     try {
       await updateFD(fdId, { status: 'Withdrawn' });
@@ -1425,6 +1434,8 @@ export default function App() {
           onImportContractNote={handleParseContractNote}
           onImportDividendStatement={handleParseDividendStatement}
           bulkSellDoneKey={bulkSellDoneKey}
+          userSettings={userSettings}
+          onSaveSettings={handleSaveSettings}
         />
       )}
 
@@ -1442,6 +1453,8 @@ export default function App() {
           onConfigSIP={(fund) => setSipTarget(fund)}
           sipConfigs={sipConfigs}
           onImportCDSLCAS={handleParseCDSLCAS}
+          userSettings={userSettings}
+          onSaveSettings={handleSaveSettings}
         />
       )}
 
@@ -1454,6 +1467,8 @@ export default function App() {
           onEditFD={(fd) => setAddFDModalData(fd)}
           onDeleteFD={handleDeleteFD}
           onWithdrawFD={handleWithdrawFD}
+          userSettings={userSettings}
+          onSaveSettings={handleSaveSettings}
         />
       )}
 
@@ -1496,6 +1511,8 @@ export default function App() {
               toast.success(`PPF "${ppf.account_name}" redeemed successfully`);
             }
           }}
+          userSettings={userSettings}
+          onSaveSettings={handleSaveSettings}
         />
       )}
 

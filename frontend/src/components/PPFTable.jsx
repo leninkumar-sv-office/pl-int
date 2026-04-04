@@ -634,7 +634,7 @@ function PPFDetail({ ppf, onEdit, onDelete, onAddContribution, onWithdraw, onRed
 }
 
 /* ── Main Table ───────────────────────────────────── */
-export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution, onWithdrawPPF, onRedeemPPF }) {
+export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, onEditPPF, onDeletePPF, onAddContribution, onWithdrawPPF, onRedeemPPF, userSettings, onSaveSettings }) {
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState('startDate');
   const [sortDir, setSortDir] = useState('asc');
@@ -644,9 +644,10 @@ export default function PPFTable({ accounts, loading, ppfDashboard, onAddPPF, on
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
   const [showMatured, setShowMatured] = useState(() => {
+    if (userSettings?.ppf_show_matured != null) return userSettings.ppf_show_matured;
     try { return localStorage.getItem('ppfShowMatured') === 'true'; } catch { return false; }
   });
-  const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; localStorage.setItem('ppfShowMatured', String(next)); return next; });
+  const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; if (onSaveSettings) onSaveSettings({ ppf_show_matured: next }); return next; });
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
     try { return localStorage.getItem('ppfSummaryCollapsed') !== 'false'; } catch { return true; }
   });

@@ -1154,11 +1154,11 @@ function HideStocksModal({ stocks, hiddenSet, onSave, onClose }) {
 }
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey }) {
+export default function StockSummaryTable({ stocks, loading, onAddStock, portfolio, onSell, onBulkSell, onDividend, transactions, onImportContractNote, onImportDividendStatement, bulkSellDoneKey, userSettings, onSaveSettings }) {
   const [sortKeys, setSortKeys] = useState([{ field: 'unrealized_profit', dir: 'desc' }]);
   const [expandedSymbol, setExpandedSymbol] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hideZeroHeld, setHideZeroHeld] = useState(false);
+  const [hideZeroHeld, setHideZeroHeld] = useState(() => userSettings?.stocks_held_only ?? false);
   const [hiddenStocks, setHiddenStocks] = useState(new Set());
   const [hideModalOpen, setHideModalOpen] = useState(false);
   const [renamingStock, setRenamingStock] = useState(null); // { symbol, name }
@@ -1683,7 +1683,7 @@ export default function StockSummaryTable({ stocks, loading, onAddStock, portfol
           <input
             type="checkbox"
             checked={hideZeroHeld}
-            onChange={(e) => setHideZeroHeld(e.target.checked)}
+            onChange={(e) => { setHideZeroHeld(e.target.checked); if (onSaveSettings) onSaveSettings({ stocks_held_only: e.target.checked }); }}
             style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
           />
           Held only

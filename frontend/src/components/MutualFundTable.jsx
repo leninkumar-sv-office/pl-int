@@ -799,7 +799,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
 
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS }) {
+export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS, userSettings, onSaveSettings }) {
   const [expandedFund, setExpandedFund] = useState(null);
   const [sortKeys, setSortKeys] = useState([{ field: 'unrealizedPL', dir: 'desc' }]);
   const [renamingFund, setRenamingFund] = useState(null); // { fund_code, name }
@@ -814,7 +814,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
-  const [heldOnly, setHeldOnly] = useState(true);
+  const [heldOnly, setHeldOnly] = useState(() => userSettings?.mf_held_only ?? true);
 
   // ── Lot-level selection for bulk redeem ──
   const [selectedLots, setSelectedLots] = useState(new Set());
@@ -1192,7 +1192,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           <input
             type="checkbox"
             checked={heldOnly}
-            onChange={(e) => setHeldOnly(e.target.checked)}
+            onChange={(e) => { setHeldOnly(e.target.checked); if (onSaveSettings) onSaveSettings({ mf_held_only: e.target.checked }); }}
             style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
           />
           Held only

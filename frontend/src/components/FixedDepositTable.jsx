@@ -358,7 +358,7 @@ function FDDetail({ fd, onEdit, onDelete, onWithdraw }) {
 }
 
 /* ── Main Table ───────────────────────────────────── */
-export default function FixedDepositTable({ deposits, loading, fdDashboard, onAddFD, onEditFD, onDeleteFD, onWithdrawFD }) {
+export default function FixedDepositTable({ deposits, loading, fdDashboard, onAddFD, onEditFD, onDeleteFD, onWithdrawFD, userSettings, onSaveSettings }) {
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState('bank');
   const [sortDir, setSortDir] = useState('asc');
@@ -367,18 +367,22 @@ export default function FixedDepositTable({ deposits, loading, fdDashboard, onAd
   const colPickerRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
+  const _saveSetting = (key, val) => { if (onSaveSettings) onSaveSettings({ [key]: val }); };
   const [showMatured, setShowMatured] = useState(() => {
+    if (userSettings?.fd_show_matured != null) return userSettings.fd_show_matured;
     try { return localStorage.getItem('fdShowMatured') === 'true'; } catch { return false; }
   });
-  const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; localStorage.setItem('fdShowMatured', String(next)); return next; });
+  const toggleShowMatured = () => setShowMatured(prev => { const next = !prev; _saveSetting('fd_show_matured', next); return next; });
   const [showWithdrawn, setShowWithdrawn] = useState(() => {
+    if (userSettings?.fd_show_withdrawn != null) return userSettings.fd_show_withdrawn;
     try { return localStorage.getItem('fdShowWithdrawn') === 'true'; } catch { return false; }
   });
-  const toggleShowWithdrawn = () => setShowWithdrawn(prev => { const next = !prev; localStorage.setItem('fdShowWithdrawn', String(next)); return next; });
+  const toggleShowWithdrawn = () => setShowWithdrawn(prev => { const next = !prev; _saveSetting('fd_show_withdrawn', next); return next; });
   const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
+    if (userSettings?.fd_summary_collapsed != null) return userSettings.fd_summary_collapsed;
     try { return localStorage.getItem('fdSummaryCollapsed') !== 'false'; } catch { return true; }
   });
-  const toggleSummary = () => setSummaryCollapsed(prev => { const next = !prev; localStorage.setItem('fdSummaryCollapsed', String(next)); return next; });
+  const toggleSummary = () => setSummaryCollapsed(prev => { const next = !prev; _saveSetting('fd_summary_collapsed', next); return next; });
 
   const col = (id) => visibleCols.has(id);
 
