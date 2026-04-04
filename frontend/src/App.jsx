@@ -175,6 +175,7 @@ export default function App() {
   const [npsModalMode, setNpsModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
   const [npsImportPreview, setNpsImportPreview] = useState(null);
   const [npsImportParsedData, setNpsImportParsedData] = useState([]);
+  const [npsImportDropdown, setNpsImportDropdown] = useState(false);
 
   // SI states
   const [siSummary, setSiSummary] = useState([]);
@@ -1428,13 +1429,53 @@ export default function App() {
               <button className="btn btn-primary" onClick={() => { setNpsModalMode('add'); setAddNPSModalData({}); }}>
                 + Add NPS
               </button>
-              <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
-                Import Statement
-                <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
-                  if (e.target.files?.length) handleParseNPSStatement([...e.target.files]);
-                  e.target.value = '';
-                }} />
-              </label>
+              {npsAccounts.length > 0 && (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <button className="btn btn-ghost" onClick={() => setNpsImportDropdown(v => !v)}>
+                    Import Statement ▾
+                  </button>
+                  {npsImportDropdown && (
+                    <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: '4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '4px 0', zIndex: 100, minWidth: '220px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                      {npsAccounts.map(a => (
+                        <label key={a.id} style={{ display: 'block', padding: '8px 16px', fontSize: '13px', color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          <div style={{ fontWeight: 600 }}>{a.account_name || a.pran}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>PRAN: {a.pran}</div>
+                          <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
+                            if (e.target.files?.length) {
+                              setNpsImportDropdown(false);
+                              handleParseNPSStatement([...e.target.files]);
+                            }
+                            e.target.value = '';
+                          }} />
+                        </label>
+                      ))}
+                      <label style={{ display: 'block', padding: '8px 16px', fontSize: '13px', color: 'var(--green)', cursor: 'pointer', fontWeight: 600 }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        + New Account (auto-detect)
+                        <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
+                          if (e.target.files?.length) {
+                            setNpsImportDropdown(false);
+                            handleParseNPSStatement([...e.target.files]);
+                          }
+                          e.target.value = '';
+                        }} />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+              {npsAccounts.length === 0 && (
+                <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
+                  Import Statement
+                  <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
+                    if (e.target.files?.length) handleParseNPSStatement([...e.target.files]);
+                    e.target.value = '';
+                  }} />
+                </label>
+              )}
             </>
           ) : activeTab === 'standingInstructions' ? (
             <button className="btn btn-primary" onClick={() => setAddSIModalData({})}>
