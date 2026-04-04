@@ -2918,7 +2918,7 @@ def withdraw_ppf_endpoint(ppf_id: str, req: PPFWithdrawRequest):
 #  NPS (NATIONAL PENSION SYSTEM)
 # ══════════════════════════════════════════════════════════
 
-from .nps_database import get_all as nps_get_all, get_dashboard as nps_get_dashboard, add as nps_add, update as nps_update, delete as nps_delete, add_contribution as nps_add_contribution
+from .nps_database import get_all as nps_get_all, get_dashboard as nps_get_dashboard, add as nps_add, update as nps_update, delete as nps_delete, add_contribution as nps_add_contribution, parse_pdf_bytes as nps_parse_pdf, import_from_parsed as nps_import
 
 
 @app.get("/api/nps/summary")
@@ -2960,6 +2960,89 @@ def add_nps_contribution_endpoint(nps_id: str, req: AddNPSContributionRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/nps/parse-statement")
+def parse_nps_statement(req: ContractNoteUpload):
+    """Parse NPS statement PDF and return preview data."""
+    import base64
+    if not req.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files accepted")
+    try:
+        pdf_bytes = base64.b64decode(req.pdf_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 PDF data")
+    try:
+        parsed = nps_parse_pdf(pdf_bytes)
+        # Count transactions and contributions
+        txn_count = sum(len(v) for v in parsed.get("scheme_transactions", {}).values())
+        contrib_count = len(parsed.get("contributions", []))
+        info = parsed.get("subscriber_info", {})
+
+        # Build flat transaction list for preview
+        flat_txns = []
+        for scheme_code, txns in parsed.get("scheme_transactions", {}).items():
+            for t in txns:
+                if t.get("type") in ("opening_balance", "closing_balance"):
+                    continue
+                flat_txns.append({**t, "scheme": scheme_code})
+        flat_txns.sort(key=lambda t: (t["date"], t.get("scheme", "")))
+
+        # Check for duplicates against existing xlsx
+        nps_dir = Path(user_dumps_dir()) / "NPS"
+        existing_keys = set()
+        if nps_dir.exists():
+            from .nps_database import _read_xlsx
+            for f in nps_dir.glob("*.xlsx"):
+                try:
+                    ex = _read_xlsx(f)
+                    for t in ex.get("_transactions", []):
+                        key = (t["date"], t.get("scheme", ""), round(t.get("amount", 0), 2),
+                               round(t.get("nav", 0), 4), round(t.get("units", 0), 4))
+                        existing_keys.add(key)
+                except Exception:
+                    pass
+
+        dup_count = 0
+        for t in flat_txns:
+            key = (t["date"], t.get("scheme", ""), round(t.get("amount", 0), 2),
+                   round(t.get("nav", 0), 4), round(t.get("units", 0), 4))
+            t["isDuplicate"] = key in existing_keys
+            if t["isDuplicate"]:
+                dup_count += 1
+
+        return {
+            "subscriber_info": info,
+            "transactions": flat_txns,
+            "contributions": parsed.get("contributions", []),
+            "summary": {
+                "total_transactions": len(flat_txns),
+                "total_contributions": contrib_count,
+                "duplicates": dup_count,
+                "new": len(flat_txns) - dup_count,
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"[NPS] Parse error: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to parse NPS PDF: {str(e)[:200]}")
+
+
+@app.post("/api/nps/import-statement")
+def import_nps_statement(req: dict):
+    """Import NPS statement data from parsed PDFs."""
+    all_parsed = req.get("all_parsed", [])
+    if not all_parsed:
+        raise HTTPException(status_code=400, detail="No parsed data provided")
+    try:
+        result = nps_import(all_parsed, base_dir=user_dumps_dir())
+        return result
+    except Exception as e:
+        logger.error(f"[NPS] Import error: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)[:200]}")
 
 
 # ══════════════════════════════════════════════════════════

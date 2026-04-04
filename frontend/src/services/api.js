@@ -539,6 +539,19 @@ export async function addNPSContribution(npsId, payload) {
   return data;
 }
 
+export async function parseNPSStatement(file) {
+  const base64 = await _readFileAsBase64(file);
+  const payload = { pdf_base64: base64, filename: file.name };
+  const { data } = await api.post('/nps/parse-statement', payload, { timeout: 120000 });
+  data._payload = payload;
+  return data;
+}
+
+export async function confirmNPSImport(payload) {
+  const { data } = await api.post('/nps/import-statement', payload, { timeout: 120000 });
+  return data;
+}
+
 // ── Standing Instructions ──────────────────────────────
 
 export async function getSISummary() {

@@ -15,6 +15,7 @@ xlsx layout:
 
 import json
 import hashlib
+import os
 import re
 import threading
 import uuid
@@ -329,7 +330,7 @@ def _parse_pdf(pdf_path: str) -> dict:
     scheme_txns = {}
     for code in ("E", "C", "G"):
         # Find section for this scheme
-        pattern = rf"SBI PENSION FUND SCHEME {code}\s*-\s*TIER I\s*\n\s*Date\s+Description.*?\n(.*?)(?=SBI PENSION FUND SCHEME [ECG]\s*-\s*TIER I|Notes\n|View More|$)"
+        pattern = rf"SBI PENSION FUND SCHEME {code}\s*-\s*TIER I[^\n]*\n\s*Date\s+Description.*?\n(.*?)(?=SBI PENSION FUND SCHEME [ECG]\s*-\s*TIER I|Notes\n|View More|$)"
         m = re.search(pattern, text, re.DOTALL)
         if m:
             section_text = m.group(1)
@@ -671,6 +672,138 @@ def _import_from_pdfs(nps_dir: Path = None):
                 f"{len(merged['contributions'])} contributions, "
                 f"total contributed: ₹{total_contrib:,.0f}, "
                 f"current value: ₹{merged['current_value']:,.0f}")
+
+
+def parse_pdf_bytes(pdf_bytes: bytes) -> dict:
+    """Parse NPS statement from in-memory PDF bytes.
+    Returns parsed data from _parse_pdf + _merge_pdf_data (single PDF)."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+    try:
+        parsed = _parse_pdf(tmp_path)
+        return parsed
+    finally:
+        os.unlink(tmp_path)
+
+
+def import_from_parsed(all_parsed: list, base_dir=None) -> dict:
+    """Import parsed NPS PDF data into xlsx, deduplicating against existing data.
+
+    Args:
+        all_parsed: list of results from parse_pdf_bytes()
+        base_dir: user dumps base dir
+
+    Returns:
+        { imported_transactions, imported_contributions, skipped_dup_transactions,
+          skipped_dup_contributions, total_transactions, total_contributions, pran }
+    """
+    nps_dir = (Path(base_dir) / "NPS") if base_dir else NPS_DIR
+    nps_dir.mkdir(parents=True, exist_ok=True)
+
+    # Merge all parsed PDFs
+    merged = _merge_pdf_data(all_parsed)
+    info = merged["info"]
+    pran = info.get("pran", "unknown")
+
+    # Build the account record
+    account = {
+        "pran": pran,
+        "account_name": info.get("subscriber_name", "NPS Account"),
+        "tier": "Tier I",
+        "fund_manager": info.get("fund_manager", ""),
+        "scheme_preference": info.get("scheme_preference", ""),
+        "start_date": info.get("registration_date", ""),
+        "current_value": merged["current_value"],
+        "status": info.get("status", "Active"),
+        "remarks": "",
+        "nominee": info.get("nominee", ""),
+        "scheme_splits": info.get("scheme_splits", []),
+        "schemes_summary": merged.get("schemes_summary", []),
+    }
+
+    new_txns = merged["transactions"]
+    new_contribs = merged["contributions"]
+
+    # Check for existing xlsx and deduplicate
+    xlsx_path = nps_dir / f"{pran}.xlsx"
+    skipped_dup_txns = 0
+    skipped_dup_contribs = 0
+
+    if xlsx_path.exists():
+        existing = _read_xlsx(xlsx_path)
+
+        # Build existing transaction fingerprints
+        existing_txn_keys = set()
+        for t in existing.get("_transactions", []):
+            key = (t["date"], t.get("scheme", ""), round(t.get("amount", 0), 2),
+                   round(t.get("nav", 0), 4), round(t.get("units", 0), 4))
+            existing_txn_keys.add(key)
+
+        # Deduplicate new transactions
+        deduped_txns = []
+        for t in new_txns:
+            key = (t["date"], t.get("scheme", ""), round(t.get("amount", 0), 2),
+                   round(t.get("nav", 0), 4), round(t.get("units", 0), 4))
+            if key in existing_txn_keys:
+                skipped_dup_txns += 1
+            else:
+                deduped_txns.append(t)
+                existing_txn_keys.add(key)
+
+        # Build existing contribution fingerprints
+        existing_contrib_keys = set()
+        for c in existing.get("contributions", []):
+            key = (c["date"], round(c.get("amount", 0), 2))
+            existing_contrib_keys.add(key)
+
+        # Deduplicate new contributions
+        deduped_contribs = []
+        for c in new_contribs:
+            key = (c["date"], round(c.get("amount", 0), 2))
+            if key in existing_contrib_keys:
+                skipped_dup_contribs += 1
+            else:
+                deduped_contribs.append(c)
+                existing_contrib_keys.add(key)
+
+        # Merge: existing + new (deduped)
+        all_txns = existing.get("_transactions", []) + deduped_txns
+        all_txns.sort(key=lambda t: (t["date"], t.get("scheme", "")))
+        all_contribs = existing.get("contributions", []) + deduped_contribs
+        all_contribs.sort(key=lambda c: c["date"])
+
+        # Update account with latest info (from PDFs) but keep existing fields if not in PDFs
+        for key in ("account_name", "fund_manager", "scheme_preference", "nominee", "status"):
+            if not account.get(key) and existing.get(key):
+                account[key] = existing[key]
+        if not account.get("start_date") and existing.get("start_date"):
+            account["start_date"] = existing["start_date"]
+
+        # Use the higher current_value (latest)
+        account["current_value"] = max(account["current_value"], existing.get("current_value", 0))
+        account["contributions"] = all_contribs
+    else:
+        all_txns = new_txns
+        account["contributions"] = new_contribs
+        deduped_txns = new_txns
+        deduped_contribs = new_contribs
+
+    # Write merged data
+    _write_xlsx(xlsx_path, account, all_txns)
+
+    return {
+        "pran": pran,
+        "account_name": account["account_name"],
+        "imported_transactions": len(deduped_txns),
+        "imported_contributions": len(deduped_contribs),
+        "skipped_dup_transactions": skipped_dup_txns,
+        "skipped_dup_contributions": skipped_dup_contribs,
+        "total_transactions": len(all_txns),
+        "total_contributions": len(account["contributions"]),
+        "current_value": account["current_value"],
+    }
 
 
 # ═══════════════════════════════════════════════════════════

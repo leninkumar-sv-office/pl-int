@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, clearPriceCache, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, clearPriceCache, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, parseNPSStatement, confirmNPSImport, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -30,6 +30,7 @@ import AddNPSModal from './components/AddNPSModal';
 import StandingInstructionTable from './components/StandingInstructionTable';
 import AddSIModal from './components/AddSIModal';
 import MFImportPreviewModal from './components/MFImportPreviewModal';
+import NPSImportPreviewModal from './components/NPSImportPreviewModal';
 import DividendImportPreviewModal from './components/DividendImportPreviewModal';
 import TradePlanner, { openTradePlanner } from './components/BuyPlannerModal';
 import UserSelector from './components/UserSelector';
@@ -172,6 +173,8 @@ export default function App() {
   const [npsDashboard, setNpsDashboard] = useState(null);
   const [addNPSModalData, setAddNPSModalData] = useState(null);
   const [npsModalMode, setNpsModalMode] = useState('add');  // 'add' | 'edit' | 'contribution'
+  const [npsImportPreview, setNpsImportPreview] = useState(null);
+  const [npsImportParsedData, setNpsImportParsedData] = useState([]);
 
   // SI states
   const [siSummary, setSiSummary] = useState([]);
@@ -998,6 +1001,69 @@ export default function App() {
     }
   };
 
+  const handleParseNPSStatement = async (filesOrFile) => {
+    const files = Array.isArray(filesOrFile) ? filesOrFile : [filesOrFile];
+    try {
+      const allParsed = [];
+      const errors = [];
+      for (let i = 0; i < files.length; i++) {
+        try {
+          if (files.length > 1) toast.loading(`Parsing NPS PDF ${i + 1}/${files.length}`, { id: 'nps-parse' });
+          const parsed = await parseNPSStatement(files[i]);
+          allParsed.push(parsed);
+        } catch (err) {
+          errors.push(`${files[i].name}: ${err.response?.data?.detail || 'Parse failed'}`);
+        }
+      }
+      toast.dismiss('nps-parse');
+      if (errors.length > 0) toast.error(errors.join('\n'), { duration: 8000 });
+      if (allParsed.length === 0) { toast.error('No NPS data found in PDFs'); return; }
+
+      // Merge all parsed results
+      const mergedTxns = allParsed.flatMap(p => p.transactions || []);
+      const mergedContribs = [];
+      const contribKeys = new Set();
+      for (const p of allParsed) {
+        for (const c of (p.contributions || [])) {
+          const key = `${c.date}_${c.amount}`;
+          if (!contribKeys.has(key)) { contribKeys.add(key); mergedContribs.push(c); }
+        }
+      }
+      // Dedup transactions across PDFs
+      const txnKeys = new Set();
+      const dedupedTxns = [];
+      for (const t of mergedTxns) {
+        const key = `${t.date}_${t.scheme}_${t.amount}_${t.nav}_${t.units}`;
+        if (!txnKeys.has(key)) { txnKeys.add(key); dedupedTxns.push(t); }
+      }
+      const dupCount = dedupedTxns.filter(t => t.isDuplicate).length;
+      const preview = {
+        subscriber_info: allParsed[allParsed.length - 1].subscriber_info,
+        transactions: dedupedTxns,
+        contributions: mergedContribs,
+        summary: { total_transactions: dedupedTxns.length, total_contributions: mergedContribs.length, duplicates: dupCount, new: dedupedTxns.length - dupCount },
+      };
+      setNpsImportParsedData(allParsed.map(p => ({ subscriber_info: p.subscriber_info, scheme_transactions: {}, contributions: p.contributions || [] })));
+      setNpsImportPreview(preview);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to parse NPS statements');
+    }
+  };
+
+  const handleConfirmNPSImport = async () => {
+    try {
+      // Send all parsed data to backend for merge+import
+      const result = await confirmNPSImport({ all_parsed: npsImportParsedData });
+      toast.success(`NPS imported: ${result.imported_transactions} transactions, ${result.imported_contributions} contributions` +
+        (result.skipped_dup_transactions > 0 ? `, ${result.skipped_dup_transactions} dups skipped` : ''));
+      setNpsImportPreview(null);
+      setNpsImportParsedData([]);
+      loadNPS();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'NPS import failed');
+    }
+  };
+
   // ── Standing Instruction handlers ────────────────
   const handleAddSI = async (data) => {
     try {
@@ -1358,9 +1424,18 @@ export default function App() {
               + Add PPF
             </button>
           ) : activeTab === 'nps' ? (
-            <button className="btn btn-primary" onClick={() => { setNpsModalMode('add'); setAddNPSModalData({}); }}>
-              + Add NPS
-            </button>
+            <>
+              <button className="btn btn-primary" onClick={() => { setNpsModalMode('add'); setAddNPSModalData({}); }}>
+                + Add NPS
+              </button>
+              <label className="btn btn-ghost" style={{ cursor: 'pointer' }}>
+                Import Statement
+                <input type="file" accept=".pdf" multiple hidden onChange={(e) => {
+                  if (e.target.files?.length) handleParseNPSStatement([...e.target.files]);
+                  e.target.value = '';
+                }} />
+              </label>
+            </>
           ) : activeTab === 'standingInstructions' ? (
             <button className="btn btn-primary" onClick={() => setAddSIModalData({})}>
               + Add SI
@@ -1525,6 +1600,7 @@ export default function App() {
           onEditNPS={(nps) => { setNpsModalMode('edit'); setAddNPSModalData(nps); }}
           onDeleteNPS={handleDeleteNPS}
           onAddContribution={(nps) => { setNpsModalMode('contribution'); setAddNPSModalData(nps); }}
+          onImportStatement={handleParseNPSStatement}
         />
       )}
 
@@ -1606,6 +1682,16 @@ export default function App() {
           data={mfImportPreview}
           onConfirm={handleConfirmCDSLCASImport}
           onCancel={() => setMfImportPreview(null)}
+        />
+      )}
+
+      {npsImportPreview && (
+        <NPSImportPreviewModal
+          data={npsImportPreview}
+          onConfirm={handleConfirmNPSImport}
+          onCancel={() => { setNpsImportPreview(null); setNpsImportParsedData([]); }}
+          isMultiPdf={npsImportParsedData.length > 1}
+          fileCount={npsImportParsedData.length}
         />
       )}
 

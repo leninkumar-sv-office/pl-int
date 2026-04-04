@@ -243,7 +243,8 @@ function NPSDetail({ nps, onEdit, onDelete, onAddContribution }) {
 }
 
 /* ── Main Table ───────────────────────────────────── */
-export default function NPSTable({ accounts, loading, npsDashboard, onAddNPS, onEditNPS, onDeleteNPS, onAddContribution }) {
+export default function NPSTable({ accounts, loading, npsDashboard, onAddNPS, onEditNPS, onDeleteNPS, onAddContribution, onImportStatement }) {
+  const importInputRef = React.useRef(null);
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState('account_name');
   const [sortDir, setSortDir] = useState('asc');
