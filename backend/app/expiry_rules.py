@@ -295,7 +295,7 @@ def _check_rule(item: dict, category: str, rule_type: str, days_threshold: int) 
     if status not in ("active",):
         return None
 
-    name = item.get("name", "") or item.get("account_name", "") or item.get("bank", "") or item.get("beneficiary", "")
+    name = item.get("policy_name", "") or item.get("name", "") or item.get("account_name", "") or item.get("bank", "") or item.get("beneficiary", "")
 
     if category in ("fd", "rd", "ppf"):
         days_left = item.get("days_to_maturity", -1)
@@ -309,10 +309,17 @@ def _check_rule(item: dict, category: str, rule_type: str, days_threshold: int) 
         days_left = item.get("days_to_expiry", -1)
         expiry_date = item.get("expiry_date", "")
         label = "Insurance" if category == "insurance" else "Standing Instruction"
+        if category == "insurance":
+            provider = item.get("provider", "")
+            premium = item.get("premium", 0)
+            policy_type = item.get("type", "")
+            detail = f" ({policy_type}, {provider}, Premium: ₹{premium:,.0f})" if provider else ""
+        else:
+            detail = ""
         if rule_type == "on_expiry" and days_left == 0:
-            return f"{label} '{name}' expires today ({expiry_date})!"
+            return f"{label} '{name}'{detail} expires TODAY ({expiry_date})! Renew immediately."
         if rule_type == "days_before_expiry" and 0 < days_left <= days_threshold:
-            return f"{label} '{name}' expires in {days_left} day(s) on {expiry_date}."
+            return f"{label} '{name}'{detail} expires in {days_left} day(s) on {expiry_date}. Please plan renewal."
 
     elif category == "nps":
         if rule_type == "contribution_reminder":
