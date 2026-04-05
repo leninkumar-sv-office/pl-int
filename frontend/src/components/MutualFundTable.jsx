@@ -103,7 +103,6 @@ function durationText(dateStr) {
 
 /* ── Main table column definitions ────────────────────── */
 const COL_DEFS = [
-  { id: 'sip',          label: 'SIP' },
   { id: 'units',        label: 'Units' },
   { id: 'avgNav',       label: 'Avg NAV' },
   { id: 'currentNav',   label: 'Current NAV' },
@@ -118,6 +117,7 @@ const COL_DEFS = [
   { id: 'invested',     label: 'Invested' },
   { id: 'unrealizedPL', label: 'Unrealized P&L' },
   { id: 'realizedPL',   label: 'Realized P&L' },
+  { id: 'sip',          label: 'SIP' },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
 const LS_KEY = 'mfVisibleCols_v4';
@@ -1317,9 +1317,6 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               <th onClick={(e) => handleSort('name', e)} style={{ cursor: 'pointer' }}>
                 Fund<SortIcon field="name" />
               </th>
-              {col('sip') && <th onClick={(e) => handleSort('sip', e)} style={{ cursor: 'pointer', textAlign: 'center' }}>
-                SIP<SortIcon field="sip" />
-              </th>}
               {col('units') && <th onClick={(e) => handleSort('units', e)} style={{ cursor: 'pointer' }}>
                 Units<SortIcon field="units" />
               </th>}
@@ -1373,6 +1370,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                   style={{ marginLeft: '6px', fontSize: '9px', padding: '1px 5px', borderRadius: '8px', background: sortMode !== 'inr' ? 'var(--blue)' : 'var(--bg-input)', color: sortMode !== 'inr' ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: 600 }}
                   title={`Sorting by ${SORT_MODE_LABELS[sortMode]} — click to cycle`}
                 >{SORT_MODE_LABELS[sortMode]}</span>
+              </th>}
+              {col('sip') && <th onClick={(e) => handleSort('sip', e)} style={{ cursor: 'pointer', textAlign: 'center' }}>
+                SIP<SortIcon field="sip" />
               </th>}
             </tr>
           </thead>
@@ -1451,15 +1451,6 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         </div>
                       )}
                     </td>
-                    {col('sip') && <td style={{ textAlign: 'center' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
-                        background: f.has_sip ? 'var(--green-bg, rgba(0,210,106,0.12))' : 'transparent',
-                        color: f.has_sip ? 'var(--green)' : 'var(--text-muted)',
-                      }}>
-                        {f.has_sip ? 'Active' : '-'}
-                      </span>
-                    </td>}
                     {col('units') && <td>
                       <div style={{ fontWeight: 700, fontSize: '15px' }}>
                         {hasHeld ? formatUnits(f.total_held_units) : '-'}
@@ -1676,6 +1667,15 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
+                    </td>}
+                    {col('sip') && <td style={{ textAlign: 'center' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
+                        background: f.has_sip ? 'var(--green-bg, rgba(0,210,106,0.12))' : 'transparent',
+                        color: f.has_sip ? 'var(--green)' : 'var(--text-muted)',
+                      }}>
+                        {f.has_sip ? 'Active' : '-'}
+                      </span>
                     </td>}
                   </tr>
 
