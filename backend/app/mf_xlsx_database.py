@@ -669,6 +669,7 @@ def _extract_mf_index_data(wb) -> dict:
         "week_52_low": 0.0,
         "lock_in_period": "",
         "exit_load": "",
+        "has_sip": False,
     }
     if "Index" not in wb.sheetnames:
         return data
@@ -692,6 +693,8 @@ def _extract_mf_index_data(wb) -> dict:
                 data["week_52_high"] = float(value)
             elif label == "52 Week Low" and isinstance(value, (int, float)):
                 data["week_52_low"] = float(value)
+            elif label == "Has SIP":
+                data["has_sip"] = str(value).strip().lower() in ("yes", "true", "1")
 
         # Lock In Period and Exit Load are in column I (index 8)
         if len(vals) >= 9:
@@ -991,6 +994,29 @@ class MFXlsxPortfolio:
                 logger.error(f"[MF-XlsxDB] Error reading sold for {fund_code}: {e}")
         return all_sold
 
+    def set_sip_flag(self, fund_code: str, has_sip: bool):
+        """Set or clear the SIP flag for a fund in its xlsx Index sheet."""
+        fp = self._file_map.get(fund_code)
+        if not fp:
+            raise ValueError(f"Fund {fund_code} not found")
+        wb = openpyxl.load_workbook(fp)
+        ws = wb["Index"] if "Index" in wb.sheetnames else wb.active
+        # Find existing "Has SIP" row or use row 5
+        target_row = 5
+        for r in range(1, 16):
+            label = ws.cell(r, 2).value
+            if label == "Has SIP":
+                target_row = r
+                break
+            if label is None and r >= 5:
+                target_row = r
+                break
+        ws.cell(target_row, 2, value="Has SIP")
+        ws.cell(target_row, 3, value="Yes" if has_sip else "No")
+        wb.save(fp)
+        wb.close()
+        self._invalidate(fund_code)
+
     def get_fund_summary(self) -> List[dict]:
         """Get per-fund aggregated summary with current NAV."""
         from datetime import datetime as dt
@@ -1107,6 +1133,7 @@ class MFXlsxPortfolio:
                 "cagr_1y": nav_changes.get("cagr_1y"),
                 "cagr_3y": nav_changes.get("cagr_3y"),
                 "cagr_5y": nav_changes.get("cagr_5y"),
+                "has_sip": idx_data.get("has_sip", False),
                 # Include held lots and sold lots for detail view
                 "held_lots": [
                     {

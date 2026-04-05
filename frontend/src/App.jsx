@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, clearPriceCache, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, parseNPSStatement, confirmNPSImport, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
+import { getPortfolio, getDashboardSummary, getTransactions, addStock, sellStock, addDividend, getStockSummary, getMarketTicker, triggerPriceRefresh, triggerTickerRefresh, triggerMFNavRefresh, clearPriceCache, setRefreshInterval as apiSetRefreshInterval, getZerodhaStatus, setZerodhaToken, parseContractNote, confirmImportContractNote, parseDividendStatement, confirmDividendImport, getMFSummary, getMFDashboard, addMFHolding, redeemMFUnits, getSIPConfigs, addSIPConfig, deleteSIPConfig, executeSIP, parseCDSLCAS, confirmCDSLCASImport, getFDSummary, getFDDashboard, addFD, updateFD, deleteFD, getRDSummary, getRDDashboard, addRD, updateRD, deleteRD, addRDInstallment, getInsuranceSummary, getInsuranceDashboard, addInsurance, updateInsurance, deleteInsurance, getPPFSummary, getPPFDashboard, addPPF, updatePPF, deletePPF, addPPFContribution, withdrawPPF, getNPSSummary, getNPSDashboard, addNPS, updateNPS, deleteNPS, addNPSContribution, parseNPSStatement, confirmNPSImport, setMFSipFlag, getSISummary, getSIDashboard, addSI, updateSI, deleteSI, getVersion, getUsers, getUserSettings, saveUserSettings } from './services/api';
 import Dashboard from './components/Dashboard';
 import PortfolioTable from './components/PortfolioTable';
 import StockSummaryTable from './components/StockSummaryTable';
@@ -857,6 +857,16 @@ export default function App() {
     }
   };
 
+  const handleToggleMFSipFlag = async (fundCode, hasSip) => {
+    try {
+      await setMFSipFlag(fundCode, hasSip);
+      toast.success(hasSip ? 'SIP marked active' : 'SIP flag removed');
+      loadMF();
+    } catch (err) {
+      toast.error('Failed to update SIP flag');
+    }
+  };
+
   const handleSaveSettings = async (updates) => {
     setUserSettings(prev => ({ ...prev, ...updates }));
     try { await saveUserSettings(updates); } catch (e) { console.error('Settings save failed:', e); }
@@ -1568,6 +1578,7 @@ export default function App() {
           onImportCDSLCAS={handleParseCDSLCAS}
           userSettings={userSettings}
           onSaveSettings={handleSaveSettings}
+          onToggleSipFlag={handleToggleMFSipFlag}
         />
       )}
 

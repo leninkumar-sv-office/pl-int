@@ -2470,6 +2470,17 @@ def get_mf_summary():
     return umf().get_fund_summary()
 
 
+@app.post("/api/mutual-funds/{fund_code}/sip-flag")
+def set_mf_sip_flag(fund_code: str, req: dict):
+    """Set or clear the SIP active flag for a mutual fund."""
+    has_sip = bool(req.get("has_sip", False))
+    try:
+        umf().set_sip_flag(fund_code, has_sip)
+        return {"fund_code": fund_code, "has_sip": has_sip}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @app.get("/api/mutual-funds/dashboard")
 def get_mf_dashboard():
     """Get aggregated MF portfolio summary for the dashboard."""

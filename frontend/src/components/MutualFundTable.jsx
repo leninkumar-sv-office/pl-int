@@ -279,7 +279,7 @@ function MFChart({ fundCode, fundName }) {
 }
 
 /* ── Expanded Fund Detail (matches StockDetail) ─────── */
-function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, selectedLots, onToggleLot, onToggleAllLots, onRefresh }) {
+function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, selectedLots, onToggleLot, onToggleAllLots, onRefresh, onToggleSipFlag }) {
   const [editingHeld, setEditingHeld] = useState(null);
   const [editingSold, setEditingSold] = useState(null);
   const f = fund;
@@ -361,6 +361,15 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
             style={{ fontWeight: 600 }}
           >
             {getSIPForFund(f.fund_code) ? 'Edit SIP' : 'Setup SIP'}
+          </button>
+        )}
+        {onToggleSipFlag && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={(e) => { e.stopPropagation(); onToggleSipFlag(f.fund_code, !f.has_sip); }}
+            style={{ fontWeight: 600, color: f.has_sip ? 'var(--green)' : 'var(--text-muted)', borderColor: f.has_sip ? 'var(--green)' : 'var(--border)' }}
+          >
+            {f.has_sip ? 'SIP Active' : 'Mark SIP Active'}
           </button>
         )}
       </div>
@@ -799,7 +808,7 @@ function FundDetail({ fund, onBuyMF, onRedeemMF, onConfigSIP, getSIPForFund, sel
 
 
 /* ── Main Table ───────────────────────────────────────── */
-export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS, userSettings, onSaveSettings }) {
+export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, onRedeemMF, onConfigSIP, sipConfigs, onImportCDSLCAS, userSettings, onSaveSettings, onToggleSipFlag }) {
   const [expandedFund, setExpandedFund] = useState(null);
   const [sortKeys, setSortKeys] = useState([{ field: 'unrealizedPL', dir: 'desc' }]);
   const [renamingFund, setRenamingFund] = useState(null); // { fund_code, name }
@@ -1395,7 +1404,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                     <td>
                       <div className="stock-symbol">
                         {cleanFundName(f.name)}
-                        {sipCfg && sipCfg.enabled && (
+                        {(f.has_sip || (sipCfg && sipCfg.enabled)) && (
                           <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, background: 'rgba(0,210,106,0.12)', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
                             SIP
                           </span>
@@ -1651,6 +1660,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                           selectedLots={selectedLots}
                           onToggleLot={toggleLot}
                           onToggleAllLots={toggleAllLots}
+                          onToggleSipFlag={onToggleSipFlag}
                         />
                       </td>
                     </tr>

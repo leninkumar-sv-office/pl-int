@@ -260,6 +260,11 @@ export async function triggerMFNavRefresh() {
   return data;
 }
 
+export async function setMFSipFlag(fundCode, hasSip) {
+  const { data } = await api.post(`/mutual-funds/${fundCode}/sip-flag`, { has_sip: hasSip });
+  return data;
+}
+
 // ── Settings ────────────────────────────────────────
 
 export async function getRefreshInterval() {
