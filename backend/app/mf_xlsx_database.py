@@ -1015,7 +1015,6 @@ class MFXlsxPortfolio:
         ws.cell(target_row, 3, value="Yes" if has_sip else "No")
         wb.save(fp)
         wb.close()
-        self._invalidate(fund_code)
 
     def get_fund_summary(self) -> List[dict]:
         """Get per-fund aggregated summary with current NAV."""
