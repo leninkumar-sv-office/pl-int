@@ -103,6 +103,7 @@ function durationText(dateStr) {
 
 /* ── Main table column definitions ────────────────────── */
 const COL_DEFS = [
+  { id: 'sip',          label: 'SIP' },
   { id: 'units',        label: 'Units' },
   { id: 'avgNav',       label: 'Avg NAV' },
   { id: 'currentNav',   label: 'Current NAV' },
@@ -824,6 +825,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const [searchTerm, setSearchTerm] = useState('');
   const searchRef = useRef(null);
   const [heldOnly, setHeldOnly] = useState(() => userSettings?.mf_held_only ?? true);
+  const [sipOnly, setSipOnly] = useState(() => userSettings?.mf_sip_only ?? false);
 
   // ── Lot-level selection for bulk redeem ──
   const [selectedLots, setSelectedLots] = useState(new Set());
@@ -948,6 +950,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const q = searchTerm.trim().toLowerCase();
   let filtered = (funds || []).filter(f => {
     if (heldOnly && f.total_held_units <= 0) return false;
+    if (sipOnly && !f.has_sip) return false;
     if (q) {
       if (!f.name.toLowerCase().includes(q) && !f.fund_code.toLowerCase().includes(q)) return false;
     }
@@ -957,6 +960,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
   const getMFSortVal = (f, field) => {
     switch (field) {
       case 'name': return f.name;
+      case 'sip': return f.has_sip ? 1 : 0;
       case 'units': return f.total_held_units;
       case 'avgNav': return f.avg_nav;
       case 'invested': return f.total_invested;
@@ -1206,7 +1210,23 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
           />
           Held only
         </label>
-        {(q || heldOnly) && (
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          fontSize: '13px',
+          color: 'var(--text-dim)',
+          whiteSpace: 'nowrap',
+          userSelect: 'none',
+          cursor: 'pointer',
+        }}>
+          <input
+            type="checkbox"
+            checked={sipOnly}
+            onChange={(e) => { setSipOnly(e.target.checked); if (onSaveSettings) onSaveSettings({ mf_sip_only: e.target.checked }); }}
+            style={{ cursor: 'pointer', accentColor: 'var(--green)' }}
+          />
+          SIP only
+        </label>
+        {(q || heldOnly || sipOnly) && (
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             {filtered.length} of {(funds || []).length} funds
           </span>
@@ -1297,6 +1317,9 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
               <th onClick={(e) => handleSort('name', e)} style={{ cursor: 'pointer' }}>
                 Fund<SortIcon field="name" />
               </th>
+              {col('sip') && <th onClick={(e) => handleSort('sip', e)} style={{ cursor: 'pointer', textAlign: 'center' }}>
+                SIP<SortIcon field="sip" />
+              </th>}
               {col('units') && <th onClick={(e) => handleSort('units', e)} style={{ cursor: 'pointer' }}>
                 Units<SortIcon field="units" />
               </th>}
@@ -1428,6 +1451,12 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                         </div>
                       )}
                     </td>
+                    {col('sip') && <td style={{ textAlign: 'center' }}>
+                      {f.has_sip
+                        ? <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 700, background: 'rgba(0,210,106,0.12)', color: 'var(--green)' }}>Active</span>
+                        : <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>-</span>
+                      }
+                    </td>}
                     {col('units') && <td>
                       <div style={{ fontWeight: 700, fontSize: '15px' }}>
                         {hasHeld ? formatUnits(f.total_held_units) : '-'}
