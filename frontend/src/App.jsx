@@ -861,10 +861,11 @@ export default function App() {
     try {
       await setMFSipFlag(fundCode, hasSip);
       toast.success(hasSip ? 'SIP marked active' : 'SIP flag removed');
-      loadMF();
     } catch (err) {
-      toast.error('Failed to update SIP flag');
+      toast.error(err.response?.data?.detail || 'Failed to update SIP flag');
+      return;
     }
+    try { loadMF(); } catch (_) {}
   };
 
   const handleSaveSettings = async (updates) => {
