@@ -858,14 +858,16 @@ export default function App() {
   };
 
   const handleToggleMFSipFlag = async (fundCode, hasSip) => {
+    // Optimistic update — reflect immediately in UI
+    setMfSummary(prev => prev.map(f => f.fund_code === fundCode ? { ...f, has_sip: hasSip } : f));
     try {
       await setMFSipFlag(fundCode, hasSip);
       toast.success(hasSip ? 'SIP marked active' : 'SIP flag removed');
     } catch (err) {
+      // Revert on failure
+      setMfSummary(prev => prev.map(f => f.fund_code === fundCode ? { ...f, has_sip: !hasSip } : f));
       toast.error(err.response?.data?.detail || 'Failed to update SIP flag');
-      return;
     }
-    try { loadMF(); } catch (_) {}
   };
 
   const handleSaveSettings = async (updates) => {
