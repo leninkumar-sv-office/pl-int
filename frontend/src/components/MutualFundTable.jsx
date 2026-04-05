@@ -120,7 +120,7 @@ const COL_DEFS = [
   { id: 'realizedPL',   label: 'Realized P&L' },
 ];
 const ALL_COL_IDS = COL_DEFS.map(c => c.id);
-const LS_KEY = 'mfVisibleCols_v3';
+const LS_KEY = 'mfVisibleCols_v4';
 
 function loadVisibleCols() {
   try {
@@ -1427,7 +1427,7 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                     <td>
                       <div className="stock-symbol">
                         {cleanFundName(f.name)}
-                        {(f.has_sip || (sipCfg && sipCfg.enabled)) && (
+                        {!col('sip') && (f.has_sip || (sipCfg && sipCfg.enabled)) && (
                           <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 3, background: 'rgba(0,210,106,0.12)', color: 'var(--green)', fontSize: '10px', fontWeight: 600 }}>
                             SIP
                           </span>
