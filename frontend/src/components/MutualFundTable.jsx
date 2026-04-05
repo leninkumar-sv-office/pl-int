@@ -1452,10 +1452,13 @@ export default function MutualFundTable({ funds, loading, mfDashboard, onBuyMF, 
                       )}
                     </td>
                     {col('sip') && <td style={{ textAlign: 'center' }}>
-                      {f.has_sip
-                        ? <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 700, background: 'rgba(0,210,106,0.12)', color: 'var(--green)' }}>Active</span>
-                        : <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>-</span>
-                      }
+                      <span style={{
+                        display: 'inline-block', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
+                        background: f.has_sip ? 'var(--green-bg, rgba(0,210,106,0.12))' : 'transparent',
+                        color: f.has_sip ? 'var(--green)' : 'var(--text-muted)',
+                      }}>
+                        {f.has_sip ? 'Active' : '-'}
+                      </span>
                     </td>}
                     {col('units') && <td>
                       <div style={{ fontWeight: 700, fontSize: '15px' }}>
